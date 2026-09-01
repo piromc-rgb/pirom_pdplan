@@ -1572,7 +1572,7 @@ class App {
     statusModal.style.backdropFilter = 'blur(10px)';
 
     statusModal.innerHTML = `
-      <div class="modal-content card-glass" style="max-width: 600px; width: 92%; border: 1px solid rgba(0, 242, 254, 0.35); box-shadow: 0 0 40px rgba(0, 242, 254, 0.2); padding: 22px; border-radius: 12px; animation: modal-scale-in 0.25s ease-out;">
+      <div class="modal-content card-glass" style="max-width: 620px; width: 92%; max-height: 90vh; display: flex; flex-direction: column; border: 1px solid rgba(0, 242, 254, 0.35); box-shadow: 0 0 40px rgba(0, 242, 254, 0.2); padding: 22px; border-radius: 12px; animation: modal-scale-in 0.25s ease-out;">
         <!-- Header -->
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-glass); padding-bottom: 12px; margin-bottom: 14px;">
           <div style="display: flex; align-items: center; gap: 10px;">
@@ -1586,49 +1586,71 @@ class App {
               </div>
             </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 6px; background: rgba(0,242,254,0.1); border: 1px solid rgba(0,242,254,0.3); border-radius: 20px; padding: 4px 10px;">
-            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00f2fe; box-shadow: 0 0 8px #00f2fe; animation: pulse-flash 0.8s infinite alternate;"></span>
-            <span style="font-size: 11px; font-weight: 800; color: var(--accent-teal);" id="ai-log-step-percent">0%</span>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 6px; background: rgba(0,242,254,0.1); border: 1px solid rgba(0,242,254,0.3); border-radius: 20px; padding: 4px 10px;">
+              <span id="ai-pulse-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00f2fe; box-shadow: 0 0 8px #00f2fe; animation: pulse-flash 0.8s infinite alternate;"></span>
+              <span style="font-size: 11px; font-weight: 800; color: var(--accent-teal);" id="ai-log-step-percent">0%</span>
+            </div>
+            <button type="button" id="btn-close-ai-status-x" style="background: none; border: none; font-size: 22px; line-height: 1; color: var(--text-secondary); cursor: pointer; padding: 0 4px; transition: color 0.2s;" title="ปิดและดำเนินการต่อ">&times;</button>
           </div>
         </div>
 
-        <!-- Progress Bar -->
-        <div style="margin-bottom: 14px;">
-          <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">
-            <span id="ai-current-activity" style="color: var(--text-primary); font-weight: 600;">🔍 เริ่มต้นระบบ AI Scheduling...</span>
-            <span id="ai-step-indicator" style="color: var(--accent-teal); font-weight: 700;">Step 1/6</span>
+        <!-- Body -->
+        <div style="overflow-y: auto; flex: 1; padding-right: 2px;">
+          <!-- Progress Bar -->
+          <div style="margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">
+              <span id="ai-current-activity" style="color: var(--text-primary); font-weight: 600;">🔍 เริ่มต้นระบบ AI Scheduling...</span>
+              <span id="ai-step-indicator" style="color: var(--accent-teal); font-weight: 700;">Step 1/6</span>
+            </div>
+            <div style="height: 7px; background: rgba(255,255,255,0.06); border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);">
+              <div id="ai-progress-bar-fill" style="height: 100%; width: 0%; background: linear-gradient(90deg, #00f2fe, #4facfe, #00c6ff); border-radius: 6px; transition: width 0.25s ease; box-shadow: 0 0 10px #00f2fe;"></div>
+            </div>
           </div>
-          <div style="height: 7px; background: rgba(255,255,255,0.06); border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);">
-            <div id="ai-progress-bar-fill" style="height: 100%; width: 0%; background: linear-gradient(90deg, #00f2fe, #4facfe, #00c6ff); border-radius: 6px; transition: width 0.25s ease; box-shadow: 0 0 10px #00f2fe;"></div>
+
+          <!-- Terminal Status Log Console -->
+          <div style="margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 10.5px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 5px;">
+                <span>📋</span> What is AI doing? (AI กำลังทำอะไร)
+              </span>
+              <span style="font-size: 9.5px; color: var(--text-secondary); font-family: monospace;">FINITE CAPACITY ENGINE</span>
+            </div>
+            <div id="ai-terminal-log-box" style="background: rgba(10, 15, 29, 0.95); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 8px; padding: 12px; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 11px; line-height: 1.65; height: 185px; overflow-y: auto; color: #cbd5e1; box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);">
+              <!-- Dynamic logs -->
+            </div>
+          </div>
+
+          <!-- Parameters Overview -->
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 6px; padding: 6px 8px; text-align: center;">
+              <div style="font-size: 9px; color: var(--text-secondary);">ใบสั่งผลิตที่เลือก</div>
+              <div style="font-size: 12px; font-weight: 800; color: var(--accent-teal); margin-top: 2px;">${selectedWOIds.length} ใบงาน (${totalBacklogOps} ขั้นตอน)</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 6px; padding: 6px 8px; text-align: center;">
+              <div style="font-size: 9px; color: var(--text-secondary);">โหมดการจัดตาราง</div>
+              <div style="font-size: 11px; font-weight: 800; color: var(--accent-green); margin-top: 2px;">SIMULATION PLACEMENT</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 6px; padding: 6px 8px; text-align: center;">
+              <div style="font-size: 9px; color: var(--text-secondary);">โมเดลการคำนวณ</div>
+              <div style="font-size: 11px; font-weight: 800; color: var(--accent-purple, #a855f7); margin-top: 2px;">Finite Capacity</div>
+            </div>
           </div>
         </div>
 
-        <!-- Terminal Status Log Console -->
-        <div style="margin-bottom: 14px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <span style="font-size: 10.5px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 5px;">
-              <span>📋</span> What is AI doing? (AI กำลังทำอะไร)
-            </span>
-            <span style="font-size: 9.5px; color: var(--text-secondary); font-family: monospace;">FINITE CAPACITY ENGINE</span>
+        <!-- Footer -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-glass); padding-top: 14px; margin-top: 14px;">
+          <div id="ai-status-footer-note" style="font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+            <span id="ai-status-footer-icon" style="display: inline-block; animation: spin 1.5s linear infinite;">⏳</span>
+            <span id="ai-status-footer-text">กำลังประมวลผล... กรุณารอสักครู่</span>
           </div>
-          <div id="ai-terminal-log-box" style="background: rgba(10, 15, 29, 0.95); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 8px; padding: 12px; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 11px; line-height: 1.65; height: 185px; overflow-y: auto; color: #cbd5e1; box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);">
-            <!-- Dynamic logs -->
-          </div>
-        </div>
-
-        <!-- Parameters Overview -->
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
-          <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 6px; padding: 6px 8px; text-align: center;">
-            <div style="font-size: 9px; color: var(--text-secondary);">ใบสั่งผลิตที่เลือก</div>
-            <div style="font-size: 12.5px; font-weight: 800; color: var(--accent-teal); margin-top: 2px;">${selectedWOIds.length} ใบงาน (${totalBacklogOps} ขั้นตอน)</div>
-          </div>
-          <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 6px; padding: 6px 8px; text-align: center;">
-            <div style="font-size: 9px; color: var(--text-secondary);">โหมดการจัดตาราง</div>
-            <div style="font-size: 11.5px; font-weight: 800; color: var(--accent-green); margin-top: 2px;">SIMULATION PLACEMENT</div>
-          </div>
-          <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 6px; padding: 6px 8px; text-align: center;">
-            <div style="font-size: 9px; color: var(--text-secondary);">โมเดลการคำนวณ</div>
-            <div style="font-size: 11.5px; font-weight: 800; color: var(--accent-purple, #a855f7); margin-top: 2px;">Finite Capacity</div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button type="button" class="btn btn-secondary" id="btn-cancel-ai-status" style="padding: 7px 14px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary);">
+              ยกเลิก (Cancel)
+            </button>
+            <button type="button" class="btn btn-glowing" id="btn-proceed-ai-status" style="padding: 7px 18px; font-size: 11px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; box-shadow: var(--shadow-neon); display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
+              <span>ปิด / ดำเนินการต่อ ➔</span>
+            </button>
           </div>
         </div>
       </div>
@@ -1641,6 +1663,12 @@ class App {
     const percentEl = statusModal.querySelector('#ai-log-step-percent');
     const activityEl = statusModal.querySelector('#ai-current-activity');
     const stepEl = statusModal.querySelector('#ai-step-indicator');
+    const footerIcon = statusModal.querySelector('#ai-status-footer-icon');
+    const footerText = statusModal.querySelector('#ai-status-footer-text');
+    const pulseDot = statusModal.querySelector('#ai-pulse-dot');
+    const proceedBtn = statusModal.querySelector('#btn-proceed-ai-status');
+    const closeXBtn = statusModal.querySelector('#btn-close-ai-status-x');
+    const cancelBtn = statusModal.querySelector('#btn-cancel-ai-status');
 
     // Detect offloaded jobs (routed to helper / alternate machines)
     const offloadedJobs = optimized.filter(j => {
@@ -1696,9 +1724,11 @@ class App {
       }
     ];
 
+    const timerIds = [];
+
     // Stream logs
-    logEvents.forEach(item => {
-      setTimeout(() => {
+    logEvents.forEach((item, index) => {
+      const tId = setTimeout(() => {
         if (!statusModal.parentNode) return;
         progressBar.style.width = `${item.pct}%`;
         percentEl.textContent = `${item.pct}%`;
@@ -1711,11 +1741,33 @@ class App {
         line.innerHTML = `<span style="color: #64748b; margin-right: 6px;">[${timeStr}]</span> ${item.msg}`;
         logBox.appendChild(line);
         logBox.scrollTop = logBox.scrollHeight;
+
+        // When reached final step (100%), update footer and wait for user to click close/proceed
+        if (index === logEvents.length - 1) {
+          if (footerIcon) {
+            footerIcon.style.animation = 'none';
+            footerIcon.textContent = '✅';
+          }
+          if (footerText) {
+            footerText.innerHTML = '<span style="color: var(--accent-green); font-weight: 600;">AI Engine ประมวลผลเสร็จสมบูรณ์แล้ว — กดปิดเพื่อดูผลลัพธ์และยืนยันแผน</span>';
+          }
+          if (pulseDot) {
+            pulseDot.style.animation = 'none';
+            pulseDot.style.background = '#22c55e';
+            pulseDot.style.boxShadow = '0 0 8px #22c55e';
+          }
+          if (proceedBtn) {
+            proceedBtn.innerHTML = '<span>ปิดและดำเนินการต่อ (Proceed) ➔</span>';
+            proceedBtn.style.boxShadow = '0 0 20px rgba(0, 242, 254, 0.6)';
+          }
+        }
       }, item.delay);
+      timerIds.push(tId);
     });
 
-    // When done (2.4s), remove status modal and open AI Result modal
-    setTimeout(() => {
+    // Handler to proceed to Result Modal
+    const proceedToResult = () => {
+      timerIds.forEach(t => clearTimeout(t));
       statusModal.remove();
       button.disabled = false;
 
@@ -1808,7 +1860,18 @@ class App {
         lockedCount,
         offloadedJobs
       });
-    }, 2400);
+    };
+
+    // Handler to cancel
+    const cancelAIStatus = () => {
+      timerIds.forEach(t => clearTimeout(t));
+      statusModal.remove();
+      button.disabled = false;
+    };
+
+    if (proceedBtn) proceedBtn.addEventListener('click', proceedToResult);
+    if (closeXBtn) closeXBtn.addEventListener('click', proceedToResult);
+    if (cancelBtn) cancelBtn.addEventListener('click', cancelAIStatus);
   }
 
   showAIResultModal(optimized, lateJobsOnBoard, applySchedule, aiContext = {}) {
