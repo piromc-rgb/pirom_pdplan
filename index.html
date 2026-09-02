@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="/pirom_pdplan/assets/index-Djlf825T.js"></script>
+    <script type="module" crossorigin src="/pirom_pdplan/assets/index-BvKQuBKQ.js"></script>
     <link rel="stylesheet" crossorigin href="/pirom_pdplan/assets/index-CU3fCOEj.css">
   </head>
   <body>
@@ -347,7 +347,7 @@
               <button id="tab-right-resources" class="tab-btn active" style="font-size: 9px; padding: 4px 6px;">Resources</button>
               <button id="tab-right-priority" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Priority</button>
               <button id="tab-right-project" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Project</button>
-              <button id="tab-right-genka" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Costing</button>
+              <button id="tab-right-pdrange" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">PD Range</button>
               <button id="tab-right-machinelink" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Machine Link</button>
             </div>
             <button id="btn-hide-sidebar" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass);" title="Collapse Sidebar">▶</button>
@@ -427,29 +427,25 @@
 
           </div>
 
-          <!-- Dr.Genka Pro Panel -->
-          <div id="panel-right-genka" class="sidebar-right-panel hidden" style="display: flex; flex-direction: column; gap: 15px;">
+          <!-- PD Range Filter Panel -->
+          <div id="panel-right-pdrange" class="sidebar-right-panel hidden" style="display: flex; flex-direction: column; gap: 15px;">
             <div class="resource-section">
-              <h4>Shop Costing Performance</h4>
-              <div class="genka-summary-cards" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-                <div class="genka-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); padding: 8px; border-radius: 6px; display: flex; flex-direction: column;">
-                  <span class="genka-label" style="font-size: 8px; text-transform: uppercase; color: var(--text-secondary);">Est. Revenue</span>
-                  <span class="genka-value text-green" id="genka-total-revenue" style="font-family: var(--font-display); font-size: 14px; font-weight: bold; color: var(--accent-green);">฿0</span>
-                </div>
-                <div class="genka-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); padding: 8px; border-radius: 6px; display: flex; flex-direction: column;">
-                  <span class="genka-label" style="font-size: 8px; text-transform: uppercase; color: var(--text-secondary);">Actual Cost</span>
-                  <span class="genka-value text-orange" id="genka-total-cost" style="font-family: var(--font-display); font-size: 14px; font-weight: bold; color: var(--accent-orange);">฿0</span>
-                </div>
-                <div class="genka-card" style="grid-column: span 2; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); padding: 8px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
-                  <span class="genka-label" style="font-size: 8px; text-transform: uppercase; color: var(--text-secondary);">Est. Margin</span>
-                  <span class="genka-value text-cyan" id="genka-net-margin" style="font-family: var(--font-display); font-size: 16px; font-weight: bold; color: var(--accent-cyan);">0%</span>
-                </div>
+              <h4>PD Range Filter (กรองตามช่วงเลขที่ PD)</h4>
+              <p class="tool-desc" style="font-size: 10px; color: var(--text-secondary); margin-bottom: 8px;">ระบุช่วงเลขที่ Production Order (เช่น PD2607785-PD2607834) เพื่อใช้เป็นเงื่อนไขในการกรองการแสดงผลบนบอร์ด:</p>
+              
+              <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                <input type="text" id="input-pdrange" placeholder="e.g. PD2607785-PD2607834" style="flex: 1; background-color: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 4px 8px; border-radius: 4px; font-size: 10px; outline: none;">
+                <button id="btn-add-pdrange" class="btn" style="font-size: 10px; padding: 4px 8px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold;">+ เพิ่ม</button>
               </div>
-            </div>
-            <div class="resource-section">
-              <h4>Active Cost Sheets</h4>
-              <div class="genka-list" id="genka-jobs-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 250px; overflow-y: auto;">
-                <!-- Rendered dynamically -->
+
+              <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                <button id="btn-pdrange-select-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold;">เลือกทั้งหมด</button>
+                <button id="btn-pdrange-deselect-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-weight: bold;">ไม่แสดงทั้งหมด</button>
+                <button id="btn-pdrange-clear-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255, 100, 100, 0.1); border: 1px solid var(--accent-red); color: var(--accent-red); border-radius: 4px; cursor: pointer; font-weight: bold;">ล้างรายการ</button>
+              </div>
+
+              <div id="pdrange-filters-container" style="display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--bg-darkest); border-radius: 8px; border: 1px solid var(--border-glass); max-height: 300px; overflow-y: auto;">
+                <!-- Dynamic PD range checkboxes will be injected here -->
               </div>
             </div>
           </div>
