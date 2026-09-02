@@ -314,23 +314,18 @@ export class DailyScheduleController {
             <span>จำนวนผลิต: <strong style="color: var(--text-primary);">${job.qty}</strong> pcs</span>
           </div>
           
-          <!-- Receive / Send flow routing -->
-          <div style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.05); display: flex; flex-direction: column; gap: 3px; font-size: 9.5px; color: var(--text-secondary);">
-            <div>
-              📥 รับงานต่อจาก: <strong style="color: var(--text-primary);">${prevWCStr}</strong>
-            </div>
-            <div>
-              📤 ส่งมอบไปที่: <strong style="color: var(--text-primary);">${nextWCStr}</strong>
-            </div>
-          </div>
         </div>
         
-        <!-- Material Status Badge -->
-        <div style="flex: 0 0 115px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; border-left: 1px dashed var(--border-glass); padding-left: 8px;">
-          <span style="font-size: 8.5px; color: var(--text-secondary);">ความพร้อมวัตถุดิบ</span>
-          <span style="background: ${readiness.bgColor}; border: 1px solid ${readiness.borderColor}; color: ${readiness.color}; font-size: 8.5px; font-weight: bold; padding: 4px 6px; border-radius: 4px; text-align: center; width: 100%; line-height: 1.2;">
-            ${readiness.text}
-          </span>
+        <!-- Receive / Send flow routing (Moved to the right) -->
+        <div style="flex: 0 0 160px; display: flex; flex-direction: column; justify-content: center; gap: 6px; border-left: 1px dashed var(--border-glass); padding-left: 12px; font-size: 9px; color: var(--text-secondary);">
+          <div>
+            📥 Operation ก่อนหน้า:<br>
+            <strong style="color: var(--text-primary); font-size: 9.5px; display: inline-block; margin-top: 2px;">${prevWCStr}</strong>
+          </div>
+          <div>
+            📤 Operation ถัดไป:<br>
+            <strong style="color: var(--text-primary); font-size: 9.5px; display: inline-block; margin-top: 2px;">${nextWCStr}</strong>
+          </div>
         </div>
       `;
       
