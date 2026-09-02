@@ -13,6 +13,7 @@ const dd = String(today.getDate()).padStart(2, '0');
 const compileVersion = `${yy}${mm}${dd}`;
 
 export default defineConfig({
+  base: '/pirom_pdplan/',
   define: {
     __APP_VERSION__: JSON.stringify(compileVersion)
   },
