@@ -251,17 +251,26 @@ export class DailyScheduleController {
       let prevStep = null;
       let nextStep = null;
       
-      if (wo && wo.steps) {
-        const sortedSteps = [...wo.steps].sort((a, b) => a.stepNum - b.stepNum);
+      let sortedSteps = [];
+      if (wo && wo.steps && wo.steps.length > 0) {
+        sortedSteps = [...wo.steps].sort((a, b) => a.stepNum - b.stepNum);
+      } else {
+        sortedSteps = this.state.scheduledJobs
+          .filter(j => j.woId === job.woId)
+          .sort((a, b) => a.stepNum - b.stepNum);
+      }
+      
+      if (sortedSteps.length > 0) {
         const currentIndex = sortedSteps.findIndex(s => s.stepNum === job.stepNum);
-        
         if (currentIndex > 0) {
           prevStep = sortedSteps[currentIndex - 1];
-          prevWCStr = `${prevStep.name} (${prevStep.machine})`;
+          const name = prevStep.name || prevStep.stepName || prevStep.partName || 'Operation';
+          prevWCStr = `${name} (${prevStep.machine})`;
         }
         if (currentIndex !== -1 && currentIndex < sortedSteps.length - 1) {
           nextStep = sortedSteps[currentIndex + 1];
-          nextWCStr = `${nextStep.name} (${nextStep.machine})`;
+          const name = nextStep.name || nextStep.stepName || nextStep.partName || 'Operation';
+          nextWCStr = `${name} (${nextStep.machine})`;
         }
       }
       
@@ -394,17 +403,26 @@ export class DailyScheduleController {
         let nextWCStr = 'คลังสินค้าสำเร็จรูป (FG)';
         let prevStep = null;
         
-        if (wo && wo.steps) {
-          const sortedSteps = [...wo.steps].sort((a, b) => a.stepNum - b.stepNum);
+        let sortedSteps = [];
+        if (wo && wo.steps && wo.steps.length > 0) {
+          sortedSteps = [...wo.steps].sort((a, b) => a.stepNum - b.stepNum);
+        } else {
+          sortedSteps = this.state.scheduledJobs
+            .filter(j => j.woId === job.woId)
+            .sort((a, b) => a.stepNum - b.stepNum);
+        }
+        
+        if (sortedSteps.length > 0) {
           const currentIndex = sortedSteps.findIndex(s => s.stepNum === job.stepNum);
-          
           if (currentIndex > 0) {
             prevStep = sortedSteps[currentIndex - 1];
-            prevWCStr = `${prevStep.name} (${prevStep.machine})`;
+            const name = prevStep.name || prevStep.stepName || prevStep.partName || 'Operation';
+            prevWCStr = `${name} (${prevStep.machine})`;
           }
           if (currentIndex !== -1 && currentIndex < sortedSteps.length - 1) {
             const nextStep = sortedSteps[currentIndex + 1];
-            nextWCStr = `${nextStep.name} (${nextStep.machine})`;
+            const name = nextStep.name || nextStep.stepName || nextStep.partName || 'Operation';
+            nextWCStr = `${name} (${nextStep.machine})`;
           }
         }
         
