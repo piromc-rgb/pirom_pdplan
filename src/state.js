@@ -1,6 +1,6 @@
 // MIE Trak Pro - Production Scheduling Central State
 import { Scheduler, getPriorityWeight } from './scheduler.js';
-import { isJobPriorityVisible, isJobProjectVisible } from './gantt.js';
+import { isJobPriorityVisible, isJobProjectVisible, isJobPdRangeVisible } from './gantt.js';
 
 class CentralState {
   constructor() {
@@ -25,6 +25,9 @@ class CentralState {
     // Active project/SO filters (defaults to true for all keys)
     this.activeProjects = {};
     this.projectColors = {};
+
+    // Active PD Ranges
+    this.activePdRanges = [];
 
     // Manually selected Work Centers to show on the board (defaults to true for all keys)
     this.activeWorkCenters = {};
@@ -1667,7 +1670,7 @@ class CentralState {
   getMachineOEE(machine) {
     // Only count jobs currently visible on the board (respecting the Priority/Project
     // filters) - a job hidden by those filters shouldn't count toward this machine's load.
-    const jobs = this.scheduledJobs.filter(j => j.machine === machine && isJobPriorityVisible(j, this) && isJobProjectVisible(j, this));
+    const jobs = this.scheduledJobs.filter(j => j.machine === machine && isJobPriorityVisible(j, this) && isJobProjectVisible(j, this) && isJobPdRangeVisible(j, this));
     const wc = this.workCenters[machine] || {};
     const capacityCount = (wc.capacity !== undefined && wc.capacity > 0) ? parseInt(wc.capacity) : 1;
     let totalHours = jobs.reduce((sum, j) => sum + j.estHours * capacityCount, 0);

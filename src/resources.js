@@ -1,5 +1,5 @@
 import { getPriorityWeight } from './scheduler.js';
-import { getJobPriority, isJobPriorityVisible, isJobProjectVisible } from './gantt.js';
+import { getJobPriority, isJobPriorityVisible, isJobProjectVisible, isJobPdRangeVisible } from './gantt.js';
 
 function parseColorToHex(colorStr) {
   if (!colorStr) return '#0284c7';
@@ -23,7 +23,7 @@ export class ResourcesController {
   constructor(state) {
     this.state = state;
     this.activeToolTab = 'nest'; // 'nest' | 'split'
-    this.activeRightTab = 'resources'; // 'resources' | 'genka' | 'machinelink'
+    this.activeRightTab = 'resources'; // 'resources' | 'pdrange' | 'machinelink'
     this.showingPieView = false;
 
     this.initElements();
@@ -57,12 +57,12 @@ export class ResourcesController {
     this.tabRightResources = document.getElementById('tab-right-resources');
     this.tabRightPriority = document.getElementById('tab-right-priority');
     this.tabRightProject = document.getElementById('tab-right-project');
-    this.tabRightGenka = document.getElementById('tab-right-genka');
+    this.tabRightGenka = document.getElementById('tab-right-pdrange');
     this.tabRightMachineLink = document.getElementById('tab-right-machinelink');
     this.panelRightResources = document.getElementById('panel-right-resources');
     this.panelRightPriority = document.getElementById('panel-right-priority');
     this.panelRightProject = document.getElementById('panel-right-project');
-    this.panelRightGenka = document.getElementById('panel-right-genka');
+    this.panelRightGenka = document.getElementById('panel-right-pdrange');
     this.panelRightMachineLink = document.getElementById('panel-right-machinelink');
     
     // Dynamic Priority Filters Container
@@ -89,7 +89,7 @@ export class ResourcesController {
     if (this.tabRightProject) {
       this.tabRightProject.addEventListener('click', () => this.switchRightTab('project'));
     }
-    this.tabRightGenka.addEventListener('click', () => this.switchRightTab('genka'));
+    this.tabRightGenka.addEventListener('click', () => this.switchRightTab('pdrange'));
     this.tabRightMachineLink.addEventListener('click', () => this.switchRightTab('machinelink'));
 
     // Resource usage pie chart - toggles the sidebar between the OEE list and the pie view
@@ -100,6 +100,47 @@ export class ResourcesController {
         this.renderOEE();
       });
     }
+
+    // PD Range Filter Events
+    const btnAddPdRange = document.getElementById('btn-add-pdrange');
+    const inputPdRange = document.getElementById('input-pdrange');
+    if (btnAddPdRange && inputPdRange) {
+      btnAddPdRange.addEventListener('click', () => {
+        const val = inputPdRange.value.trim().toUpperCase();
+        if (!val) return;
+        
+        let start = val, end = null;
+        if (val.includes('-')) {
+          const parts = val.split('-');
+          start = parts[0].trim();
+          end = parts[1].trim();
+        }
+        
+        // Prevent duplicate exact same ranges
+        const exists = this.state.activePdRanges.some(r => r.start === start && r.end === end);
+        if (!exists) {
+          this.state.activePdRanges.push({ start, end, enabled: true });
+          inputPdRange.value = '';
+          this.state.notify();
+        }
+      });
+      inputPdRange.addEventListener('keyup', (e) => {
+        if (e.key === 'Enter') btnAddPdRange.click();
+      });
+    }
+
+    document.getElementById('btn-pdrange-select-all')?.addEventListener('click', () => {
+      this.state.activePdRanges.forEach(r => r.enabled = true);
+      this.state.notify();
+    });
+    document.getElementById('btn-pdrange-deselect-all')?.addEventListener('click', () => {
+      this.state.activePdRanges.forEach(r => r.enabled = false);
+      this.state.notify();
+    });
+    document.getElementById('btn-pdrange-clear-all')?.addEventListener('click', () => {
+      this.state.activePdRanges = [];
+      this.state.notify();
+    });
 
     // Priority filter Select All / Deselect All
     document.getElementById('btn-priority-select-all')?.addEventListener('click', () => {
@@ -174,7 +215,7 @@ export class ResourcesController {
     } else if (tab === 'project') {
       if (this.tabRightProject) this.tabRightProject.classList.add('active');
       if (this.panelRightProject) this.panelRightProject.classList.remove('hidden');
-    } else if (tab === 'genka') {
+    } else if (tab === 'pdrange') {
       this.tabRightGenka.classList.add('active');
       this.panelRightGenka.classList.remove('hidden');
     } else if (tab === 'machinelink') {
@@ -687,8 +728,8 @@ export class ResourcesController {
       // Handled by renderPriorityFilters() above
     } else if (this.activeRightTab === 'project') {
       // Handled by renderProjectFilters() above
-    } else if (this.activeRightTab === 'genka') {
-      this.renderGenka();
+    } else if (this.activeRightTab === 'pdrange') {
+      this.renderPdRangeFilters();
     } else if (this.activeRightTab === 'machinelink') {
       this.renderMachineLink();
     }
@@ -704,7 +745,7 @@ export class ResourcesController {
     if (!this.state.showAllWorkCenters) {
       const usedMachines = new Set(
         this.state.scheduledJobs
-          .filter(j => isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state))
+          .filter(j => isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobPdRangeVisible(j, this.state))
           .map(j => j.machine)
           .filter(Boolean)
       );
@@ -855,7 +896,7 @@ export class ResourcesController {
     const machines = this.getVisibleMachines();
     const hoursByMachine = machines.map(m => {
       const hours = this.state.scheduledJobs
-        .filter(j => j.machine === m && isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state))
+        .filter(j => j.machine === m && isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobPdRangeVisible(j, this.state))
         .reduce((sum, j) => sum + (j.estHours > 0 ? j.estHours : 0), 0);
       return { machine: m, name: this.state.getMachineDisplayName(m), hours };
     }).filter(m => m.hours > 0).sort((a, b) => b.hours - a.hours);
@@ -1067,62 +1108,53 @@ export class ResourcesController {
     }
   }
 
-  renderGenka() {
-    const revenueEl = document.getElementById('genka-total-revenue');
-    const costEl = document.getElementById('genka-total-cost');
-    const marginEl = document.getElementById('genka-net-margin');
-    const jobsListEl = document.getElementById('genka-jobs-list');
-
-    if (!revenueEl || !costEl || !marginEl || !jobsListEl) return;
-
-    const scheduled = this.state.scheduledJobs;
-    let totalRevenue = 0;
-    let totalCost = 0;
-
-    scheduled.forEach(job => {
-      totalRevenue += this.state.calculateRevenue(job);
-      totalCost += this.state.calculateJobActualCost(job);
-    });
-
-    const netProfit = totalRevenue - totalCost;
-    const marginPercent = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0;
-
-    revenueEl.textContent = `฿${totalRevenue.toLocaleString()}`;
-    costEl.textContent = `฿${totalCost.toLocaleString()}`;
-    marginEl.textContent = `${marginPercent}%`;
-    marginEl.className = `genka-value ${marginPercent >= 50 ? 'text-green' : (marginPercent >= 20 ? 'text-cyan' : 'text-orange')}`;
-
-    jobsListEl.innerHTML = '';
-    if (scheduled.length === 0) {
-      jobsListEl.innerHTML = '<div class="empty-list-hint" style="font-size: 10px; color: var(--text-secondary);">No scheduled jobs.</div>';
+  renderPdRangeFilters() {
+    const container = document.getElementById('pdrange-filters-container');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (this.state.activePdRanges.length === 0) {
+      container.innerHTML = '<div style="font-size: 10px; color: var(--text-secondary); text-align: center; padding: 10px;">ไม่มีรายการช่วง PD ที่กำหนด<br>แสดงผลทั้งหมด</div>';
       return;
     }
-
-    scheduled.forEach(job => {
-      const plannedCost = job.plannedCost || this.state.calculatePlannedCost(job);
-      const actualCost = this.state.calculateJobActualCost(job);
-      const costPercent = plannedCost > 0 ? Math.min(100, Math.round((actualCost / plannedCost) * 100)) : 0;
+    
+    this.state.activePdRanges.forEach((range, idx) => {
+      const row = document.createElement('div');
+      row.style = 'display: flex; align-items: center; justify-content: space-between; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; border: 1px solid var(--border-glass);';
       
-      const jobRow = document.createElement('div');
-      jobRow.className = 'genka-job-row';
-
-      const warningClass = actualCost > plannedCost ? 'warning' : '';
-      const profitStatus = actualCost > plannedCost ? '<span style="color: var(--accent-red)">Loss Alert</span>' : '<span style="color: var(--accent-green)">On Budget</span>';
-
-      jobRow.innerHTML = `
-        <div class="genka-job-header">
-          <span><strong>${job.woId || job.id}</strong> [${job.stepNum}]</span>
-          <span>${profitStatus}</span>
-        </div>
-        <div style="font-size: 8px; color: var(--text-secondary); display:flex; justify-content:space-between; margin-top:2px;">
-          <span>Planned: ฿${Math.round(plannedCost)}</span>
-          <span>Actual: ฿${Math.round(actualCost)}</span>
-        </div>
-        <div class="genka-cost-bar">
-          <div class="genka-cost-fill ${warningClass}" style="width: ${costPercent}%"></div>
-        </div>
-      `;
-      jobsListEl.appendChild(jobRow);
+      const leftDiv = document.createElement('div');
+      leftDiv.style = 'display: flex; align-items: center; gap: 8px;';
+      
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = range.enabled;
+      cb.style = 'cursor: pointer;';
+      cb.addEventListener('change', (e) => {
+        range.enabled = e.target.checked;
+        this.state.notify();
+      });
+      
+      const label = document.createElement('label');
+      label.textContent = range.end ? `${range.start} - ${range.end}` : range.start;
+      label.style = 'font-size: 11px; cursor: pointer; color: var(--text-primary); font-family: monospace;';
+      label.addEventListener('click', () => { cb.click(); });
+      
+      leftDiv.appendChild(cb);
+      leftDiv.appendChild(label);
+      
+      const btnDel = document.createElement('button');
+      btnDel.innerHTML = '&times;';
+      btnDel.style = 'background: none; border: none; color: var(--accent-red); cursor: pointer; font-size: 14px; font-weight: bold; padding: 0 4px;';
+      btnDel.title = 'ลบช่วงนี้';
+      btnDel.addEventListener('click', () => {
+        this.state.activePdRanges.splice(idx, 1);
+        this.state.notify();
+      });
+      
+      row.appendChild(leftDiv);
+      row.appendChild(btnDel);
+      container.appendChild(row);
     });
   }
 

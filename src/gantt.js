@@ -132,6 +132,33 @@ export function isJobProjectVisible(job, state) {
   return true;
 }
 
+export function isJobPdRangeVisible(job, state) {
+  if (!state || !state.activePdRanges || state.activePdRanges.length === 0) return true;
+  
+  // Get PD number (woId or id)
+  const pd = String(job.woId || job.id || '').trim();
+  if (!pd) return true; // If no PD number, let it show (or hide? let's show)
+  
+  // If there are ranges, check if it falls in ANY active range
+  let hasActiveRanges = false;
+  for (const range of state.activePdRanges) {
+    if (!range.enabled) continue;
+    hasActiveRanges = true;
+    
+    // Check range boundaries (string comparison works for same length formatted strings like PD260000)
+    // If range is a single value
+    if (range.start && !range.end) {
+      if (pd === range.start) return true;
+    } else if (range.start && range.end) {
+      if (pd >= range.start && pd <= range.end) return true;
+    }
+  }
+  
+  // If there were active ranges but we didn't match any, hide it.
+  // If all ranges were disabled, it means no filter is active, so show it.
+  return !hasActiveRanges;
+}
+
 export class GanttController {
   constructor(state) {
     this.state = state;
@@ -642,7 +669,7 @@ export class GanttController {
     const boardRangeEl = document.getElementById('board-date-range-display');
     if (boardRangeEl) {
       const scheduledJobs = (this.state.scheduledJobs || []).filter(job => {
-        return isJobPriorityVisible(job, this.state) && isJobProjectVisible(job, this.state) && this.state.activeWorkCenters[job.machine] !== false && typeof job.startHour === 'number' && !isNaN(job.startHour);
+        return isJobPriorityVisible(job, this.state) && isJobProjectVisible(job, this.state) && isJobPdRangeVisible(job, this.state) && this.state.activeWorkCenters[job.machine] !== false && typeof job.startHour === 'number' && !isNaN(job.startHour);
       });
       let startObj, endObj, lastTaskInfo = '';
       if (scheduledJobs.length > 0) {
@@ -823,7 +850,7 @@ export class GanttController {
         const isParent = directParentIdsAll.has(woId);
 
         const woJobs = getJobsForWo(woId).filter(j => {
-          return isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && this.state.activeWorkCenters[j.machine] !== false;
+          return isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobPdRangeVisible(j, this.state) && this.state.activeWorkCenters[j.machine] !== false;
         });
 
         if (woJobs.length === 0) return;
@@ -1468,7 +1495,7 @@ export class GanttController {
       if (!this.state.showAllWorkCenters) {
         const usedMachines = new Set(
           this.state.scheduledJobs
-            .filter(j => isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state))
+            .filter(j => isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobPdRangeVisible(j, this.state))
             .map(j => j.machine)
             .filter(Boolean)
         );
@@ -1739,7 +1766,7 @@ export class GanttController {
 
       // Filter jobs/steps assigned to this machine and matching selected priorities
       const machineJobs = (jobsByMachine.get(machineName) || []).filter(j => {
-        return isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state);
+        return isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobPdRangeVisible(j, this.state);
       });
 
       // When zoomed out (day/week/month/quarter/year), adjacent same-priority jobs
@@ -2632,7 +2659,7 @@ export class GanttController {
       let lastJob = null;
 
       const activeJobs = this.state.scheduledJobs.filter(job => {
-        return isJobPriorityVisible(job, this.state) && isJobProjectVisible(job, this.state) && this.state.activeWorkCenters[job.machine] !== false && typeof job.startHour === 'number' && !isNaN(job.startHour);
+        return isJobPriorityVisible(job, this.state) && isJobProjectVisible(job, this.state) && isJobPdRangeVisible(job, this.state) && this.state.activeWorkCenters[job.machine] !== false && typeof job.startHour === 'number' && !isNaN(job.startHour);
       });
 
       activeJobs.forEach(job => {
