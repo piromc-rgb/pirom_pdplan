@@ -6,7 +6,7 @@ import { GanttController } from './gantt.js';
 import { ResourcesController } from './resources.js';
 import { KioskController } from './kiosk.js';
 import { DailyScheduleController } from './dailySchedule.js';
-import { AssemblyTreeController } from './assemblyTree.js';
+import { AssemblyTreeController, matchesAssemblyQuery } from './assemblyTree.js';
 
 function getBaseDate() {
   return new Date(2026, 5, 22, 8, 0, 0); // Fixed epoch: Mon June 22 2026 8:00
@@ -414,95 +414,151 @@ class App {
       });
     }
 
-    // 4. Resources Sidebar Show/Hide Toggle
+    // 4. Left/Right sidebar tabs - Backlog, Assembly, Resources - are exclusive:
+    // exactly one is active at a time (radio-button style, like the Work
+    // Center/PD/Assembly Set mode buttons), rather than each being an independent
+    // show/hide toggle. Picking one puts away whichever of the other two was showing.
+    const btnTabBacklog = document.getElementById('btn-toggle-backlog-header');
+    const btnTabAssembly = document.getElementById('btn-toggle-assembly-list-header');
+    const btnTabResources = document.getElementById('btn-toggle-resources-header');
+    const backlogTabContent = document.getElementById('backlog-tab-content');
+    const assemblyListTabContent = document.getElementById('assembly-list-tab-content');
+    const backlogHeaderTitle = document.getElementById('backlog-header-title');
+    const assemblySearchInput = document.getElementById('assembly-list-search-input');
+    const assemblySetListEl = document.getElementById('assembly-set-list');
+
+    const renderAssemblySetList = (query) => {
+      if (!assemblySetListEl || !this.assemblyTree) return;
+      const all = this.assemblyTree.getAllAssemblies();
+      const matches = all.filter(a => matchesAssemblyQuery(a.id, a.partName, query));
+
+      if (matches.length === 0) {
+        assemblySetListEl.innerHTML = '<div style="padding: 20px 10px; text-align: center; font-size: 11px; color: var(--text-secondary);">ไม่พบ Assembly Set ที่ตรงกับคำค้นหา</div>';
+        return;
+      }
+
+      assemblySetListEl.innerHTML = matches.map(a => {
+        // "X/Y" = how many of this assembly's sub-PDs have actually started work
+        // (Running/Setup/Paused/Completed) out of all its sub-PDs - PDs still just
+        // waiting in the backlog or scheduled-but-not-started don't count towards X.
+        const { progressed, total } = this.assemblyTree.getSubPdProgress(a.id);
+        let progressColor = 'var(--text-secondary)';
+        if (total > 0 && progressed === total) progressColor = 'var(--accent-green)';
+        else if (progressed > 0) progressColor = 'var(--accent-orange)';
+        const progressBadge = total > 0
+          ? `<span style="font-size: 10px; font-weight: 800; color: ${progressColor}; flex-shrink: 0; margin-left: 6px;" title="PD ย่อยที่เริ่มงานแล้ว (Running/Setup/Paused/Completed) / PD ย่อยทั้งหมด">${progressed}/${total}</span>`
+          : '';
+        return `
+        <div class="assembly-set-list-item" data-wo-id="${a.id}" style="padding: 8px 10px; margin-bottom: 6px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.03); cursor: pointer; transition: background 0.2s;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="font-weight: bold; font-size: 11.5px; color: var(--accent-teal); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${a.id}</div>
+            ${progressBadge}
+          </div>
+          <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${a.partName}">${a.partName}</div>
+        </div>
+      `;
+      }).join('');
+
+      assemblySetListEl.querySelectorAll('.assembly-set-list-item').forEach(item => {
+        item.addEventListener('mouseenter', () => { item.style.background = 'rgba(0, 242, 254, 0.08)'; });
+        item.addEventListener('mouseleave', () => { item.style.background = 'rgba(255,255,255,0.03)'; });
+        item.addEventListener('click', () => {
+          const woId = item.getAttribute('data-wo-id');
+          state.setGanttMode('assembly');
+          if (this.assemblyTree) {
+            this.assemblyTree.selectedWoId = woId;
+            this.assemblyTree.collapsedNodes.clear();
+            this.assemblyTree.render();
+            this.assemblyTree.fitView();
+          }
+        });
+      });
+    };
+
+    const setTabButtonActive = (btn, active) => {
+      if (!btn) return;
+      if (active) {
+        btn.style.background = 'rgba(0, 242, 254, 0.1)';
+        btn.style.borderColor = 'var(--accent-teal)';
+        btn.style.color = 'var(--accent-teal)';
+      } else {
+        btn.style.background = 'rgba(255, 255, 255, 0.05)';
+        btn.style.borderColor = 'var(--border-glass)';
+        btn.style.color = 'var(--text-secondary)';
+      }
+    };
+
+    let activeSidebarTab = 'backlog'; // 'backlog' | 'assembly' | 'resources' - mutually exclusive
+
+    const btnAddPd = document.getElementById('btn-add-pd');
+    const btnImportExcel = document.getElementById('btn-import-excel');
+
+    const applySidebarTab = () => {
+      const mainLayout = document.querySelector('.main-layout');
+      setTabButtonActive(btnTabBacklog, activeSidebarTab === 'backlog');
+      setTabButtonActive(btnTabAssembly, activeSidebarTab === 'assembly');
+      setTabButtonActive(btnTabResources, activeSidebarTab === 'resources');
+
+      if (activeSidebarTab === 'resources') {
+        // Resources takes over the whole board: put away the left Backlog/Assembly panel.
+        mainLayout.classList.add('hide-backlog');
+        mainLayout.classList.remove('hide-resources');
+      } else {
+        mainLayout.classList.remove('hide-backlog');
+        mainLayout.classList.add('hide-resources');
+
+        const showAssembly = activeSidebarTab === 'assembly';
+        if (backlogTabContent) backlogTabContent.style.display = showAssembly ? 'none' : 'flex';
+        if (assemblyListTabContent) {
+          assemblyListTabContent.style.display = showAssembly ? 'flex' : 'none';
+          assemblyListTabContent.classList.toggle('hidden', !showAssembly);
+        }
+        if (backlogHeaderTitle) {
+          backlogHeaderTitle.textContent = showAssembly ? 'ASSEMBLY SET LIST' : `PD BACKLOG (${state.workOrders.length})`;
+        }
+        // "Add Production Order" / "Import from Excel" only make sense for the
+        // Backlog itself, not while browsing the Assembly Set list.
+        if (btnAddPd) btnAddPd.style.display = showAssembly ? 'none' : '';
+        if (btnImportExcel) btnImportExcel.style.display = showAssembly ? 'none' : '';
+        if (showAssembly) renderAssemblySetList(assemblySearchInput ? assemblySearchInput.value : '');
+      }
+
+      // Force redraw Gantt to resize cards to the newly available planning board width
+      this.gantt.render();
+    };
+
+    if (btnTabBacklog) {
+      btnTabBacklog.addEventListener('click', () => { activeSidebarTab = 'backlog'; applySidebarTab(); });
+    }
+    if (btnTabAssembly) {
+      btnTabAssembly.addEventListener('click', () => { activeSidebarTab = 'assembly'; applySidebarTab(); });
+    }
+    if (btnTabResources) {
+      btnTabResources.addEventListener('click', () => { activeSidebarTab = 'resources'; applySidebarTab(); });
+    }
+
+    // Legacy entry points (Options dropdown, the ◀ collapse button) just flip
+    // between the left panel and Resources, reusing the same exclusive state.
     const btnToggleResources = document.getElementById('btn-toggle-resources');
     const btnHideSidebar = document.getElementById('btn-hide-sidebar');
-    
-    const toggleResources = () => {
-      const mainLayout = document.querySelector('.main-layout');
-      mainLayout.classList.toggle('hide-resources');
-      
-      const isHidden = mainLayout.classList.contains('hide-resources');
-      if (btnToggleResources) {
-        if (isHidden) {
-          btnToggleResources.textContent = 'Show Resources';
-          btnToggleResources.classList.add('active');
-        } else {
-          btnToggleResources.textContent = 'Hide Resources';
-          btnToggleResources.classList.remove('active');
-        }
-      }
-      
-      const btnToggleResourcesHeader = document.getElementById('btn-toggle-resources-header');
-      if (btnToggleResourcesHeader) {
-        if (isHidden) {
-          btnToggleResourcesHeader.style.background = 'rgba(255, 255, 255, 0.05)';
-          btnToggleResourcesHeader.style.borderColor = 'var(--border-glass)';
-          btnToggleResourcesHeader.style.color = 'var(--text-secondary)';
-        } else {
-          btnToggleResourcesHeader.style.background = 'rgba(0, 242, 254, 0.1)';
-          btnToggleResourcesHeader.style.borderColor = 'var(--accent-teal)';
-          btnToggleResourcesHeader.style.color = 'var(--accent-teal)';
-        }
-      }
-      
-      // Force redraw Gantt to resize cards to the expanded planning board
-      this.gantt.render();
-    };
-
-    if (btnToggleResources) {
-      btnToggleResources.addEventListener('click', toggleResources);
-    }
-    const btnToggleResourcesHeader = document.getElementById('btn-toggle-resources-header');
-    if (btnToggleResourcesHeader) {
-      btnToggleResourcesHeader.addEventListener('click', toggleResources);
-    }
-    if (btnHideSidebar) {
-      btnHideSidebar.addEventListener('click', toggleResources);
-    }
-
-    // 4b. Backlog Sidebar Show/Hide Toggle
     const btnToggleBacklog = document.getElementById('btn-toggle-backlog');
-    const btnToggleBacklogHeader = document.getElementById('btn-toggle-backlog-header');
     const btnCollapseBacklogX = document.getElementById('btn-collapse-backlog-x');
-    
-    const toggleBacklog = () => {
-      const mainLayout = document.querySelector('.main-layout');
-      mainLayout.classList.toggle('hide-backlog');
-      
-      const isHidden = mainLayout.classList.contains('hide-backlog');
-      if (btnToggleBacklog) {
-        if (isHidden) {
-          btnToggleBacklog.textContent = 'Show Backlog';
-        } else {
-          btnToggleBacklog.textContent = 'Hide Backlog';
-        }
-      }
-      if (btnToggleBacklogHeader) {
-        if (isHidden) {
-          btnToggleBacklogHeader.style.background = 'rgba(255, 255, 255, 0.05)';
-          btnToggleBacklogHeader.style.borderColor = 'var(--border-glass)';
-          btnToggleBacklogHeader.style.color = 'var(--text-secondary)';
-        } else {
-          btnToggleBacklogHeader.style.background = 'rgba(0, 242, 254, 0.1)';
-          btnToggleBacklogHeader.style.borderColor = 'var(--accent-teal)';
-          btnToggleBacklogHeader.style.color = 'var(--accent-teal)';
-        }
-      }
-      
-      // Force redraw Gantt to resize cards to the expanded planning board
-      this.gantt.render();
-    };
 
-    if (btnToggleBacklog) {
-      btnToggleBacklog.addEventListener('click', toggleBacklog);
+    const goToResourcesTab = () => { activeSidebarTab = 'resources'; applySidebarTab(); };
+    const goToBacklogTab = () => { activeSidebarTab = 'backlog'; applySidebarTab(); };
+
+    if (btnToggleResources) btnToggleResources.addEventListener('click', goToResourcesTab);
+    if (btnHideSidebar) btnHideSidebar.addEventListener('click', goToResourcesTab);
+    if (btnToggleBacklog) btnToggleBacklog.addEventListener('click', goToBacklogTab);
+    if (btnCollapseBacklogX) btnCollapseBacklogX.addEventListener('click', goToResourcesTab);
+
+    if (assemblySearchInput) {
+      assemblySearchInput.addEventListener('input', () => {
+        renderAssemblySetList(assemblySearchInput.value);
+      });
     }
-    if (btnToggleBacklogHeader) {
-      btnToggleBacklogHeader.addEventListener('click', toggleBacklog);
-    }
-    if (btnCollapseBacklogX) {
-      btnCollapseBacklogX.addEventListener('click', toggleBacklog);
-    }
+
+    applySidebarTab();
 
     // 5. Undo / Redo / Clear Board Buttons
     const btnUndo = document.getElementById('btn-undo');

@@ -1,11 +1,5 @@
 node_modules/
 dist/
-.vite/
-.DS_Store
-.claude/
-
-# Real production/customer data - not meant for the repo
+.env
 *.xlsx
-*.xls
 Plan.json
-pd.md

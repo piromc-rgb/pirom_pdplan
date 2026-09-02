@@ -1,6 +1,47 @@
 // Assembly Parts Tree Diagram Controller
 // Implements full GoDiagram-style Visual Parts Tree Hierarchy (BOM Tree)
 
+// Parses a search box entry like "PD2607785-PD2607795" into a numeric ID range, so
+// searching finds every PD whose number falls between two IDs instead of only
+// exact/substring text matches. Returns null when the query isn't range-shaped
+// (plain substring search should be used instead).
+export function parseIdRangeQuery(query) {
+  const q = (query || '').trim();
+  const m = q.match(/^([A-Za-z]*)(\d+)\s*-\s*([A-Za-z]*)(\d+)$/);
+  if (!m) return null;
+  const [, prefix1, numStr1, prefix2, numStr2] = m;
+  if (prefix1 && prefix2 && prefix1.toUpperCase() !== prefix2.toUpperCase()) return null;
+  const prefix = (prefix1 || prefix2 || '').toUpperCase();
+  if (!prefix) return null; // require a prefix (e.g. "PD") so a bare "1-5" doesn't match everything
+  // A right side with no prefix and fewer digits than the left (e.g. "PD2519316-329")
+  // is ambiguous - is "329" a full second ID or a truncated suffix? Rather than guess,
+  // only treat it as a range when both sides carry the same digit count (or the right
+  // side repeats the "PD" prefix), otherwise fall back to a plain substring search.
+  if (!prefix2 && numStr2.length !== numStr1.length) return null;
+  const num1 = parseInt(numStr1, 10);
+  const num2 = parseInt(numStr2, 10);
+  return { prefix, min: Math.min(num1, num2), max: Math.max(num1, num2) };
+}
+
+// True if `id`/`partName` satisfy a search query - either a "PDxxxx-PDyyyy" ID
+// range, or (for anything else) a plain case-insensitive substring match.
+export function matchesAssemblyQuery(id, partName, query) {
+  const q = (query || '').trim();
+  if (!q) return true;
+
+  const range = parseIdRangeQuery(q);
+  if (range) {
+    const idMatch = (id || '').toUpperCase().match(/^([A-Za-z]+)(\d+)$/);
+    if (!idMatch) return false;
+    if (idMatch[1] !== range.prefix) return false;
+    const idNum = parseInt(idMatch[2], 10);
+    return idNum >= range.min && idNum <= range.max;
+  }
+
+  const lower = q.toLowerCase();
+  return id.toLowerCase().includes(lower) || (partName || '').toLowerCase().includes(lower);
+}
+
 export class AssemblyTreeController {
   constructor(state, ganttController) {
     this.state = state;
@@ -10,12 +51,14 @@ export class AssemblyTreeController {
     this.zoomPlane = document.getElementById('assembly-tree-zoom-plane');
     this.svg = document.getElementById('assembly-tree-svg');
     this.nodesContainer = document.getElementById('assembly-tree-nodes-container');
-    this.selectWO = document.getElementById('assembly-tree-select-wo');
-    
+    this.searchInput = document.getElementById('assembly-tree-search-input');
+    this.searchDropdown = document.getElementById('assembly-tree-search-dropdown');
+
     this.headerPartNo = document.getElementById('tree-header-partno');
     this.headerDesc = document.getElementById('tree-header-desc');
 
     this.selectedWoId = null;
+    this.allAssemblies = [];
     this.collapsedNodes = new Set();
     this.scale = 1.0;
     this.panX = 0;
@@ -28,15 +71,38 @@ export class AssemblyTreeController {
   }
 
   initEvents() {
-    // Select Assembly Dropdown
-    if (this.selectWO) {
-      this.selectWO.addEventListener('change', (e) => {
-        this.selectedWoId = e.target.value;
-        this.collapsedNodes.clear();
-        this.render();
-        this.fitView();
+    // Searchable Assembly Set picker: a text input that filters a dropdown list
+    // (44+ PDs makes a plain <select> hard to scan/scroll through).
+    if (this.searchInput) {
+      this.searchInput.addEventListener('focus', () => {
+        // The box shows "ID - part name" for the current selection; select it all so
+        // typing replaces it, and open the dropdown showing every option first.
+        this.searchInput.select();
+        this.renderSearchDropdown('');
+      });
+      this.searchInput.addEventListener('input', () => {
+        this.renderSearchDropdown(this.searchInput.value);
+      });
+      this.searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          this.hideSearchDropdown();
+          this.searchInput.blur();
+        } else if (e.key === 'Enter') {
+          const firstItem = this.searchDropdown?.querySelector('.assembly-search-item');
+          if (firstItem) {
+            e.preventDefault();
+            this.selectAssembly(firstItem.getAttribute('data-wo-id'));
+          }
+        }
       });
     }
+
+    document.addEventListener('click', (e) => {
+      if (this.searchInput && this.searchDropdown &&
+          !this.searchInput.contains(e.target) && !this.searchDropdown.contains(e.target)) {
+        this.hideSearchDropdown();
+      }
+    });
 
     // Print
     const btnPrint = document.getElementById('btn-print-assembly-tree');
@@ -128,6 +194,43 @@ export class AssemblyTreeController {
     }
   }
 
+  hideSearchDropdown() {
+    if (this.searchDropdown) this.searchDropdown.classList.add('hidden');
+  }
+
+  renderSearchDropdown(query) {
+    if (!this.searchDropdown) return;
+    const matches = this.allAssemblies.filter(a => matchesAssemblyQuery(a.id, a.partName, query));
+
+    if (matches.length === 0) {
+      this.searchDropdown.innerHTML = '<div style="padding: 10px 12px; font-size: 12px; color: #64748b;">ไม่พบ Assembly Set ที่ตรงกับคำค้นหา</div>';
+    } else {
+      this.searchDropdown.innerHTML = matches.map(a => `
+        <div class="assembly-search-item" data-wo-id="${a.id}" style="padding: 7px 12px; font-size: 12px; cursor: pointer; color: #0f172a; ${a.id === this.selectedWoId ? 'background: #e0f2fe; font-weight: 700;' : ''}" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='${a.id === this.selectedWoId ? '#e0f2fe' : ''}'">
+          <span style="font-weight: 700;">${a.id}</span>
+          <span style="color: #475569;"> - ${a.partName}</span>
+        </div>
+      `).join('');
+
+      this.searchDropdown.querySelectorAll('.assembly-search-item').forEach(item => {
+        item.addEventListener('click', () => {
+          this.selectAssembly(item.getAttribute('data-wo-id'));
+        });
+      });
+    }
+
+    this.searchDropdown.classList.remove('hidden');
+  }
+
+  selectAssembly(woId) {
+    this.selectedWoId = woId;
+    this.collapsedNodes.clear();
+    this.hideSearchDropdown();
+    if (this.searchInput) this.searchInput.blur();
+    this.render();
+    this.fitView();
+  }
+
   fitView() {
     this.panX = 180;
     this.panY = 20;
@@ -135,28 +238,57 @@ export class AssemblyTreeController {
     this.applyTransform();
   }
 
-  getAllAssemblies() {
-    const allWoIds = new Set([
-      ...this.state.workOrders.map(w => w.id),
-      ...this.state.scheduledJobs.map(j => j.woId).filter(Boolean)
-    ]);
+  // Builds the cross-PD assembly graph from state.assemblyLinks: each link's `from`
+  // step belongs to the child PD that gets assembled INTO the parent PD its `to`
+  // step belongs to. This is a different relationship than the WO-ID dash suffix
+  // (which just numbers routing steps within a single PD) - a link's from/to PD IDs
+  // are recovered by stripping the step suffix off each side.
+  getAssemblyGraph() {
+    const parentOf = new Map();   // childWoId -> parentWoId
+    const childrenOf = new Map(); // parentWoId -> Set<childWoId>
+    const allWoIds = new Set();
 
-    // Find Root Assemblies (WOs with no parent or depth 0)
+    (this.state.assemblyLinks || []).forEach(link => {
+      const fromWo = (link.from || '').split('-')[0];
+      const toWo = (link.to || '').split('-')[0];
+      if (!fromWo || !toWo || fromWo === toWo) return;
+      allWoIds.add(fromWo);
+      allWoIds.add(toWo);
+      if (!parentOf.has(fromWo)) parentOf.set(fromWo, toWo);
+      if (!childrenOf.has(toWo)) childrenOf.set(toWo, new Set());
+      childrenOf.get(toWo).add(fromWo);
+    });
+
+    return { parentOf, childrenOf, allWoIds };
+  }
+
+  getAllAssemblies() {
+    const { parentOf, childrenOf, allWoIds } = this.getAssemblyGraph();
+
+    // Level 0 = PDs that are never assembled into something else (not a `from` in
+    // any link) but do have other PDs assembled into them.
     const assemblies = [];
     allWoIds.forEach(woId => {
-      const depth = (woId.match(/-/g) || []).length;
-      if (depth === 0) {
+      if (!parentOf.has(woId) && childrenOf.has(woId) && childrenOf.get(woId).size > 0) {
         const jobs = this.state.scheduledJobs.filter(j => j.woId === woId);
         const backlog = this.state.workOrders.find(w => w.id === woId);
         const partName = jobs[0]?.partName || backlog?.partName || woId;
-        assemblies.push({ id: woId, partName: partName });
+        assemblies.push({ id: woId, partName });
       }
     });
 
-    if (assemblies.length === 0 && allWoIds.size > 0) {
-      // Fallback: take first WO
-      const first = Array.from(allWoIds)[0];
-      assemblies.push({ id: first, partName: first });
+    if (assemblies.length === 0) {
+      // No assembly links recorded yet - fall back to any WO so the tab isn't blank.
+      const anyWoIds = new Set([
+        ...this.state.workOrders.map(w => w.id),
+        ...this.state.scheduledJobs.map(j => j.woId).filter(Boolean)
+      ]);
+      if (anyWoIds.size > 0) {
+        const first = Array.from(anyWoIds)[0];
+        const jobs = this.state.scheduledJobs.filter(j => j.woId === first);
+        const backlog = this.state.workOrders.find(w => w.id === first);
+        assemblies.push({ id: first, partName: jobs[0]?.partName || backlog?.partName || first });
+      }
     }
 
     return assemblies;
@@ -164,33 +296,31 @@ export class AssemblyTreeController {
 
   getAssemblyFamily(rootWoId) {
     if (!rootWoId) return [];
-    const allWoIds = new Set([
-      ...this.state.workOrders.map(w => w.id),
-      ...this.state.scheduledJobs.map(j => j.woId).filter(Boolean)
-    ]);
+    const { parentOf, childrenOf } = this.getAssemblyGraph();
 
-    // Gather all WOs belonging to this root
-    const familyIds = Array.from(allWoIds).filter(id => id === rootWoId || id.startsWith(rootWoId + '-'));
-    
-    // Sort tree hierarchically
-    familyIds.sort((a, b) => {
-      const aParts = a.split('-');
-      const bParts = b.split('-');
-      for (let i = 0; i < Math.min(aParts.length, bParts.length); i++) {
-        const numA = parseInt(aParts[i], 10);
-        const numB = parseInt(bParts[i], 10);
-        if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numA - numB;
-        if (aParts[i] !== bParts[i]) return aParts[i].localeCompare(bParts[i]);
-      }
-      return aParts.length - bParts.length;
-    });
+    // BFS down the assembly graph from rootWoId (Level 0) - Level 1 are PDs
+    // assembled directly into it, Level 2 are PDs assembled into a Level 1 PD, etc.
+    const depthOf = new Map([[rootWoId, 0]]);
+    const queue = [rootWoId];
+    const familyIds = [rootWoId];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      const kids = childrenOf.get(current);
+      if (!kids) continue;
+      kids.forEach(childId => {
+        if (depthOf.has(childId)) return; // guards against a cyclic/duplicate link
+        depthOf.set(childId, depthOf.get(current) + 1);
+        familyIds.push(childId);
+        queue.push(childId);
+      });
+    }
 
     const nodes = familyIds.map(id => {
       const jobs = this.state.scheduledJobs.filter(j => j.woId === id);
       const backlog = this.state.workOrders.find(w => w.id === id);
       const partName = jobs[0]?.partName || backlog?.partName || id;
       const dwgNo = jobs[0]?.dwgNo || backlog?.dwgNo || '';
-      
+
       const totalSteps = jobs.length + (backlog ? backlog.steps.length : 0);
       const completedSteps = jobs.filter(j => j.status === 'Completed').length;
       const isRunning = jobs.some(j => j.status === 'Running' || j.status === 'Setup');
@@ -200,10 +330,9 @@ export class AssemblyTreeController {
       if (isComplete) status = 'released';
       else if (isRunning || completedSteps > 0) status = 'working';
 
-      const depth = id === rootWoId ? 0 : (id.match(/-/g) || []).length;
-      const lastDash = id.lastIndexOf('-');
-      const parentId = depth === 0 ? null : (lastDash > 0 ? id.substring(0, lastDash) : rootWoId);
-      const hasChildren = familyIds.some(other => other !== id && other.startsWith(id + '-'));
+      const depth = depthOf.get(id) || 0;
+      const parentId = depth === 0 ? null : (parentOf.get(id) || null);
+      const hasChildren = childrenOf.has(id) && childrenOf.get(id).size > 0;
 
       // Machine steps summary
       const stepNames = jobs.map(j => j.machine || j.stepName).filter(Boolean);
@@ -224,6 +353,24 @@ export class AssemblyTreeController {
     });
 
     return nodes;
+  }
+
+  // Counts, among a root's sub-PDs (every family node below depth 0), how many have
+  // actually started production - i.e. at least one of their jobs is Running, Setup,
+  // Paused or Completed - versus ones still just sitting in the backlog or scheduled
+  // on the board but not yet worked on. Used by the Assembly Set list to show "X/Y".
+  getSubPdProgress(rootWoId) {
+    const subNodes = this.getAssemblyFamily(rootWoId).filter(n => n.depth > 0);
+    const total = subNodes.length;
+    let progressed = 0;
+    subNodes.forEach(n => {
+      const jobs = this.state.scheduledJobs.filter(j => j.woId === n.id);
+      const hasProgress = jobs.some(j =>
+        j.status === 'Running' || j.status === 'Setup' || j.status === 'Paused' || j.status === 'Completed'
+      );
+      if (hasProgress) progressed++;
+    });
+    return { progressed, total };
   }
 
   buildTreeHierarchy(nodes, rootWoId) {
@@ -255,11 +402,14 @@ export class AssemblyTreeController {
       return;
     }
 
-    // Populate dropdown
-    if (this.selectWO) {
-      const currentVal = this.selectedWoId || assemblies[0].id;
-      this.selectWO.innerHTML = assemblies.map(a => `<option value="${a.id}" ${a.id === currentVal ? 'selected' : ''}>${a.id} - ${a.partName}</option>`).join('');
-      this.selectedWoId = currentVal;
+    // Keep the full list around for the search dropdown, and reflect the current
+    // selection in the search box's text (only while the user isn't actively typing).
+    this.allAssemblies = assemblies;
+    const currentVal = this.selectedWoId || assemblies[0].id;
+    this.selectedWoId = currentVal;
+    if (this.searchInput && document.activeElement !== this.searchInput) {
+      const currentAssembly = assemblies.find(a => a.id === currentVal);
+      this.searchInput.value = currentAssembly ? `${currentAssembly.id} - ${currentAssembly.partName}` : currentVal;
     }
 
     const rootWoId = this.selectedWoId || assemblies[0].id;

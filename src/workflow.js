@@ -259,9 +259,12 @@ export class WorkflowController {
   }
 
   render() {
-    // Update the backlog count in the header title
+    // Update the backlog count in the header title - unless the sidebar is
+    // currently showing the Assembly Set list instead (main.js owns that title then).
     const backlogTitle = document.getElementById('backlog-header-title');
-    if (backlogTitle) {
+    const assemblyListTabContent = document.getElementById('assembly-list-tab-content');
+    const showingAssemblyList = assemblyListTabContent && !assemblyListTabContent.classList.contains('hidden');
+    if (backlogTitle && !showingAssemblyList) {
       backlogTitle.textContent = `PD BACKLOG (${this.state.workOrders.length})`;
     }
 

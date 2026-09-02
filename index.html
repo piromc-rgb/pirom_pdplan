@@ -123,6 +123,13 @@
             </div>
           </div>
 
+          <div class="tab-content hidden" id="assembly-list-tab-content" style="flex: 1; display: none; flex-direction: column; overflow: hidden; margin-top: 10px;">
+            <input type="text" id="assembly-list-search-input" placeholder="ค้นหา PD / ชื่องาน..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); outline: none; margin-bottom: 8px;">
+            <div class="scrollable-list" id="assembly-set-list" style="flex: 1; overflow-y: auto;">
+              <!-- Rendered dynamically: all root Assembly Sets -->
+            </div>
+          </div>
+
           <div class="sidebar-footer" style="padding: 12px; border-top: 1px solid var(--border-glass);">
             <button id="btn-clear-backlog" class="btn" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); color: var(--accent-red); font-weight: bold; border-radius: 6px; cursor: pointer;">
               <span>🗑️ Clear Backlog</span>
@@ -137,7 +144,10 @@
               <button id="btn-toggle-backlog-header" class="btn-action-small" title="Toggle Backlog Sidebar" style="margin: 0; padding: 4px 8px; font-size: 10.5px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 6px; cursor: pointer; font-weight: bold;">
                 📋 Backlog
               </button>
-              <button id="btn-toggle-resources-header" class="btn-action-small" title="Toggle Resources Sidebar" style="margin: 0; padding: 4px 8px; font-size: 10.5px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 6px; cursor: pointer; font-weight: bold;">
+              <button id="btn-toggle-assembly-list-header" class="btn-action-small" title="แสดงรายชื่อ Assembly Set ทั้งหมดในพื้นที่ PD Backlog" style="margin: 0; padding: 4px 8px; font-size: 10.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 6px; cursor: pointer; font-weight: bold;">
+                🔗 Assembly
+              </button>
+              <button id="btn-toggle-resources-header" class="btn-action-small" title="Toggle Resources Sidebar" style="margin: 0; padding: 4px 8px; font-size: 10.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 6px; cursor: pointer; font-weight: bold;">
                 👥 Resources
               </button>
             </div>
@@ -279,9 +289,12 @@
             <div class="assembly-tree-toolbar" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
               <div style="display: flex; align-items: center; gap: 12px;">
                 <button id="btn-print-assembly-tree" class="btn btn-secondary" style="padding: 4px 16px; font-size: 12px; font-weight: bold; background: #ffffff; color: #0284c7; border: 1px solid #0284c7; border-radius: 4px; box-shadow: none;">Print</button>
-                <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #334155; font-weight: 600;">
-                  <label for="assembly-tree-select-wo">Assembly Set:</label>
-                  <select id="assembly-tree-select-wo" style="padding: 4px 10px; font-size: 12px; border: 1px solid #94a3b8; border-radius: 4px; background: #ffffff; color: #0f172a; outline: none; font-weight: 600;"></select>
+                <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #334155; font-weight: 600; position: relative;">
+                  <label for="assembly-tree-search-input">Assembly Set:</label>
+                  <div style="position: relative;">
+                    <input type="text" id="assembly-tree-search-input" placeholder="ค้นหา PD / ชื่องาน..." autocomplete="off" style="padding: 4px 10px; font-size: 12px; border: 1px solid #94a3b8; border-radius: 4px; background: #ffffff; color: #0f172a; outline: none; font-weight: 600; width: 260px;">
+                    <div id="assembly-tree-search-dropdown" class="hidden" style="position: absolute; top: 100%; left: 0; margin-top: 2px; width: 340px; max-height: 320px; overflow-y: auto; background: #ffffff; border: 1px solid #94a3b8; border-radius: 4px; box-shadow: 0 6px 16px rgba(0,0,0,0.15); z-index: 100;"></div>
+                  </div>
                 </div>
               </div>
               <div style="display: flex; align-items: center; gap: 8px;">
