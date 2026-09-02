@@ -271,6 +271,15 @@ export class DailyScheduleController {
           nextStep = sortedSteps[currentIndex + 1];
           const name = nextStep.name || nextStep.stepName || nextStep.partName || 'Operation';
           nextWCStr = `${name} (${nextStep.machine})`;
+        } else {
+          // Last step: check if it goes to another PD
+          if (this.state.assemblyLinks) {
+            const link = this.state.assemblyLinks.find(l => l.from === job.id);
+            if (link) {
+              const toWoId = link.to.split('-')[0];
+              nextWCStr = `ประกอบเข้า ${toWoId}`;
+            }
+          }
         }
       }
       
@@ -423,6 +432,15 @@ export class DailyScheduleController {
             const nextStep = sortedSteps[currentIndex + 1];
             const name = nextStep.name || nextStep.stepName || nextStep.partName || 'Operation';
             nextWCStr = `${name} (${nextStep.machine})`;
+          } else {
+            // Last step: check if it goes to another PD
+            if (this.state.assemblyLinks) {
+              const link = this.state.assemblyLinks.find(l => l.from === job.id);
+              if (link) {
+                const toWoId = link.to.split('-')[0];
+                nextWCStr = `ประกอบเข้า ${toWoId}`;
+              }
+            }
           }
         }
         
