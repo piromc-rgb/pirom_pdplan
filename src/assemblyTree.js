@@ -141,11 +141,21 @@ export class AssemblyTreeController {
       ...this.state.scheduledJobs.map(j => j.woId).filter(Boolean)
     ]);
 
-    // Find Root Assemblies (WOs with no parent or depth 0)
+    const childSet = new Set();
+    if (this.state.assemblyLinks) {
+      this.state.assemblyLinks.forEach(link => {
+        const fromWo = link.from.split('-')[0];
+        if (fromWo) childSet.add(fromWo);
+      });
+    }
+    allWoIds.forEach(id => {
+      if (id.includes('-')) childSet.add(id);
+    });
+
+    // Find Root Assemblies
     const assemblies = [];
     allWoIds.forEach(woId => {
-      const depth = (woId.match(/-/g) || []).length;
-      if (depth === 0) {
+      if (!childSet.has(woId)) {
         const jobs = this.state.scheduledJobs.filter(j => j.woId === woId);
         const backlog = this.state.workOrders.find(w => w.id === woId);
         const partName = jobs[0]?.partName || backlog?.partName || woId;
@@ -154,11 +164,9 @@ export class AssemblyTreeController {
     });
 
     if (assemblies.length === 0 && allWoIds.size > 0) {
-      // Fallback: take first WO
       const first = Array.from(allWoIds)[0];
       assemblies.push({ id: first, partName: first });
     }
-
     return assemblies;
   }
 
@@ -169,23 +177,60 @@ export class AssemblyTreeController {
       ...this.state.scheduledJobs.map(j => j.woId).filter(Boolean)
     ]);
 
-    // Gather all WOs belonging to this root
-    const familyIds = Array.from(allWoIds).filter(id => id === rootWoId || id.startsWith(rootWoId + '-'));
-    
-    // Sort tree hierarchically
-    familyIds.sort((a, b) => {
-      const aParts = a.split('-');
-      const bParts = b.split('-');
-      for (let i = 0; i < Math.min(aParts.length, bParts.length); i++) {
-        const numA = parseInt(aParts[i], 10);
-        const numB = parseInt(bParts[i], 10);
-        if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numA - numB;
-        if (aParts[i] !== bParts[i]) return aParts[i].localeCompare(bParts[i]);
+    const childrenMap = new Map();
+    const parentMap = new Map();
+
+    const addLink = (parentId, childId) => {
+      if (!childrenMap.has(parentId)) childrenMap.set(parentId, new Set());
+      childrenMap.get(parentId).add(childId);
+      parentMap.set(childId, parentId);
+    };
+
+    if (this.state.assemblyLinks) {
+      this.state.assemblyLinks.forEach(link => {
+        const fromWo = link.from.split('-')[0];
+        const toWo = link.to.split('-')[0];
+        if (fromWo && toWo && fromWo !== toWo) {
+          addLink(toWo, fromWo);
+        }
+      });
+    }
+
+    allWoIds.forEach(id => {
+      if (id.includes('-')) {
+        const lastDash = id.lastIndexOf('-');
+        const parentPrefix = id.substring(0, lastDash);
+        if (!parentMap.has(id) && allWoIds.has(parentPrefix)) {
+          addLink(parentPrefix, id);
+        }
       }
-      return aParts.length - bParts.length;
     });
 
-    const nodes = familyIds.map(id => {
+    const familyIds = new Set([rootWoId]);
+    const queue = [rootWoId];
+    const depths = new Map();
+    depths.set(rootWoId, 0);
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (childrenMap.has(current)) {
+        for (const child of childrenMap.get(current)) {
+          if (!familyIds.has(child) && allWoIds.has(child)) {
+            familyIds.add(child);
+            queue.push(child);
+            depths.set(child, depths.get(current) + 1);
+          }
+        }
+      }
+    }
+
+    const familyArray = Array.from(familyIds);
+    familyArray.sort((a, b) => {
+      if (depths.get(a) !== depths.get(b)) return depths.get(a) - depths.get(b);
+      return a.localeCompare(b);
+    });
+
+    const nodes = familyArray.map(id => {
       const jobs = this.state.scheduledJobs.filter(j => j.woId === id);
       const backlog = this.state.workOrders.find(w => w.id === id);
       const partName = jobs[0]?.partName || backlog?.partName || id;
@@ -200,12 +245,14 @@ export class AssemblyTreeController {
       if (isComplete) status = 'released';
       else if (isRunning || completedSteps > 0) status = 'working';
 
-      const depth = id === rootWoId ? 0 : (id.match(/-/g) || []).length;
-      const lastDash = id.lastIndexOf('-');
-      const parentId = depth === 0 ? null : (lastDash > 0 ? id.substring(0, lastDash) : rootWoId);
-      const hasChildren = familyIds.some(other => other !== id && other.startsWith(id + '-'));
+      const depth = depths.get(id) || 0;
+      const parentId = depth === 0 ? null : parentMap.get(id);
+      
+      let hasChildren = false;
+      if (childrenMap.has(id)) {
+         hasChildren = Array.from(childrenMap.get(id)).some(c => allWoIds.has(c));
+      }
 
-      // Machine steps summary
       const stepNames = jobs.map(j => j.machine || j.stepName).filter(Boolean);
 
       return {
@@ -215,7 +262,7 @@ export class AssemblyTreeController {
         depth,
         parentId,
         hasChildren,
-        status, // 'released', 'working', 'waiting'
+        status,
         totalSteps,
         completedSteps,
         stepNames: stepNames.length > 0 ? stepNames.slice(0, 3).join(', ') : 'ASSEMBLY, DCE',
@@ -225,25 +272,6 @@ export class AssemblyTreeController {
 
     return nodes;
   }
-
-  buildTreeHierarchy(nodes, rootWoId) {
-    const nodeMap = new Map();
-    nodes.forEach(n => nodeMap.set(n.id, { ...n, children: [] }));
-
-    let root = null;
-    nodeMap.forEach(n => {
-      if (n.id === rootWoId) {
-        root = n;
-      } else if (n.parentId && nodeMap.has(n.parentId)) {
-        nodeMap.get(n.parentId).children.push(n);
-      } else if (root) {
-        root.children.push(n);
-      }
-    });
-
-    return root;
-  }
-
   render() {
     if (!this.container) return;
 
