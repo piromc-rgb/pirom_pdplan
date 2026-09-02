@@ -25,6 +25,9 @@ class CentralState {
     // Active project/SO filters (defaults to true for all keys)
     this.activeProjects = {};
     this.projectColors = {};
+
+    // Manually selected Work Centers to show on the board (defaults to true for all keys)
+    this.activeWorkCenters = {};
     
     // Locked projects to prevent moving or rescheduling
     this.lockedProjects = {};

@@ -85,6 +85,18 @@ function playSnapSound() {
   }
 }
 
+// Picks black or white text so it stays readable against a custom (user-picked)
+// task bar color - light backgrounds like white/yellow need black text instead
+// of the default white.
+function getReadableTextColor(hexColor) {
+  if (!hexColor || typeof hexColor !== 'string' || hexColor[0] !== '#' || hexColor.length < 7) return '#fff';
+  const r = parseInt(hexColor.substring(1, 3), 16);
+  const g = parseInt(hexColor.substring(3, 5), 16);
+  const b = parseInt(hexColor.substring(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? '#000' : '#fff';
+}
+
 export function getJobPriority(job, state) {
   if (job.priority !== undefined && job.priority !== null && String(job.priority).trim() !== '') {
     return String(job.priority).trim();
@@ -630,7 +642,7 @@ export class GanttController {
     const boardRangeEl = document.getElementById('board-date-range-display');
     if (boardRangeEl) {
       const scheduledJobs = (this.state.scheduledJobs || []).filter(job => {
-        return isJobPriorityVisible(job, this.state) && isJobProjectVisible(job, this.state) && typeof job.startHour === 'number' && !isNaN(job.startHour);
+        return isJobPriorityVisible(job, this.state) && isJobProjectVisible(job, this.state) && this.state.activeWorkCenters[job.machine] !== false && typeof job.startHour === 'number' && !isNaN(job.startHour);
       });
       let startObj, endObj, lastTaskInfo = '';
       if (scheduledJobs.length > 0) {
@@ -811,7 +823,7 @@ export class GanttController {
         const isParent = directParentIdsAll.has(woId);
 
         const woJobs = getJobsForWo(woId).filter(j => {
-          return isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state);
+          return isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && this.state.activeWorkCenters[j.machine] !== false;
         });
 
         if (woJobs.length === 0) return;
@@ -1309,7 +1321,7 @@ export class GanttController {
                 cardBg = 'linear-gradient(135deg, #b91c1c, #991b1b)';
                 borderStyle = '1.5px solid #f87171';
               } else if (customCardColor) {
-                cardBg = `linear-gradient(135deg, ${customCardColor}, ${customCardColor}cc)`;
+                cardBg = `linear-gradient(135deg, ${customCardColor}, ${customCardColor})`;
                 borderStyle = `1.5px solid ${customCardColor}`;
               }
 
@@ -1454,7 +1466,12 @@ export class GanttController {
       // Loop through each Work Center track in sorted order
       let order = this.state.workCenterOrder || Object.keys(this.state.workCenters);
       if (!this.state.showAllWorkCenters) {
-        const usedMachines = new Set(this.state.scheduledJobs.map(j => j.machine).filter(Boolean));
+        const usedMachines = new Set(
+          this.state.scheduledJobs
+            .filter(j => isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state))
+            .map(j => j.machine)
+            .filter(Boolean)
+        );
         this.state.workOrders.forEach(wo => {
           wo.steps.forEach(step => {
             if (step.machine) usedMachines.add(step.machine);
@@ -1462,6 +1479,9 @@ export class GanttController {
         });
         order = order.filter(m => usedMachines.has(m));
       }
+
+      // Manually deselected Work Centers (Resources tab checkboxes) are always hidden
+      order = order.filter(m => this.state.activeWorkCenters[m] !== false);
 
       // Calculate top 3 workload threshold among active/rendered ones
       const machineLoads = order.map(m => {
@@ -1722,8 +1742,76 @@ export class GanttController {
         return isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state);
       });
 
+      // When zoomed out (day/week/month/quarter/year), adjacent same-priority jobs
+      // collapse into pixel-thin slivers that visually stack on top of each other
+      // anyway. Merge them into a single summary bar so far fewer DOM nodes get
+      // created/laid out per pan/redraw - this is what keeps panning smooth at
+      // wide time scales. Zooming below the threshold (hr and finer) renders
+      // every job individually again, same as before.
+      const isWideScale = config.totalHours >= 48; // day, week, month, quarter, year
+      const mergedJobIds = new Set();
+      const mergedGroups = [];
+      if (isWideScale && machineJobs.length > 1) {
+        const sortedForMerge = [...machineJobs].sort((a, b) => a.startHour - b.startHour);
+        const mergeGapHours = config.totalHours * 0.01; // ~1% of the visible window
+        let currentGroup = null;
+        sortedForMerge.forEach(job => {
+          const jobPriority = getJobPriority(job, this.state);
+          const jobEndHour = job.startHour + job.estHours;
+          if (currentGroup && currentGroup.priority === jobPriority && job.startHour <= currentGroup.endHour + mergeGapHours) {
+            currentGroup.jobs.push(job);
+            currentGroup.endHour = Math.max(currentGroup.endHour, jobEndHour);
+          } else {
+            currentGroup = { priority: jobPriority, startHour: job.startHour, endHour: jobEndHour, jobs: [job] };
+            mergedGroups.push(currentGroup);
+          }
+        });
+        mergedGroups.filter(g => g.jobs.length > 1).forEach(g => {
+          g.jobs.forEach(j => mergedJobIds.add(j.id));
+        });
+      }
+
+      mergedGroups.filter(g => g.jobs.length > 1).forEach(group => {
+        const timelineEnd = config.startOffset + config.totalHours;
+        if (group.startHour >= timelineEnd || group.endHour <= config.startOffset) return;
+
+        const start = Math.max(config.startOffset, group.startHour);
+        const end = Math.min(timelineEnd, group.endHour);
+        const leftPercent = ((start - config.startOffset) / config.totalHours) * 100;
+        const widthPercent = ((end - start) / config.totalHours) * 100;
+
+        const customColor = this.state.priorityColors ? this.state.priorityColors[group.priority] : null;
+
+        const card = document.createElement('div');
+        // "scheduled" gives it the standard solid task-bar background/text color as a
+        // fallback so it's never see-through - without it, a merged group with no
+        // custom priority color had no background at all and its default white text
+        // vanished against a light theme.
+        card.className = 'gantt-card gantt-card-merged scheduled';
+        card.style.left = `${leftPercent}%`;
+        card.style.width = `${widthPercent}%`;
+        card.style.cursor = 'zoom-in';
+        if (customColor) {
+          card.style.background = `linear-gradient(135deg, ${customColor}, ${customColor})`;
+          card.style.borderColor = customColor;
+          card.style.color = getReadableTextColor(customColor);
+        }
+        card.setAttribute('title', `Priority: ${group.priority} — ${group.jobs.length} งาน\nStart: ${this.formatTime(group.startHour, scale)} | Finish: ${this.formatTime(group.endHour, scale)}\n(คลิกเพื่อซูมเข้าดูรายละเอียด)`);
+        card.innerHTML = `
+          <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; overflow: hidden;">
+            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 9px; font-weight: 700;">×${group.jobs.length}</span>
+          </div>
+        `;
+        card.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.fitTasks(group.jobs);
+        });
+        track.appendChild(card);
+      });
+
       // Render job cards on timeline
       machineJobs.forEach(job => {
+        if (mergedJobIds.has(job.id)) return;
         const jobEnd = job.startHour + job.estHours;
         const timelineEnd = config.startOffset + config.totalHours;
         
@@ -1818,10 +1906,13 @@ export class GanttController {
           const customProjectColor = this.state.projectColors ? this.state.projectColors[job.project || 'General'] : null;
           const customCardColor = customPriorityColor || customProjectColor;
 
+          let readableTextColor = null;
           if (customCardColor && job.status !== 'Completed' && job.status !== 'Running' && job.status !== 'Paused') {
-            card.style.background = `linear-gradient(135deg, ${customCardColor}, ${customCardColor}cc)`;
+            card.style.background = `linear-gradient(135deg, ${customCardColor}, ${customCardColor})`;
             card.style.borderColor = customCardColor;
             card.style.boxShadow = `0 4px 10px rgba(0,0,0,0.35)`;
+            readableTextColor = getReadableTextColor(customCardColor);
+            card.style.color = readableTextColor;
           }
 
           card.setAttribute('draggable', job.status === 'Completed' ? 'false' : 'true');
@@ -1901,6 +1992,17 @@ export class GanttController {
               <path d="M3 3h6v6H3V3zm2 2v2h2V5H5zm8-2h6v6h-6V3zm2 2v2h2V5h-2zM3 13h6v6H3v-6zm2 2v2h2v-2H5zm13-2h3v2h-3v-2zm-3 3h3v3h-3v-3zm3 3h3v-3h-3v3zm-3-3h-2v2h2v-2zm3-3h-3v2h3v-2zm-3-2h2V9h-2v2zm2-4h2V3h-2v2zm0 4h2V7h-2v2zm-4 4h2v-2h-2v2zm-2 2H9v2h2v-2zm4 4h-2v2h2v-2zm2-2h-2v2h2v-2z"/>
             </svg>
           `;
+
+          // .gantt-card-bottom / .gantt-card-remove hardcode a white text color in CSS
+          // (they don't inherit from .gantt-card), so a custom light task bar color
+          // needs them overridden here too or "Qty:"/"Fin:"/the × button stay unreadable.
+          if (readableTextColor) {
+            const mutedColor = readableTextColor === '#000' ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.7)';
+            const bottomEl = card.querySelector('.gantt-card-bottom');
+            if (bottomEl) bottomEl.style.color = mutedColor;
+            const removeEl = card.querySelector('.gantt-card-remove');
+            if (removeEl) removeEl.style.color = readableTextColor === '#000' ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.4)';
+          }
 
           // Bind drag event
           if (job.status === 'Completed' || isJobLocked) {
@@ -2530,7 +2632,7 @@ export class GanttController {
       let lastJob = null;
 
       const activeJobs = this.state.scheduledJobs.filter(job => {
-        return isJobPriorityVisible(job, this.state) && isJobProjectVisible(job, this.state) && typeof job.startHour === 'number' && !isNaN(job.startHour);
+        return isJobPriorityVisible(job, this.state) && isJobProjectVisible(job, this.state) && this.state.activeWorkCenters[job.machine] !== false && typeof job.startHour === 'number' && !isNaN(job.startHour);
       });
 
       activeJobs.forEach(job => {

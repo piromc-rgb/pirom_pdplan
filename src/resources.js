@@ -111,6 +111,34 @@ export class ResourcesController {
       this.state.notify();
     });
 
+    // Project filter Select All / Deselect All
+    document.getElementById('btn-project-select-all')?.addEventListener('click', () => {
+      Object.keys(this.state.activeProjects).forEach(k => { this.state.activeProjects[k] = true; });
+      this.state.notify();
+    });
+    document.getElementById('btn-project-deselect-all')?.addEventListener('click', () => {
+      Object.keys(this.state.activeProjects).forEach(k => { this.state.activeProjects[k] = false; });
+      this.state.notify();
+    });
+
+    // Work Center filter Select All / Deselect All
+    document.getElementById('btn-wc-select-all')?.addEventListener('click', () => {
+      Object.keys(this.state.activeWorkCenters).forEach(k => { this.state.activeWorkCenters[k] = true; });
+      this.state.notify();
+    });
+    document.getElementById('btn-wc-deselect-all')?.addEventListener('click', () => {
+      Object.keys(this.state.activeWorkCenters).forEach(k => { this.state.activeWorkCenters[k] = false; });
+      this.state.notify();
+    });
+    document.getElementById('btn-wc-deselect-zero')?.addEventListener('click', () => {
+      Object.keys(this.state.activeWorkCenters).forEach(k => {
+        if (this.state.getMachineOEE(k).oee === 0) {
+          this.state.activeWorkCenters[k] = false;
+        }
+      });
+      this.state.notify();
+    });
+
     // Events for dynamic priority/project filters are bound during dynamic rendering
   }
 
@@ -266,9 +294,10 @@ export class ResourcesController {
       const customerStr = customerList.length > 0 ? customerList.join(', ') : '';
 
       // Calculate production date range & find the last task for this priority from scheduled jobs
+      // (jobs on a Work Center hidden via the Resources tab checkboxes don't count towards Finish Date)
       const priorityJobs = this.state.scheduledJobs.filter(j => {
         const jobP = String(j.priority || this.state.workOrders?.find(wo => wo.id === j.woId)?.priority || 'Normal').trim();
-        return jobP === String(p).trim() && typeof j.startHour === 'number' && !isNaN(j.startHour);
+        return jobP === String(p).trim() && typeof j.startHour === 'number' && !isNaN(j.startHour) && this.state.activeWorkCenters[j.machine] !== false;
       });
       let dateRangeStr = '-';
       let lastTaskStr = 'ยังไม่มีงานบนกระดาน';
@@ -336,9 +365,22 @@ export class ResourcesController {
             <span>${dateRangeStr}</span>
           </div>
         </div>
-        <span class="delete-btn" style="margin-left: 6px; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; font-size: 11px; padding: 2px; align-self: flex-start;" title="ลบข้อมูลงานทั้งหมดที่มี Priority นี้">🗑️</span>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; margin-left: 6px; align-self: flex-start;">
+          <button class="edit-btn" title="แก้ไขชื่อ Priority นี้" style="background: none; border: none; color: var(--accent-teal); cursor: pointer; padding: 2px; display: flex; align-items: center; justify-content: center; transition: opacity 0.2s;">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-teal);">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+          </button>
+          <button class="delete-btn" title="ลบข้อมูลงานทั้งหมดที่มี Priority นี้" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 2px; display: flex; align-items: center; justify-content: center; transition: color 0.2s;">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="icon-trash" style="color: var(--accent-red); filter: drop-shadow(0 0 2px rgba(255, 51, 51, 0.25));">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </button>
+        </div>
       `;
-      
+
       // Bind click on Last Task badge to navigate Gantt chart
       const lastTaskBtn = label.querySelector('.priority-last-task-btn');
       if (lastTaskBtn && maxFinishHour > -Infinity) {
@@ -379,28 +421,65 @@ export class ResourcesController {
         });
       }
 
+      // Bind edit button event listener
+      const editBtn = label.querySelector('.edit-btn');
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+
+        const newName = prompt(`แก้ไขชื่อ Priority "${p}" เป็น:`, p);
+        if (newName === null) return;
+        const trimmed = newName.trim();
+        if (!trimmed || trimmed === p) return;
+
+        // 1. Rename on scheduledJobs
+        this.state.scheduledJobs.forEach(j => {
+          if (j.priority === p) j.priority = trimmed;
+        });
+        // 2. Rename on workOrders
+        this.state.workOrders.forEach(w => {
+          if (w.priority === p) w.priority = trimmed;
+        });
+        // 3. Carry over active/visibility state and custom color to the new name
+        if (this.state.activePriorities[p] !== undefined) {
+          this.state.activePriorities[trimmed] = this.state.activePriorities[p];
+          delete this.state.activePriorities[p];
+        }
+        if (this.state.priorityColors && this.state.priorityColors[p]) {
+          this.state.priorityColors[trimmed] = this.state.priorityColors[p];
+          delete this.state.priorityColors[p];
+        }
+
+        // 4. Save files
+        this.state.savePlanToFile();
+        this.state.saveWorkOrdersToFile();
+
+        // 5. Notify to re-render
+        this.state.notify();
+      });
+
       // Bind delete button event listener
       const deleteBtn = label.querySelector('.delete-btn');
       deleteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
-        
+
         const confirmMsg = `คุณต้องการลบข้อมูลงานทั้งหมดที่มีระดับความสำคัญ (Priority): "${p}" ใช่หรือไม่?\n\n*คำเตือน: การดำเนินการนี้จะลบใบสั่งผลิตใน Backlog และคิวงานบน Gantt ทั้งหมดที่มีระดับความสำคัญนี้ออกไปอย่างถาวร`;
         if (confirm(confirmMsg)) {
           // 1. Filter scheduledJobs
           this.state.scheduledJobs = this.state.scheduledJobs.filter(j => j.priority !== p);
           // 2. Filter workOrders
           this.state.workOrders = this.state.workOrders.filter(w => w.priority !== p);
-          
+
           // 3. Save files
           this.state.savePlanToFile();
           this.state.saveWorkOrdersToFile();
-          
+
           // 4. Notify to re-render
           this.state.notify();
         }
       });
-      
+
       this.priorityFiltersContainer.appendChild(label);
     });
   }
@@ -478,16 +557,19 @@ export class ResourcesController {
       }
       const hexColor = parseColorToHex(dotColor);
       
-      const lockIcon = isLocked ? '🔒' : '🔓';
-      const lockTitle = isLocked 
-        ? `โครงการ "${proj}" ถูกล็อคแผนงานไว้ (คลิกเพื่อปลดล็อค / Unlock)` 
+      const lockIconSvg = isLocked
+        ? `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`
+        : `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>`;
+      const lockTitle = isLocked
+        ? `โครงการ "${proj}" ถูกล็อคแผนงานไว้ (คลิกเพื่อปลดล็อค / Unlock)`
         : `คลิกเพื่อล็อคแผนงานโครงการ "${proj}" ป้องกันการขยับแผน (Lock Project)`;
-      const lockStyle = isLocked 
-        ? 'margin-left: 6px; cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 4px; background: rgba(239, 68, 68, 0.25); border: 1px solid rgba(239, 68, 68, 0.5); filter: drop-shadow(0 0 3px rgba(239, 68, 68, 0.6));' 
-        : 'margin-left: 6px; cursor: pointer; font-size: 13px; opacity: 0.45; padding: 2px 4px; border-radius: 4px; transition: opacity 0.2s;';
+      const lockStyle = isLocked
+        ? 'margin-left: 6px; background: rgba(239, 68, 68, 0.15); border: none; color: var(--accent-red); cursor: pointer; padding: 2px; border-radius: 4px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 0 2px rgba(255, 51, 51, 0.25));'
+        : 'margin-left: 6px; background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 2px; border-radius: 4px; display: flex; align-items: center; justify-content: center; opacity: 0.6; transition: opacity 0.2s;';
 
       // Calculate production date range for this project from scheduled jobs
-      const projJobs = this.state.scheduledJobs.filter(j => (j.project || 'General') === proj && typeof j.startHour === 'number' && !isNaN(j.startHour));
+      // (jobs on a Work Center hidden via the Resources tab checkboxes don't count towards Finish Date)
+      const projJobs = this.state.scheduledJobs.filter(j => (j.project || 'General') === proj && typeof j.startHour === 'number' && !isNaN(j.startHour) && this.state.activeWorkCenters[j.machine] !== false);
       let dateRangeStr = '-';
       let fullTooltip = 'ยังไม่มีแผนงานผลิต';
       if (projJobs.length > 0) {
@@ -531,8 +613,13 @@ export class ResourcesController {
           </span>
         </div>
         <span style="font-size: 10px; color: var(--text-secondary); margin-left: 4px; align-self: center;">(${count})</span>
-        <span class="lock-btn" style="${lockStyle} align-self: center;" title="${lockTitle}">${lockIcon}</span>
-        <span class="delete-btn" style="margin-left: 4px; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; font-size: 11px; padding: 2px; align-self: center;" title="ลบข้อมูลงานทั้งหมดที่มี Project นี้">🗑️</span>
+        <button class="lock-btn" style="${lockStyle} align-self: center;" title="${lockTitle}">${lockIconSvg}</button>
+        <button class="delete-btn" title="ลบข้อมูลงานทั้งหมดที่มี Project นี้" style="margin-left: 4px; align-self: center; background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 2px; display: flex; align-items: center; justify-content: center; transition: color 0.2s;">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="icon-trash" style="color: var(--accent-red); filter: drop-shadow(0 0 2px rgba(255, 51, 51, 0.25));">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
       `;
       
       // Bind color picker input event listener
@@ -610,8 +697,9 @@ export class ResourcesController {
   // Work centers currently visible on the board: either all of them (if the
   // "show all" toggle is on), or only ones with a job actually shown right now -
   // respecting the Priority/Project filters, so a machine whose only jobs are
-  // hidden by those filters doesn't show up either.
-  getVisibleMachines() {
+  // hidden by those filters doesn't show up either. Does NOT account for the
+  // manual per-Work-Center checkboxes - use getVisibleMachines() for that.
+  getAutoVisibleMachines() {
     let machines = Object.keys(this.state.workCenters);
     if (!this.state.showAllWorkCenters) {
       const usedMachines = new Set(
@@ -628,6 +716,12 @@ export class ResourcesController {
       machines = machines.filter(m => usedMachines.has(m));
     }
     return machines;
+  }
+
+  // Work centers actually shown on the Gantt board: auto-visible ones, further
+  // narrowed down by the manual Work Center Filter checkboxes in the Resources tab.
+  getVisibleMachines() {
+    return this.getAutoVisibleMachines().filter(m => this.state.activeWorkCenters[m] !== false);
   }
 
   // Render Machine OEE list
@@ -647,9 +741,22 @@ export class ResourcesController {
 
     this.oeeList.innerHTML = '';
 
-    let machines = this.getVisibleMachines();
+    let machines = this.getAutoVisibleMachines();
     // Highest load first
     machines.sort((a, b) => this.state.getMachineOEE(b).util - this.state.getMachineOEE(a).util);
+
+    // Sync activeWorkCenters keys against the full Work Center roster (not just the
+    // auto-visible ones) so a manual choice survives a machine being auto-hidden later.
+    Object.keys(this.state.workCenters).forEach(m => {
+      if (this.state.activeWorkCenters[m] === undefined) {
+        this.state.activeWorkCenters[m] = true;
+      }
+    });
+    Object.keys(this.state.activeWorkCenters).forEach(m => {
+      if (!this.state.workCenters[m]) {
+        delete this.state.activeWorkCenters[m];
+      }
+    });
 
     let maxOeeVal = -1;
     let maxUtilVal = -1;
@@ -664,10 +771,13 @@ export class ResourcesController {
     });
 
     const subHeader = document.createElement('div');
-    subHeader.style.cssText = 'display: flex; justify-content: space-between; font-size: 8.5px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; border-bottom: 1.5px solid var(--border-glass); padding-bottom: 4px; margin-bottom: 8px; letter-spacing: 0.5px;';
+    subHeader.style.cssText = 'display: flex; align-items: center; gap: 6px; font-size: 8.5px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; border-bottom: 1.5px solid var(--border-glass); padding-bottom: 4px; margin-bottom: 8px; letter-spacing: 0.5px;';
     subHeader.innerHTML = `
-      <span>Work Center</span>
-      <span style="padding-right: 5px;">OEE</span>
+      <span style="width: 14px; flex-shrink: 0;"></span>
+      <span style="flex: 1; display: flex; justify-content: space-between;">
+        <span>Work Center</span>
+        <span style="padding-right: 5px;">OEE</span>
+      </span>
     `;
     this.oeeList.appendChild(subHeader);
 
@@ -692,16 +802,31 @@ export class ResourcesController {
       const isMaxUtil = oeeData.util === maxUtilVal && maxUtilVal > 0;
       const barStyleOverride = isMaxUtil ? 'background: var(--accent-red) !important; box-shadow: 0 0 8px rgba(255, 51, 51, 0.4);' : '';
 
+      const isWcChecked = this.state.activeWorkCenters[machine] !== false;
+      item.style.display = 'flex';
+      item.style.flexDirection = 'row';
+      item.style.alignItems = 'center';
+      item.style.gap = '6px';
       item.innerHTML = `
-        <div class="oee-info">
-          <span class="oee-name">${this.state.getMachineDisplayName(machine)} <span class="badge-status" style="font-size: 8px; color: var(--text-secondary)">(${oeeData.active})</span></span>
-          <span class="oee-percent" style="color: ${percentColor}; font-weight: ${percentWeight};">${oeeData.oee}%</span>
-        </div>
-        <div class="oee-bar-bg" title="Machine Capacity Load: ${oeeData.util}%">
-          <div class="oee-bar-fill ${statusClass}" style="width: ${Math.min(100, oeeData.util)}%; ${barStyleOverride}"></div>
+        <input type="checkbox" class="wc-visibility-checkbox" style="width: auto; margin: 0; cursor: pointer; flex-shrink: 0;" ${isWcChecked ? 'checked' : ''} title="Hide / Unhide Work Center บนบอร์ด Gantt (ซ่อน/แสดง)">
+        <div style="flex: 1; min-width: 0;">
+          <div class="oee-info">
+            <span class="oee-name">${this.state.getMachineDisplayName(machine)} <span class="badge-status" style="font-size: 8px; color: var(--text-secondary)">(${oeeData.active})</span></span>
+            <span class="oee-percent" style="color: ${percentColor}; font-weight: ${percentWeight};">${oeeData.oee}%</span>
+          </div>
+          <div class="oee-bar-bg" title="Machine Capacity Load: ${oeeData.util}%">
+            <div class="oee-bar-fill ${statusClass}" style="width: ${Math.min(100, oeeData.util)}%; ${barStyleOverride}"></div>
+          </div>
         </div>
       `;
-      
+
+      const wcCheckbox = item.querySelector('.wc-visibility-checkbox');
+      wcCheckbox.addEventListener('click', (e) => e.stopPropagation());
+      wcCheckbox.addEventListener('change', () => {
+        this.state.activeWorkCenters[machine] = wcCheckbox.checked;
+        this.state.notify();
+      });
+
       item.addEventListener('dblclick', () => {
         if (this.state.dailyScheduleController) {
           const machineJobs = this.state.scheduledJobs.filter(j => j.machine === machine);

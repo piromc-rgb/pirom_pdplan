@@ -1352,10 +1352,43 @@ class App {
       });
     }
 
+    // 12b. Toggle Hide/Unhide unused Work Centers (respects current Priority/Project filters)
+    const btnToggleHideUnusedWc = document.getElementById('btn-toggle-hide-unused-wc');
+    const hideUnusedWcText = document.getElementById('hide-unused-wc-text');
+
+    const updateHideUnusedWcButtonUI = () => {
+      const isHiding = !state.showAllWorkCenters;
+      if (btnToggleHideUnusedWc) {
+        if (isHiding) {
+          btnToggleHideUnusedWc.style.background = 'rgba(0, 242, 254, 0.15)';
+          btnToggleHideUnusedWc.style.borderColor = 'var(--accent-teal)';
+          btnToggleHideUnusedWc.style.color = 'var(--accent-teal)';
+          if (hideUnusedWcText) hideUnusedWcText.textContent = 'WC ว่าง: ซ่อน';
+        } else {
+          btnToggleHideUnusedWc.style.background = 'rgba(255, 255, 255, 0.05)';
+          btnToggleHideUnusedWc.style.borderColor = 'var(--border-glass)';
+          btnToggleHideUnusedWc.style.color = 'var(--text-secondary)';
+          if (hideUnusedWcText) hideUnusedWcText.textContent = 'WC ว่าง: แสดง';
+        }
+      }
+      const checkShowAllWc = document.getElementById('check-show-all-wc');
+      if (checkShowAllWc) checkShowAllWc.checked = state.showAllWorkCenters;
+    };
+
+    if (btnToggleHideUnusedWc) {
+      btnToggleHideUnusedWc.addEventListener('click', () => {
+        state.showAllWorkCenters = !state.showAllWorkCenters;
+        updateHideUnusedWcButtonUI();
+        state.notify();
+      });
+    }
+
     state.subscribe(() => {
       updateDepButtonUI();
+      updateHideUnusedWcButtonUI();
     });
     updateDepButtonUI();
+    updateHideUnusedWcButtonUI();
 
     // Dispatch initial history state to align button disabled states
     state.dispatchHistoryEvent();
