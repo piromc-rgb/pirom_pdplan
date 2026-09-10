@@ -67,8 +67,11 @@ export class KioskController {
       this.selectedJobId = null; // Reset
     });
 
-    // Listen to Gantt card clicks to sync with Kiosk
+    // Listen to Gantt card clicks to sync with Kiosk - only auto-opens the drawer
+    // in "Work Center Terminal" work mode; in "วางแผน" (planning) mode, clicking a
+    // task bar keeps its normal planning behavior and leaves the kiosk alone.
     window.addEventListener('gantt-card-selected', (e) => {
+      if (this.state.workMode !== 'terminal') return;
       const { jobId, machine } = e.detail;
       this.state.setKioskMachine(machine);
       this.selectedJobId = jobId;

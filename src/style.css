@@ -639,7 +639,7 @@ body {
 /* Timeline hour labels */
 .gantt-timeline-ruler {
   display: grid;
-  grid-template-columns: 140px 1fr;
+  grid-template-columns: var(--gantt-label-col-width, 140px) 1fr;
   height: 35px;
   background-color: var(--bg-darker);
   border-bottom: 1px solid var(--border-glass);
@@ -647,6 +647,12 @@ body {
   top: 0;
   z-index: 40;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+#gantt-label-col-resizer:hover,
+#gantt-label-col-resizer.resizing {
+  background: var(--accent-teal);
+  opacity: 0.5;
 }
 
 .row-label-header {
@@ -688,7 +694,7 @@ body {
 
 .gantt-row {
   display: grid;
-  grid-template-columns: 140px 1fr;
+  grid-template-columns: var(--gantt-label-col-width, 140px) 1fr;
   min-height: 40px;
   border-bottom: 1px solid var(--border-glass);
   position: relative;
@@ -996,6 +1002,21 @@ body {
   color: var(--accent-red);
 }
 
+.gantt-card-priority-badge {
+  position: absolute;
+  top: 2px;
+  right: 20px;
+  font-size: 8px;
+  font-weight: 800;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  line-height: 1.4;
+  pointer-events: none;
+}
+
 /* Red overlay indicating overlap conflict (Finite mode) */
 .gantt-overlap-alert {
   position: absolute;
@@ -1273,7 +1294,7 @@ body {
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: #fff;
   border-bottom: 1px solid var(--border-glass);
 }
 
@@ -2631,4 +2652,47 @@ a, button, select, input[type="submit"], input[type="button"], input[type="check
 .gantt-dep-line.assembly-dep-line.error {
   stroke: var(--accent-red) !important;
   marker-end: url(#arrow-error) !important;
+}
+
+/* Display Options dropdown - iOS-style toggle switches */
+.display-option-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.ios-toggle {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.ios-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.ios-toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 20px;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+.ios-toggle-slider::before {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 2px;
+  top: 2px;
+  background: #ffffff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.ios-toggle input:checked + .ios-toggle-slider {
+  background: var(--accent-teal);
+}
+.ios-toggle input:checked + .ios-toggle-slider::before {
+  transform: translateX(16px);
 }

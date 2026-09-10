@@ -40,19 +40,43 @@
                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
               </svg>
             </button>
-            <button id="btn-toggle-dep-lines" class="btn-action-small" title="เปิด/ปิด การแสดงผลเส้นเชื่อมโยง Task (Show/Hide Task Dependency Lines)" style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; margin-left: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">
+            <div class="display-options-wrapper" style="position: relative; display: inline-block; margin-left: 6px;">
+              <button id="btn-display-options" class="btn-action-small" title="ตัวเลือกการแสดงผลบนบอร์ด" style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+                <span>Display Options</span>
+              </button>
+              <div id="display-options-panel" class="hidden" style="position: absolute; top: 100%; left: 0; margin-top: 6px; background: var(--bg-darker); border: 1px solid var(--border-glass); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.45); padding: 6px; z-index: 500; min-width: 220px;">
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                  <span>เส้นเชื่อมโยง</span>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-dep-lines" checked><span class="ios-toggle-slider"></span></span>
+                </label>
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                  <span title="ซ่อน/แสดง Work Center ที่ไม่มีงานแสดงผลอยู่บนบอร์ดขณะนี้">WC ว่าง: ซ่อน</span>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-hide-unused-wc" checked><span class="ios-toggle-slider"></span></span>
+                </label>
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                  <span title="แสดงเลข Priority มุมขวาบนของ Task Bar">Priority</span>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-priority-badge" checked><span class="ios-toggle-slider"></span></span>
+                </label>
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                  <span title="รวม Task Bar ที่ทับซ้อนกัน (Priority เดียวกัน) เป็นแท่งเดียวตอน Zoom Out">Merge Bar</span>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-merge-bars" checked><span class="ios-toggle-slider"></span></span>
+                </label>
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                  <span title="ใช้เครื่องจักรช่วยงาน (Offload ไปเครื่องสำรอง เมื่อเครื่องหลักไม่ว่าง)">เครื่องช่วยงาน</span>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-machine-offload" checked><span class="ios-toggle-slider"></span></span>
+                </label>
+              </div>
+            </div>
+            <button id="btn-toggle-work-mode" class="btn-action-small" title="สลับโหมดการทำงาน: วางแผน (ลาก/แก้ไขแผนงานปกติ) หรือ Work Center Terminal (คลิก Task Bar เพื่อเปิด MIE Shop Floor Kiosk Simulator ทันที)" style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; margin-left: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                <rect x="3" y="4" width="18" height="12" rx="1.5"></rect>
+                <path d="M8 20h8M12 16v4"></path>
               </svg>
-              <span id="dep-lines-text">เส้นเชื่อมโยง: ON</span>
-            </button>
-            <button id="btn-toggle-hide-unused-wc" class="btn-action-small" title="ซ่อน/แสดง Work Center ที่ไม่มีงานแสดงผลอยู่บนบอร์ดขณะนี้ (ตามตัวกรอง Priority / Project ที่เลือกอยู่)" style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; margin-left: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.29 20.29 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a20.29 20.29 0 0 1-3.22 4.36M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
-                <line x1="1" y1="1" x2="23" y2="23"/>
-              </svg>
-              <span id="hide-unused-wc-text">WC ว่าง: ซ่อน</span>
+              <span id="work-mode-text">โหมด: วางแผน</span>
             </button>
           </div>
           <div id="header-datetime" style="font-size: 10px; color: var(--text-secondary); font-family: monospace; padding-left: 2px;"></div>
@@ -74,6 +98,22 @@
               <path d="M11 21h-1l1-7H5.5L13 3h1l-1 7h5.5L11 21z"/>
             </svg>
             AI Auto-Optimize (APS)
+          </button>
+
+          <button id="btn-reschedule" class="btn btn-glowing" title="คำนวณแผนงานทั้งหมดใหม่ตาม Scheduling Model ปัจจุบัน - ใช้เมื่อแก้ไข Priority, Work Center Settings, Lock/Unlock Project ฯลฯ แล้วต้องการให้บอร์ดอัปเดตตามทันที" style="margin-left: 8px; background: linear-gradient(135deg, var(--accent-purple, #a855f7), #7c3aed);">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+              <polyline points="21 3 21 9 15 9"/>
+            </svg>
+            Reschedule
+          </button>
+
+          <button id="btn-continuity-analysis" class="btn btn-glowing" title="วิเคราะห์ช่วงเวลาว่างของสถานีงาน และหาสาเหตุว่าเกิดจาก PD/สถานีงานอะไร" style="margin-left: 8px; background: linear-gradient(135deg, #0891b2, #0e7490);">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 3v18h18"/>
+              <path d="M18.7 8l-5.1 5.1-2.8-2.8L7 14"/>
+            </svg>
+            วิเคราะห์ความต่อเนื่อง
           </button>
         </div>
 
@@ -114,6 +154,9 @@
             <button id="btn-import-excel" class="btn" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 4px;">
               <span>📥 Import from Excel</span>
             </button>
+            <button id="btn-view-completed-pd" class="btn" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(22, 163, 74, 0.1); border: 1px solid var(--accent-green, #16a34a); color: var(--accent-green, #16a34a); font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 4px;">
+              <span>✅ View PD ที่ผลิตเสร็จแล้ว</span>
+            </button>
           </div>
           
           <div class="tab-content" id="backlog-tab-content" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; margin-top: 10px;">
@@ -124,6 +167,10 @@
           </div>
 
           <div class="tab-content hidden" id="assembly-list-tab-content" style="flex: 1; display: none; flex-direction: column; overflow: hidden; margin-top: 10px;">
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--text-secondary); cursor: pointer; user-select: none; margin-bottom: 8px;" title="ซ่อน Assembly ที่ไม่มีงานตรงกับตัวกรอง Priority / Project / Customer / Work Center ที่เลือกอยู่ในแท็บ Resources">
+              <input type="checkbox" id="chk-assembly-follow-filters" checked style="width: auto; margin: 0; cursor: pointer;">
+              แสดงตามตัวกรอง (Priority / Project / Customer / Work Center)
+            </label>
             <input type="text" id="assembly-list-search-input" placeholder="ค้นหา PD / ชื่องาน..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); outline: none; margin-bottom: 8px;">
             <div class="scrollable-list" id="assembly-set-list" style="flex: 1; overflow-y: auto;">
               <!-- Rendered dynamically: all root Assembly Sets -->
@@ -206,6 +253,7 @@
                   <button class="scale-btn" data-scale="min15">15m</button>
                   <button class="scale-btn" data-scale="min30">30m</button>
                   <button class="scale-btn" data-scale="hr">1H</button>
+                  <button class="scale-btn" data-scale="hr4">4H</button>
                   <button class="scale-btn active" data-scale="day">1D</button>
                   <button class="scale-btn" data-scale="week">1W</button>
                   <button class="scale-btn" data-scale="month">1M</button>
@@ -218,9 +266,15 @@
                   <button class="mode-btn" data-mode="pd">Production Order (PD)</button>
                   <button class="mode-btn" data-mode="assembly">Assembly Set</button>
                 </div>
-                <div class="timeline-nav-controls">
-                  <button id="btn-timeline-now" class="btn-action-small" title="Scroll to Current Time" style="margin: 0; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--text-primary);">Go to Now</button>
-                  <span id="board-date-range-display" style="font-size: 11px; font-weight: bold; color: var(--accent-teal); margin-left: 10px; font-family: monospace; letter-spacing: 0.5px;"></span>
+                <div class="timeline-nav-controls" style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
+                  <div style="display: flex; align-items: center;">
+                    <button id="btn-timeline-now" class="btn-action-small" title="Scroll to Current Time" style="margin: 0; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--text-primary);">Go to Now</button>
+                    <span id="board-date-range-display" style="font-size: 11px; font-weight: bold; color: var(--accent-teal); margin-left: 10px; font-family: monospace; letter-spacing: 0.5px;"></span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <button id="btn-timeline-goto-date" class="btn-action-small" title="Scroll to a specific date" style="margin: 0; background: rgba(255, 165, 0, 0.15); border: 1px solid var(--accent-orange); color: var(--text-primary);">Goto Date</button>
+                    <input type="date" id="timeline-goto-date-input" style="display: none; font-size: 11px; padding: 2px 4px; border-radius: 4px; border: 1px solid var(--accent-orange); background: var(--bg-card); color: var(--text-primary);">
+                  </div>
                 </div>
               </div>
             </div>
@@ -263,7 +317,7 @@
                 </defs>
               </svg>
               <div class="gantt-timeline-ruler">
-                <div class="row-label-header" id="row-label-header">Work Center</div>
+                <div class="row-label-header" id="row-label-header" style="position: sticky; left: 0;"><span id="row-label-header-text">Work Center</span><div id="gantt-label-col-resizer" title="ลากเพื่อปรับความกว้างคอลัมน์" style="position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: col-resize; z-index: 60;"></div></div>
                 <div class="ruler-hours">
                   <span>08:00</span>
                   <span>10:00</span>
@@ -359,7 +413,7 @@
               <button id="tab-right-priority" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Priority</button>
               <button id="tab-right-project" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Project</button>
               <button id="tab-right-pdrange" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">PD Range</button>
-              <button id="tab-right-machinelink" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Machine Link</button>
+              <button id="tab-right-customer" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Customer</button>
             </div>
             <button id="btn-hide-sidebar" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass);" title="Collapse Sidebar">▶</button>
           </div>
@@ -461,31 +515,20 @@
             </div>
           </div>
 
-          <!-- Machine Link Panel -->
-          <div id="panel-right-machinelink" class="sidebar-right-panel hidden" style="display: flex; flex-direction: column; gap: 15px;">
+          <!-- Customer Filter Panel -->
+          <div id="panel-right-customer" class="sidebar-right-panel hidden" style="display: flex; flex-direction: column; gap: 15px;">
             <div class="resource-section">
-              <h4>IoT Status Tower Lights</h4>
-              <p class="tool-desc" style="font-size: 10px; color: var(--text-secondary); margin-bottom: 5px;">Real-time machine sensor indicators:</p>
-              <div class="machinelink-list" id="machinelink-sensors-list" style="display: flex; flex-direction: column; gap: 8px;">
-                <!-- Rendered dynamically -->
+              <h4>Gantt Customer Filter (กรองตามลูกค้า)</h4>
+              <p class="tool-desc" style="font-size: 10px; color: var(--text-secondary); margin-bottom: 8px;">เลือกลูกค้าที่จะให้แสดงผลบนบอร์ด Gantt:</p>
+              <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                <button id="btn-customer-select-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold;">เลือกทั้งหมด</button>
+                <button id="btn-customer-select-filtered" class="btn" title="เลือกเฉพาะลูกค้าที่ตรงกับคำค้นหาด้านล่าง (ลูกค้าอื่นจะถูกซ่อน)" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255, 165, 0, 0.1); border: 1px solid var(--accent-orange); color: var(--accent-orange); border-radius: 4px; cursor: pointer; font-weight: bold;">เลือกที่กรอง</button>
+                <button id="btn-customer-deselect-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-weight: bold;">ล้างทั้งหมด</button>
               </div>
-            </div>
-            <div class="resource-section">
-              <h4>Downtime Loss Analysis</h4>
-              <div class="machinelink-loss-chart" style="display: flex; flex-direction: column; gap: 8px;">
-                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 3px;">Time Loss Allocation (Hours):</div>
-                <div class="loss-bar-container" style="display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,0.05); width: 100%;">
-                  <div class="loss-bar-fill setup" style="width: 25%; background: var(--accent-purple);" title="Setup Loss (25%)"></div>
-                  <div class="loss-bar-fill breakdown" style="width: 15%; background: var(--accent-red);" title="Breakdown Loss (15%)"></div>
-                  <div class="loss-bar-fill stops" style="width: 10%; background: var(--accent-orange);" title="Minor Stops Loss (10%)"></div>
-                  <div class="loss-bar-fill runtime" style="width: 50%; background: var(--accent-green);" title="Actual Runtime (50%)"></div>
-                </div>
-                <div class="loss-legend" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; font-size: 8px; color: var(--text-secondary);">
-                  <span class="loss-leg-item" style="display: flex; align-items: center; gap: 3px;"><span class="loss-color setup" style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-purple); display: inline-block;"></span>Setup (25%)</span>
-                  <span class="loss-leg-item" style="display: flex; align-items: center; gap: 3px;"><span class="loss-color breakdown" style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-red); display: inline-block;"></span>Breakdown (15%)</span>
-                  <span class="loss-leg-item" style="display: flex; align-items: center; gap: 3px;"><span class="loss-color stops" style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-orange); display: inline-block;"></span>Stops (10%)</span>
-                  <span class="loss-leg-item" style="display: flex; align-items: center; gap: 3px;"><span class="loss-color runtime" style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); display: inline-block;"></span>Run (50%)</span>
-                </div>
+              <input type="text" id="customer-search-input" placeholder="ค้นหาลูกค้า..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); outline: none; margin-bottom: 8px;">
+
+              <div id="customer-filters-container" style="display: flex; flex-direction: column; gap: 12px; padding: 12px; background: var(--bg-darkest); border-radius: 8px; border: 1px solid var(--border-glass);">
+                <!-- Dynamic customer checkboxes will be injected here -->
               </div>
             </div>
           </div>
@@ -515,6 +558,8 @@
                 <button id="btn-project-select-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold;">เลือกทั้งหมด</button>
                 <button id="btn-project-deselect-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-weight: bold;">ล้างทั้งหมด</button>
               </div>
+
+              <input type="text" id="project-search-input" placeholder="ค้นหาโครงการ..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); outline: none; margin-bottom: 8px;">
 
               <div id="project-filters-container" style="display: flex; flex-direction: column; gap: 12px; padding: 12px; background: var(--bg-darkest); border-radius: 8px; border: 1px solid var(--border-glass);">
                 <!-- Dynamic project checkboxes will be injected here -->
@@ -852,6 +897,22 @@
         </div>
       </div>
 
+      <!-- IMPORT EXCEL RESULT REPORT MODAL -->
+      <div id="import-excel-report-modal" class="modal-overlay hidden">
+        <div class="modal-content card-glass" style="max-width: 650px; width: 92%; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+          <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px;">
+            <h3 style="font-family: var(--font-display); font-size: 15px; color: var(--accent-teal); text-transform: uppercase; margin: 0;">📊 ผลการนำเข้า Excel</h3>
+            <span class="modal-close" id="btn-close-import-excel-report" style="cursor: pointer; font-size: 20px; color: var(--text-secondary);">&times;</span>
+          </div>
+          <div class="modal-body" id="import-excel-report-body" style="overflow-y: auto; max-height: 480px; display: flex; flex-direction: column; gap: 14px;">
+            <!-- Populated dynamically -->
+          </div>
+          <div class="modal-footer" style="display: flex; justify-content: flex-end; border-top: 1px solid var(--border-glass); padding-top: 15px; margin-top: 15px;">
+            <button class="btn btn-glowing" id="btn-close-import-excel-report-footer" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; box-shadow: var(--shadow-neon);">Close</button>
+          </div>
+        </div>
+      </div>
+
       <!-- WORK CENTER PLAN MODAL -->
       <div id="wc-plan-modal" class="modal-overlay hidden">
         <div class="modal-content card-glass" style="max-width: 800px; width: 90%; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
@@ -905,7 +966,7 @@
             <div style="background: rgba(255,255,255,0.02); padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-glass); display: flex; flex-direction: column; gap: 10px;">
               <div style="font-size: 11px; font-weight: bold; color: var(--accent-teal); text-transform: uppercase; letter-spacing: 0.5px;">ข้อมูลทั่วไป (General Information)</div>
               
-              <div style="display: grid; grid-template-columns: 1.2fr 1.2fr 1.2fr 1.2fr; gap: 10px;">
+              <div style="display: grid; grid-template-columns: 110px 150px 1fr 150px; gap: 10px;">
                 <div class="form-group" style="display: flex; flex-direction: column; gap: 4px;">
                   <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary);">PD Number / ID</label>
                   <input type="text" id="edit-pd-id" readonly style="background: var(--bg-darkest); color: var(--accent-teal); border: 1px solid var(--border-glass); padding: 6px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; font-family: monospace; cursor: not-allowed; opacity: 0.9;">
@@ -924,7 +985,7 @@
                 </div>
               </div>
 
-              <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px;">
+              <div style="display: grid; grid-template-columns: 1fr 120px 140px; gap: 10px;">
                 <div class="form-group" style="display: flex; flex-direction: column; gap: 4px;">
                   <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary);">Part Name (ชื่อชิ้นงาน)</label>
                   <input type="text" id="edit-pd-partname" placeholder="e.g. SR-53 ลิ่มมอเตอร์แกน Y" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 6px 8px; border-radius: 6px; font-size: 11px; outline: none;">
@@ -976,10 +1037,14 @@
 
           </div>
           <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-glass); padding-top: 15px;">
-            <div>
+            <div style="display: flex; align-items: center; gap: 14px;">
               <button class="btn" id="btn-delete-this-pd" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--accent-red); color: var(--accent-red); font-weight: bold; transition: all 0.2s;">
                 🗑️ ลบ PD นี้
               </button>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); cursor: pointer; user-select: none;" title="เมื่อติ๊ก PD นี้จะถูกจำไว้ว่าผลิตเสร็จแล้ว และจะไม่ถูกนำกลับเข้าแผนอีกตอน Load App หรือ Import Excel ใหม่">
+                <input type="checkbox" id="chk-pd-completed-history" style="width: auto; margin: 0; cursor: pointer;">
+                ผลิตจริงเสร็จแล้ว
+              </label>
             </div>
             <div style="display: flex; gap: 10px; align-items: center;">
               <button class="btn" id="btn-export-pd-csv" style="padding: 8px 14px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-primary); font-weight: 600; display: flex; align-items: center; gap: 4px;">
@@ -1075,9 +1140,80 @@
               </tbody>
             </table>
           </div>
-          <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border-glass); padding-top: 15px;">
-            <button class="btn btn-secondary" id="btn-cancel-workcenter-settings" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary);">Cancel</button>
-            <button class="btn btn-glowing" id="btn-save-workcenter-settings" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; box-shadow: var(--shadow-neon);">Save Settings</button>
+          <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; border-top: 1px solid var(--border-glass); padding-top: 15px;">
+            <div style="display: flex; gap: 8px;">
+              <input type="file" id="input-load-wc-config-file" accept="application/json,.json" style="display: none;">
+              <button class="btn" id="btn-load-workcenter-config-file" title="โหลดค่าตั้งค่าเครื่องจักรจากไฟล์ .json" style="padding: 8px 14px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); font-weight: bold;">📂 Load File</button>
+              <button class="btn" id="btn-save-workcenter-config-file" title="บันทึกค่าตั้งค่าเครื่องจักรปัจจุบันเป็นไฟล์ .json" style="padding: 8px 14px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); font-weight: bold;">💾 Save File</button>
+            </div>
+            <span id="wc-config-filename-label" style="font-size: 10.5px; color: var(--text-secondary); text-align: center; flex: 1;">Config: (ค่าเริ่มต้นของระบบ)</span>
+            <div style="display: flex; gap: 10px;">
+              <button class="btn btn-secondary" id="btn-cancel-workcenter-settings" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary);">Cancel</button>
+              <button class="btn btn-glowing" id="btn-save-workcenter-settings" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; box-shadow: var(--shadow-neon);">Save Settings</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMPLETED PD LIST MODAL -->
+      <div id="completed-pd-list-modal" class="modal-overlay hidden">
+        <div class="modal-content card-glass" style="max-width: 650px; width: 92%; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+          <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px;">
+            <h3 style="font-family: var(--font-display); font-size: 15px; color: var(--accent-green, #16a34a); text-transform: uppercase; margin: 0;">✅ Production Order ที่ผลิตเสร็จแล้ว (<span id="completed-pd-list-count">0</span>)</h3>
+            <span class="modal-close" id="btn-close-completed-pd-list" style="cursor: pointer; font-size: 20px; color: var(--text-secondary);">&times;</span>
+          </div>
+          <p style="font-size: 10.5px; color: var(--text-secondary); margin: 0 0 12px 0;">PD ในรายการนี้จะไม่ถูกนำกลับเข้าแผนอีก ไม่ว่าจะ reload หน้า, sync ข้อมูลใหม่ หรือรัน AI Auto-Optimize (รายละเอียด Part Name / Customer ไม่แสดง เพราะถูกนำออกจากแผนแล้วถาวร)</p>
+          <div class="modal-body" style="overflow-y: auto; max-height: 420px;">
+            <div id="completed-pd-list-body" style="display: flex; flex-direction: column; gap: 6px;">
+              <!-- Populated dynamically -->
+            </div>
+            <div id="completed-pd-list-empty-msg" class="hidden" style="text-align: center; padding: 30px 20px; color: var(--text-secondary); font-size: 12px;">
+              ยังไม่มี Production Order ที่บันทึกว่าผลิตเสร็จแล้ว
+            </div>
+          </div>
+          <div class="modal-footer" style="display: flex; justify-content: flex-end; border-top: 1px solid var(--border-glass); padding-top: 15px; margin-top: 15px;">
+            <button class="btn btn-secondary" id="btn-close-completed-pd-list-footer" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary);">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PRODUCTION ORDER SEARCH MODAL -->
+      <div id="pd-search-modal" class="modal-overlay hidden">
+        <div class="modal-content card-glass" style="max-width: 620px; width: 92%; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+          <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px;">
+            <h3 style="font-family: var(--font-display); font-size: 15px; color: var(--accent-teal); text-transform: uppercase; margin: 0;">🔍 ค้นหา Production Order</h3>
+            <span class="modal-close" id="btn-close-pd-search" style="cursor: pointer; font-size: 20px; color: var(--text-secondary);">&times;</span>
+          </div>
+          <input type="text" id="pd-search-input" placeholder="ค้นหาด้วย PD Number / Part Name / Drawing Number..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 8px 12px; font-size: 12px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); outline: none; margin-bottom: 12px;">
+          <div class="modal-body" style="overflow-y: auto; max-height: 420px;">
+            <div id="pd-search-results" style="display: flex; flex-direction: column; gap: 6px;">
+              <!-- Populated dynamically -->
+            </div>
+            <div id="pd-search-empty-msg" style="text-align: center; padding: 30px 20px; color: var(--text-secondary); font-size: 12px;">
+              พิมพ์เพื่อค้นหา Production Order
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MACHINE CONTINUITY ANALYSIS MODAL -->
+      <div id="continuity-analysis-modal" class="modal-overlay hidden">
+        <div class="modal-content card-glass" style="max-width: 900px; width: 94%; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+          <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px;">
+            <h3 style="font-family: var(--font-display); font-size: 15px; color: #22d3ee; text-transform: uppercase; margin: 0;">📊 วิเคราะห์ความต่อเนื่องของสถานีงาน</h3>
+            <span class="modal-close" id="btn-close-continuity-analysis" style="cursor: pointer; font-size: 20px; color: var(--text-secondary);">&times;</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+            <label for="continuity-machine-select" style="font-size: 11px; color: var(--text-secondary); white-space: nowrap;">เลือกสถานีงาน:</label>
+            <select id="continuity-machine-select" style="flex: 1; background: var(--bg-darkest); border: 1px solid var(--border-glass); color: var(--text-primary); font-size: 12px; padding: 6px 10px; border-radius: 6px; outline: none;">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+          <div id="continuity-summary" style="font-size: 11px; color: var(--text-secondary); margin-bottom: 12px; background: var(--bg-darkest); padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-glass);">
+            เลือกสถานีงานเพื่อเริ่มวิเคราะห์
+          </div>
+          <div class="modal-body" style="overflow-y: auto; max-height: 440px;">
+            <div id="continuity-results" style="display: flex; flex-direction: column; gap: 8px;"></div>
           </div>
         </div>
       </div>
@@ -1086,7 +1222,7 @@
 
       <!-- WORK CENTER DAILY CALENDAR SCHEDULE MODAL -->
       <div id="wc-daily-schedule-modal" class="modal-overlay hidden">
-        <div class="modal-content card-glass" style="max-width: 650px; width: 90%; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
+        <div class="modal-content card-glass" style="max-width: 1100px; width: 94%; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
           <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-glass); padding-bottom: 12px; flex-wrap: wrap; gap: 10px;">
             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
               <h3 id="wc-daily-title" style="font-family: var(--font-display); font-size: 14px; color: var(--accent-teal); text-transform: uppercase; margin: 0;">Work Center Daily Schedule</h3>
@@ -1098,7 +1234,7 @@
             </div>
             <div style="display: flex; align-items: center; gap: 10px;">
               <button id="btn-export-daily-pdf" class="btn btn-glowing" style="padding: 6px 12px; font-size: 10px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; box-shadow: var(--shadow-neon); display: flex; align-items: center; gap: 4px;">
-                <span>📄 PDF (4M Checklist)</span>
+                <span>📄 PDF</span>
               </button>
               <span class="modal-close" id="btn-close-wc-daily" style="cursor: pointer; font-size: 20px; color: var(--text-secondary);">&times;</span>
             </div>
@@ -1113,7 +1249,7 @@
             <button id="btn-next-day" style="background: none; border: none; color: var(--accent-teal); cursor: pointer; font-size: 16px; padding: 4px 10px; border-radius: 4px; transition: background 0.2s;" title="ถัดไป 1 วัน">▶</button>
           </div>
           
-          <div class="modal-body" style="overflow-y: auto; max-height: 420px; padding-right: 5px;">
+          <div class="modal-body" style="overflow-y: auto; max-height: 72vh; padding-right: 5px;">
             <!-- Schedule timeline wrapper -->
             <div id="wc-daily-schedule-timeline" style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
               <!-- Calendar slots generated dynamically -->

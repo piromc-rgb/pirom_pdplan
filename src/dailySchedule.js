@@ -205,7 +205,8 @@ export class DailyScheduleController {
     // Filter scheduled jobs for this machine based on mode
     const targetJobs = this.state.scheduledJobs.filter(job => {
       if (job.machine !== this.selectedMachine) return false;
-      
+      if (job.status === 'Completed') return false;
+
       const jobDate = this.state.workingHourToDate(job.startHour);
       
       if (viewMode === 'daily') {
@@ -225,9 +226,9 @@ export class DailyScheduleController {
     });
     
     targetJobs.sort((a, b) => a.startHour - b.startHour);
-    
+
     this.timelineContainer.innerHTML = '';
-    
+
     if (targetJobs.length === 0) {
       this.emptyMsg.classList.remove('hidden');
       return;
@@ -295,58 +296,67 @@ export class DailyScheduleController {
 
       const card = document.createElement('div');
       card.className = 'daily-job-card';
+      card.title = 'ดับเบิลคลิกเพื่อแก้ไข Production Order นี้';
       card.style.cssText = `
-        display: flex; 
-        background: rgba(255,255,255,0.02); 
-        border: 1px solid var(--border-glass); 
-        border-left: 4px solid var(--accent-teal); 
-        border-radius: 8px; 
-        padding: 12px; 
-        gap: 12px; 
+        display: flex;
+        background: rgba(255,255,255,0.02);
+        border: 1px solid var(--border-glass);
+        border-left: 4px solid var(--accent-teal);
+        border-radius: 8px;
+        padding: 12px;
+        gap: 12px;
         transition: all 0.2s;
         box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        cursor: pointer;
       `;
       
       card.innerHTML = `
         <!-- Time block -->
-        <div style="flex: 0 0 120px; display: flex; flex-direction: column; border-right: 1px dashed var(--border-glass); padding-right: 8px; justify-content: center; align-items: flex-start;">
+        <div style="flex: 0 0 150px; display: flex; flex-direction: column; border-right: 1px dashed var(--border-glass); padding-right: 12px; justify-content: center; align-items: flex-start;">
           ${datePrefix}
-          <span style="font-size: 8.5px; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">ช่วงเวลาทำงาน</span>
-          <strong style="font-size: 11.5px; color: var(--text-primary); margin-top: 3px;">${timeStartStr} - ${timeEndStr}${otSuffix}</strong>
-          <span style="font-size: 9px; color: var(--text-secondary); margin-top: 2px;">Duration: <strong>${job.estHours.toFixed(2)}h</strong></span>
+          <span style="font-size: 9.5px; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">ช่วงเวลาทำงาน</span>
+          <strong style="font-size: 14px; color: var(--text-primary); margin-top: 4px;">${timeStartStr} - ${timeEndStr}${otSuffix}</strong>
+          <span style="font-size: 10.5px; color: var(--text-secondary); margin-top: 3px;">Duration: <strong>${job.estHours.toFixed(2)}h</strong></span>
         </div>
-        
-        <!-- Job Specifications -->
-        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <strong style="font-size: 12px; color: var(--accent-teal);">PD ID: ${job.woId}</strong>
-            <span class="priority-badge ${job.priority ? job.priority.toLowerCase() : 'normal'}" style="font-size: 8px; padding: 2px 5px; border-radius: 4px; font-weight: 700;">${job.priority || 'Normal'}</span>
+
+        <!-- Job details: 3 fixed lines -->
+        <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding-left: 4px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+            <span style="font-size: 13px; color: var(--text-primary);"><strong style="color: var(--accent-teal);">PD ID: ${job.woId}</strong> &nbsp;·&nbsp; ชื่องาน: <strong>${job.partName}</strong> &nbsp;·&nbsp; รหัสแบบ: <strong style="color: var(--accent-cyan); font-family: monospace;">${job.dwgNo || 'N/A'}</strong> &nbsp;·&nbsp; จำนวนผลิต: <strong>${job.qty}</strong> pcs</span>
+            <span class="priority-badge ${job.priority ? job.priority.toLowerCase() : 'normal'}" style="font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 700; flex-shrink: 0;">${job.priority || 'Normal'}</span>
           </div>
-          
-          <div style="font-size: 11px; color: var(--text-primary); line-height: 1.3;">
-            ชื่องาน: <strong>${job.partName}</strong>
-          </div>
-          <div style="font-size: 10px; color: var(--text-secondary); display: flex; gap: 15px; margin-top: 2px; flex-wrap: wrap;">
+          <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">
+            <span>Customer: <strong style="color: var(--text-primary);">${job.customer || 'N/A'}</strong></span>
             <span>เลขที่ SO: <strong style="color: var(--accent-teal); font-weight: bold;">${job.project || 'N/A'}</strong></span>
-            <span>รหัสแบบ: <strong style="color: var(--accent-cyan); font-family: monospace;">${job.dwgNo || 'N/A'}</strong></span>
-            <span>จำนวนผลิต: <strong style="color: var(--text-primary);">${job.qty}</strong> pcs</span>
           </div>
-          
+          <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">
+            <span>📥 Operation ก่อนหน้า: <strong style="color: var(--text-primary);">${prevWCStr}</strong></span>
+            <span>📤 Operation ถัดไป: <strong style="color: var(--text-primary);">${nextWCStr}</strong></span>
+          </div>
         </div>
-        
-        <!-- Receive / Send flow routing (Moved to the right) -->
-        <div style="flex: 0 0 160px; display: flex; flex-direction: column; justify-content: center; gap: 6px; border-left: 1px dashed var(--border-glass); padding-left: 12px; font-size: 9px; color: var(--text-secondary);">
-          <div>
-            📥 Operation ก่อนหน้า:<br>
-            <strong style="color: var(--text-primary); font-size: 9.5px; display: inline-block; margin-top: 2px;">${prevWCStr}</strong>
-          </div>
-          <div>
-            📤 Operation ถัดไป:<br>
-            <strong style="color: var(--text-primary); font-size: 9.5px; display: inline-block; margin-top: 2px;">${nextWCStr}</strong>
-          </div>
+
+        <!-- Mark this PD finished and take it off the board -->
+        <div style="flex: 0 0 90px; display: flex; align-items: center; justify-content: center; border-left: 1px dashed var(--border-glass); padding-left: 10px;">
+          <button class="btn-mark-pd-completed" title="บันทึกว่า ${job.woId} ผลิตจริงเสร็จแล้ว - จะไม่ถูกนำกลับเข้าแผนอีก" style="font-size: 9.5px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--accent-green, #16a34a); background: rgba(22, 163, 74, 0.1); color: var(--accent-green, #16a34a); cursor: pointer; font-weight: 700; white-space: nowrap;">✅ ผลิตเสร็จแล้ว</button>
         </div>
       `;
-      
+
+      card.addEventListener('dblclick', () => {
+        this.close();
+        window.dispatchEvent(new CustomEvent('open-pd-modal', { detail: { woId: job.woId } }));
+      });
+
+      const btnMarkCompleted = card.querySelector('.btn-mark-pd-completed');
+      if (btnMarkCompleted) {
+        btnMarkCompleted.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (confirm(`บันทึกว่า ${job.woId} ผลิตจริงเสร็จแล้วใช่หรือไม่?\n(PD นี้จะถูกนำออกจากแผน และจะไม่ถูกนำกลับเข้ามาอีก)`)) {
+            this.state.markPdCompletedAndRemove(job.woId);
+            this.render();
+          }
+        });
+      }
+
       this.timelineContainer.appendChild(card);
     });
   }
@@ -359,7 +369,8 @@ export class DailyScheduleController {
     // Filter scheduled jobs for this machine based on mode
     const targetJobs = this.state.scheduledJobs.filter(job => {
       if (job.machine !== this.selectedMachine) return false;
-      
+      if (job.status === 'Completed') return false;
+
       const jobDate = this.state.workingHourToDate(job.startHour);
       
       if (viewMode === 'daily') {
@@ -395,7 +406,7 @@ export class DailyScheduleController {
     
     // Create print content
     let jobsHtml = '';
-    const colSpanVal = viewMode !== 'daily' ? 9 : 8;
+    const colSpanVal = viewMode !== 'daily' ? 10 : 9;
     
     if (targetJobs.length === 0) {
       jobsHtml = `<tr><td colspan="${colSpanVal}" style="text-align: center; padding: 20px;">ไม่มีแผนงานผลิตในระยะเวลานี้</td></tr>`;
@@ -461,6 +472,7 @@ export class DailyScheduleController {
             <td style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;">${timeStartStr} - ${timeEndStr}</td>
             <td style="border: 1px solid #000; padding: 6px; font-weight: bold;">${job.woId}</td>
             <td style="border: 1px solid #000; padding: 6px; font-weight: bold;">${job.project || 'N/A'}</td>
+            <td style="border: 1px solid #000; padding: 6px;">${job.customer || 'N/A'}</td>
             <td style="border: 1px solid #000; padding: 6px;">${job.partName}</td>
             <td style="border: 1px solid #000; padding: 6px; text-align: center; font-family: monospace;">${job.dwgNo || 'N/A'}</td>
             <td style="border: 1px solid #000; padding: 6px; text-align: center;">${job.qty}</td>
@@ -478,7 +490,8 @@ export class DailyScheduleController {
         <th style="width: 14%; text-align: center;">ช่วงเวลาทำงาน</th>
         <th style="width: 10%;">เลขที่ PD</th>
         <th style="width: 10%;">เลขที่ SO</th>
-        <th style="width: 22%;">ชื่อชิ้นงาน (Part Name)</th>
+        <th style="width: 14%;">Customer</th>
+        <th style="width: 18%;">ชื่อชิ้นงาน (Part Name)</th>
         <th style="width: 9%; text-align: center;">รหัสแบบ (Dwg)</th>
         <th style="width: 6%; text-align: center;">จำนวน</th>
         <th style="width: 8%;">ขั้นตอนถัดไป</th>
@@ -498,14 +511,6 @@ export class DailyScheduleController {
             table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
             th { background-color: #f2f2f2; border: 1px solid #000; padding: 8px; font-size: 11px; text-align: left; }
             td { border: 1px solid #000; padding: 8px; font-size: 11px; }
-            .checklist-section { margin-top: 30px; page-break-inside: avoid; }
-            .checklist-title { font-weight: bold; font-size: 14px; border-bottom: 1.5px solid #000; padding-bottom: 5px; margin-bottom: 10px; color: #111; }
-            .checklist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-            .checklist-grid-bottom { margin-top: 15px; border-top: 1px solid #000; padding-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; page-break-inside: avoid; }
-            .checklist-box { border: 1px solid #000; padding: 10px; border-radius: 4px; background-color: #fafafa; }
-            .checklist-box h4 { margin: 0 0 8px 0; font-size: 12px; border-bottom: 1px dashed #666; padding-bottom: 4px; }
-            .checklist-item { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 6px; font-size: 10px; }
-            .checkbox { width: 12px; height: 12px; border: 1px solid #000; display: inline-block; flex-shrink: 0; margin-top: 2px; }
             .signature-block { display: flex; justify-content: space-between; margin-top: 50px; font-size: 11px; page-break-inside: avoid; }
             .sig-col { text-align: center; width: 45%; }
             .sig-line { border-bottom: 1px solid #000; width: 80%; margin: 30px auto 5px auto; }
@@ -537,38 +542,6 @@ export class DailyScheduleController {
               ${jobsHtml}
             </tbody>
           </table>
-          
-          <div class="checklist-section">
-            <div class="checklist-title">2. รายการตรวจสอบความพร้อมก่อนเริ่มงาน 4M (4M Operational Readiness Checklist)</div>
-            <div class="checklist-grid">
-              <div class="checklist-box">
-                <h4>👨‍🏭 MAN (คน)</h4>
-                <div class="checklist-item"><span class="checkbox"></span> <span>พนักงานผ่านการลงเวลาและมีความพร้อมด้านร่างกาย 100%</span></div>
-                <div class="checklist-item"><span class="checkbox"></span> <span>สวมใส่ชุดความปลอดภัย PPE ครบถ้วน (แว่นตา, ถุงมือ, รองเท้าเซฟตี้)</span></div>
-                <div class="checklist-item"><span class="checkbox"></span> <span>มีทักษะและเข้าใจแบบสั่งงาน (Drawing) และใบงานควบคุมการผลิต</span></div>
-              </div>
-              <div class="checklist-box">
-                <h4>⚙️ MACHINE (เครื่องจักร / อุปกรณ์)</h4>
-                <div class="checklist-item"><span class="checkbox"></span> <span>ทำความสะอาดเครื่องจักรและเช็กตามใบตรวจเช็กประจำวัน (Daily PM Checklist)</span></div>
-                <div class="checklist-item"><span class="checkbox"></span> <span>การตั้งค่าลม ก๊าซไฟฟ้า แรงดัน เลเซอร์ หรืออุปกรณ์เครื่องมือปกติ</span></div>
-                <div class="checklist-item"><span class="checkbox"></span> <span>ตั้งค่า Parameter สำหรับวัตถุดิบและแบบสั่งงานถูกต้องเรียบร้อย</span></div>
-              </div>
-            </div>
-            <div class="checklist-grid-bottom">
-              <div class="checklist-box">
-                <h4>📦 MATERIAL (วัตถุดิบ / งานกึ่งสำเร็จรูป)</h4>
-                <div class="checklist-item"><span class="checkbox"></span> <span>จำนวนวัตถุดิบและลักษณะตรงตามแบบสั่งงาน (Dwg No / Description)</span></div>
-                <div class="checklist-item"><span class="checkbox"></span> <span>ผ่านการตรวจสอบคุณภาพจากขั้นตอนก่อนหน้า (มีบัตรนำทาง Routing Tag แนบมา)</span></div>
-                <div class="checklist-item"><span class="checkbox"></span> <span>วัตถุดิบจัดวางเป็นระเบียบในตำแหน่งจุดรับวัตถุดิบ (In-bound Area)</span></div>
-              </div>
-              <div class="checklist-box">
-                <h4>📐 METHOD (วิธีการทำงาน)</h4>
-                <div class="checklist-item"><span class="checkbox"></span> <span>Drawing ล่าสุดพร้อมเปิดหน้าจอ CAD/CAM หรือถือฉบับจริงเวอร์ชันถูกต้อง</span></div>
-                <div class="checklist-item"><span class="checkbox"></span> <span>เข้าใจเกณฑ์มาตรฐานคุณภาพ และวิธีการวัดขนาดเพื่อควบคุมคุณลักษณะงาน</span></div>
-                <div class="checklist-item"><span class="checkbox"></span> <span>มีแผนเก็บตัวอย่างตรวจเช็กงานตัวแรก (First-piece inspection) ก่อนทำชิ้นถัดไป</span></div>
-              </div>
-            </div>
-          </div>
           
           <div class="signature-block">
             <div class="sig-col">

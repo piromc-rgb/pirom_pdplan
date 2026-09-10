@@ -1,5 +1,5 @@
 import { getPriorityWeight } from './scheduler.js';
-import { getJobPriority, isJobPriorityVisible, isJobProjectVisible, isJobPdRangeVisible } from './gantt.js';
+import { getJobPriority, isJobPriorityVisible, isJobProjectVisible, isJobCustomerVisible, isJobPdRangeVisible } from './gantt.js';
 
 function parseColorToHex(colorStr) {
   if (!colorStr) return '#0284c7';
@@ -23,8 +23,10 @@ export class ResourcesController {
   constructor(state) {
     this.state = state;
     this.activeToolTab = 'nest'; // 'nest' | 'split'
-    this.activeRightTab = 'resources'; // 'resources' | 'pdrange' | 'machinelink'
+    this.activeRightTab = 'resources'; // 'resources' | 'priority' | 'project' | 'pdrange' | 'customer'
     this.showingPieView = false;
+    this.customerSearchQuery = '';
+    this.projectSearchQuery = '';
 
     this.initElements();
     this.bindEvents();
@@ -58,16 +60,19 @@ export class ResourcesController {
     this.tabRightPriority = document.getElementById('tab-right-priority');
     this.tabRightProject = document.getElementById('tab-right-project');
     this.tabRightGenka = document.getElementById('tab-right-pdrange');
-    this.tabRightMachineLink = document.getElementById('tab-right-machinelink');
+    this.tabRightCustomer = document.getElementById('tab-right-customer');
     this.panelRightResources = document.getElementById('panel-right-resources');
     this.panelRightPriority = document.getElementById('panel-right-priority');
     this.panelRightProject = document.getElementById('panel-right-project');
     this.panelRightGenka = document.getElementById('panel-right-pdrange');
-    this.panelRightMachineLink = document.getElementById('panel-right-machinelink');
-    
+    this.panelRightCustomer = document.getElementById('panel-right-customer');
+
     // Dynamic Priority Filters Container
     this.priorityFiltersContainer = document.getElementById('priority-filters-container');
     this.projectFiltersContainer = document.getElementById('project-filters-container');
+    this.projectSearchInput = document.getElementById('project-search-input');
+    this.customerFiltersContainer = document.getElementById('customer-filters-container');
+    this.customerSearchInput = document.getElementById('customer-search-input');
   }
 
   bindEvents() {
@@ -90,7 +95,9 @@ export class ResourcesController {
       this.tabRightProject.addEventListener('click', () => this.switchRightTab('project'));
     }
     this.tabRightGenka.addEventListener('click', () => this.switchRightTab('pdrange'));
-    this.tabRightMachineLink.addEventListener('click', () => this.switchRightTab('machinelink'));
+    if (this.tabRightCustomer) {
+      this.tabRightCustomer.addEventListener('click', () => this.switchRightTab('customer'));
+    }
 
     // Resource usage pie chart - toggles the sidebar between the OEE list and the pie view
     this.btnResourcePie = document.getElementById('btn-resource-pie');
@@ -162,6 +169,38 @@ export class ResourcesController {
       this.state.notify();
     });
 
+    // Customer filter Select All / Deselect All
+    document.getElementById('btn-customer-select-all')?.addEventListener('click', () => {
+      Object.keys(this.state.activeCustomers).forEach(k => { this.state.activeCustomers[k] = true; });
+      this.state.notify();
+    });
+    document.getElementById('btn-customer-deselect-all')?.addEventListener('click', () => {
+      Object.keys(this.state.activeCustomers).forEach(k => { this.state.activeCustomers[k] = false; });
+      this.state.notify();
+    });
+    document.getElementById('btn-customer-select-filtered')?.addEventListener('click', () => {
+      // Isolate the search results: turn on every customer matching the current
+      // search box text and turn off everything else (an empty query matches all,
+      // same as "เลือกทั้งหมด").
+      const query = (this.customerSearchQuery || '').trim().toLowerCase();
+      Object.keys(this.state.activeCustomers).forEach(k => {
+        this.state.activeCustomers[k] = !query || k.toLowerCase().includes(query);
+      });
+      this.state.notify();
+    });
+    if (this.customerSearchInput) {
+      this.customerSearchInput.addEventListener('input', () => {
+        this.customerSearchQuery = this.customerSearchInput.value;
+        this.renderCustomerFilters();
+      });
+    }
+    if (this.projectSearchInput) {
+      this.projectSearchInput.addEventListener('input', () => {
+        this.projectSearchQuery = this.projectSearchInput.value;
+        this.renderProjectFilters();
+      });
+    }
+
     // Work Center filter Select All / Deselect All
     document.getElementById('btn-wc-select-all')?.addEventListener('click', () => {
       Object.keys(this.state.activeWorkCenters).forEach(k => { this.state.activeWorkCenters[k] = true; });
@@ -200,12 +239,12 @@ export class ResourcesController {
 
   switchRightTab(tab) {
     this.activeRightTab = tab;
-    const tabs = [this.tabRightResources, this.tabRightPriority, this.tabRightProject, this.tabRightGenka, this.tabRightMachineLink];
-    const panels = [this.panelRightResources, this.panelRightPriority, this.panelRightProject, this.panelRightGenka, this.panelRightMachineLink];
-    
+    const tabs = [this.tabRightResources, this.tabRightPriority, this.tabRightProject, this.tabRightGenka, this.tabRightCustomer];
+    const panels = [this.panelRightResources, this.panelRightPriority, this.panelRightProject, this.panelRightGenka, this.panelRightCustomer];
+
     tabs.forEach(t => { if (t) t.classList.remove('active'); });
     panels.forEach(p => { if (p) p.classList.add('hidden'); });
-    
+
     if (tab === 'resources') {
       this.tabRightResources.classList.add('active');
       this.panelRightResources.classList.remove('hidden');
@@ -218,9 +257,9 @@ export class ResourcesController {
     } else if (tab === 'pdrange') {
       this.tabRightGenka.classList.add('active');
       this.panelRightGenka.classList.remove('hidden');
-    } else if (tab === 'machinelink') {
-      this.tabRightMachineLink.classList.add('active');
-      this.panelRightMachineLink.classList.remove('hidden');
+    } else if (tab === 'customer') {
+      if (this.tabRightCustomer) this.tabRightCustomer.classList.add('active');
+      if (this.panelRightCustomer) this.panelRightCustomer.classList.remove('hidden');
     }
     this.render();
   }
@@ -553,6 +592,20 @@ export class ResourcesController {
       const proj = wo.project || 'General';
       counts[proj]++;
     });
+
+    // 2b. Collect which customer(s) each project belongs to, for display next
+    // to the project number - most projects map to a single customer, but show
+    // all of them (comma-separated) on the rare case a project spans a few.
+    const projectCustomers = {};
+    sortedProjects.forEach(proj => projectCustomers[proj] = new Set());
+    this.state.scheduledJobs.forEach(job => {
+      const proj = job.project || 'General';
+      if (job.customer) projectCustomers[proj]?.add(job.customer);
+    });
+    this.state.workOrders.forEach(wo => {
+      const proj = wo.project || 'General';
+      if (wo.customer) projectCustomers[proj]?.add(wo.customer);
+    });
     
     // 3. Update state.activeProjects keys. If a key is new, default to true.
     sortedProjects.forEach(proj => {
@@ -568,15 +621,25 @@ export class ResourcesController {
       }
     });
 
-    // 4. Generate HTML elements
+    // 4. Filter the list by the search box (matches against activeProjects/counts
+    // computed above from the full list, so select-all/deselect-all still act on
+    // every project even while a search narrows what's shown).
+    const query = (this.projectSearchQuery || '').trim().toLowerCase();
+    const visibleProjects = query ? sortedProjects.filter(p => p.toLowerCase().includes(query)) : sortedProjects;
+
+    // 5. Generate HTML elements
     this.projectFiltersContainer.innerHTML = '';
-    
+
     if (sortedProjects.length === 0) {
       this.projectFiltersContainer.innerHTML = '<div style="font-size: 10px; color: var(--text-secondary); text-align: center; padding: 10px;">No projects found.</div>';
       return;
     }
-    
-    sortedProjects.forEach(proj => {
+    if (visibleProjects.length === 0) {
+      this.projectFiltersContainer.innerHTML = '<div style="font-size: 10px; color: var(--text-secondary); text-align: center; padding: 10px;">ไม่พบโครงการที่ตรงกับคำค้นหา</div>';
+      return;
+    }
+
+    visibleProjects.forEach(proj => {
       const label = document.createElement('label');
       label.style.cssText = 'display: flex; align-items: flex-start; gap: 8px; cursor: pointer; user-select: none; margin-bottom: 6px; padding: 4px 6px; border-radius: 6px; transition: background 0.2s;';
       
@@ -639,6 +702,8 @@ export class ResourcesController {
         }
       }
 
+      const customerLabel = Array.from(projectCustomers[proj] || []).join(', ');
+
       label.innerHTML = `
         <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; margin-top: 2px;">
           <input type="checkbox" style="width: auto; margin: 0; cursor: pointer;" ${isChecked ? 'checked' : ''} title="Hide / Unhide Project (ซ่อน/แสดง)">
@@ -649,6 +714,7 @@ export class ResourcesController {
         </div>
         <div style="display: flex; flex-direction: column; min-width: 0; flex: 1; margin-left: 2px;">
           <span style="font-weight: bold; color: ${dotColor}; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${proj}">${proj}</span>
+          ${customerLabel ? `<span style="font-size: 9px; color: var(--text-secondary); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${customerLabel}">${customerLabel}</span>` : ''}
           <span style="font-size: 8.5px; color: var(--text-secondary); margin-top: 1px; white-space: nowrap;" title="${fullTooltip}">
             <strong style="color: ${dateRangeStr === '-' ? 'var(--text-secondary)' : 'var(--accent-teal)'};">${dateRangeStr}</strong>
           </span>
@@ -717,9 +783,163 @@ export class ResourcesController {
     });
   }
 
+  renderCustomerFilters() {
+    if (!this.customerFiltersContainer) return;
+
+    // 1. Get all unique customers from state.scheduledJobs and state.workOrders
+    const customers = new Set();
+    this.state.scheduledJobs.forEach(job => {
+      const cust = job.customer || 'General';
+      customers.add(cust);
+    });
+    this.state.workOrders.forEach(wo => {
+      const cust = wo.customer || 'General';
+      customers.add(cust);
+    });
+
+    // Sort them so the list is stable
+    const sortedCustomers = Array.from(customers).sort();
+
+    // 2. Count jobs for each customer
+    const counts = {};
+    sortedCustomers.forEach(cust => counts[cust] = 0);
+    this.state.scheduledJobs.forEach(job => {
+      const cust = job.customer || 'General';
+      counts[cust]++;
+    });
+    this.state.workOrders.forEach(wo => {
+      const cust = wo.customer || 'General';
+      counts[cust]++;
+    });
+
+    // 3. Update state.activeCustomers keys. If a key is new, default to true.
+    sortedCustomers.forEach(cust => {
+      if (this.state.activeCustomers[cust] === undefined) {
+        this.state.activeCustomers[cust] = true;
+      }
+    });
+
+    // Clean up old customers that are no longer in scheduledJobs or workOrders
+    Object.keys(this.state.activeCustomers).forEach(cust => {
+      if (!customers.has(cust)) {
+        delete this.state.activeCustomers[cust];
+      }
+    });
+
+    // 4. Filter the list by the search box (matches against activeCustomers/counts
+    // computed above from the full list, so select-all/deselect-all still act on
+    // every customer even while a search narrows what's shown).
+    const query = (this.customerSearchQuery || '').trim().toLowerCase();
+    const visibleCustomers = query ? sortedCustomers.filter(c => c.toLowerCase().includes(query)) : sortedCustomers;
+
+    // 5. Generate HTML elements
+    this.customerFiltersContainer.innerHTML = '';
+
+    if (sortedCustomers.length === 0) {
+      this.customerFiltersContainer.innerHTML = '<div style="font-size: 10px; color: var(--text-secondary); text-align: center; padding: 10px;">No customers found.</div>';
+      return;
+    }
+    if (visibleCustomers.length === 0) {
+      this.customerFiltersContainer.innerHTML = '<div style="font-size: 10px; color: var(--text-secondary); text-align: center; padding: 10px;">ไม่พบลูกค้าที่ตรงกับคำค้นหา</div>';
+      return;
+    }
+
+    visibleCustomers.forEach(cust => {
+      const label = document.createElement('label');
+      label.style.cssText = 'display: flex; align-items: flex-start; gap: 8px; cursor: pointer; user-select: none; margin-bottom: 6px; padding: 4px 6px; border-radius: 6px; transition: background 0.2s;';
+
+      const isChecked = this.state.activeCustomers[cust] !== false;
+      const count = counts[cust] || 0;
+
+      // Generate a pseudo-random color based on hash of name or custom customerColors
+      let dotColor = 'var(--accent-teal)';
+      if (this.state.customerColors && this.state.customerColors[cust]) {
+        dotColor = this.state.customerColors[cust];
+      } else {
+        let hash = 0;
+        for (let i = 0; i < cust.length; i++) {
+          hash = cust.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+        dotColor = '#' + '00000'.substring(0, 6 - c.length) + c;
+      }
+      const hexColor = parseColorToHex(dotColor);
+
+      // Calculate production date range for this customer from scheduled jobs
+      const custJobs = this.state.scheduledJobs.filter(j => (j.customer || 'General') === cust && typeof j.startHour === 'number' && !isNaN(j.startHour) && this.state.activeWorkCenters[j.machine] !== false);
+      let dateRangeStr = '-';
+      let fullTooltip = 'ยังไม่มีแผนงานผลิต';
+      if (custJobs.length > 0) {
+        const minStartHour = Math.min(...custJobs.map(j => j.startHour));
+        const maxFinishHour = Math.max(...custJobs.map(j => j.startHour + ((typeof j.estHours === 'number' && j.estHours > 0) ? j.estHours : 1.0)));
+        const dStart = this.state.workingHourToDate(minStartHour);
+        const dEnd = this.state.workingHourToDate(maxFinishHour);
+        if (dStart && !isNaN(dStart.getTime()) && dEnd && !isNaN(dEnd.getTime())) {
+          const sDay = dStart.getDate();
+          const sMonth = dStart.getMonth() + 1;
+          const sYear = String(dStart.getFullYear()).slice(-2);
+          const sTime = `${String(dStart.getHours()).padStart(2, '0')}:${String(dStart.getMinutes()).padStart(2, '0')}`;
+
+          const eDay = dEnd.getDate();
+          const eMonth = dEnd.getMonth() + 1;
+          const eYear = String(dEnd.getFullYear()).slice(-2);
+          const eTime = `${String(dEnd.getHours()).padStart(2, '0')}:${String(dEnd.getMinutes()).padStart(2, '0')}`;
+
+          const startDayMidnight = new Date(dStart.getFullYear(), dStart.getMonth(), dStart.getDate());
+          const endDayMidnight = new Date(dEnd.getFullYear(), dEnd.getMonth(), dEnd.getDate());
+          const calDays = Math.max(1, Math.round((endDayMidnight - startDayMidnight) / (1000 * 60 * 60 * 24)) + 1);
+          const daySuffix = calDays === 1 ? '1 Day' : `${calDays} Days`;
+
+          dateRangeStr = `${sDay}/${sMonth}/${sYear} - ${eDay}/${eMonth}/${eYear} (${daySuffix})`;
+          fullTooltip = `ช่วงเวลาผลิต: ${sDay}/${sMonth}/${dStart.getFullYear()} ${sTime} ถึง ${eDay}/${eMonth}/${dEnd.getFullYear()} ${eTime} (รวม ${calDays} วัน)`;
+        }
+      }
+
+      label.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; margin-top: 2px;">
+          <input type="checkbox" style="width: auto; margin: 0; cursor: pointer;" ${isChecked ? 'checked' : ''} title="Hide / Unhide Customer (ซ่อน/แสดง)">
+          <div style="position: relative; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center;" title="Change Task Bar Color (คลิกเปลี่ยนสีแถบงาน)">
+            <input type="color" class="customer-color-input" data-customer="${cust}" value="${hexColor}" style="position: absolute; opacity: 0; width: 100%; height: 100%; cursor: pointer; left: 0; top: 0; padding: 0; margin: 0; border: none; z-index: 2;">
+            <span class="color-swatch-icon" style="display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 3px; background-color: ${dotColor}; color: #ffffff; font-size: 8px; border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 1px 3px rgba(0,0,0,0.3); pointer-events: none;" title="Change Task Bar Color (คลิกเปลี่ยนสีแถบงาน)">🎨</span>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; min-width: 0; flex: 1; margin-left: 2px;">
+          <span style="font-weight: bold; color: ${dotColor}; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${cust}">${cust}</span>
+          <span style="font-size: 8.5px; color: var(--text-secondary); margin-top: 1px; white-space: nowrap;" title="${fullTooltip}">
+            <strong style="color: ${dateRangeStr === '-' ? 'var(--text-secondary)' : 'var(--accent-teal)'};">${dateRangeStr}</strong>
+          </span>
+        </div>
+        <span style="font-size: 10px; color: var(--text-secondary); margin-left: 4px; align-self: center;">(${count})</span>
+      `;
+
+      // Bind color picker input event listener
+      const colorInput = label.querySelector('.customer-color-input');
+      if (colorInput) {
+        colorInput.addEventListener('input', (e) => {
+          e.stopPropagation();
+          const newColor = e.target.value;
+          if (!this.state.customerColors) this.state.customerColors = {};
+          this.state.customerColors[cust] = newColor;
+          this.state.savePlanToFile();
+          this.state.notify();
+        });
+      }
+
+      // Bind event listener to checkbox
+      const checkbox = label.querySelector('input[type="checkbox"]');
+      checkbox.addEventListener('change', () => {
+        this.state.activeCustomers[cust] = checkbox.checked;
+        this.state.notify();
+      });
+
+      this.customerFiltersContainer.appendChild(label);
+    });
+  }
+
   render() {
     this.renderPriorityFilters();
     this.renderProjectFilters();
+    this.renderCustomerFilters();
     if (this.activeRightTab === 'resources') {
       this.renderOEE();
       this.renderNestingCandidates();
@@ -730,8 +950,8 @@ export class ResourcesController {
       // Handled by renderProjectFilters() above
     } else if (this.activeRightTab === 'pdrange') {
       this.renderPdRangeFilters();
-    } else if (this.activeRightTab === 'machinelink') {
-      this.renderMachineLink();
+    } else if (this.activeRightTab === 'customer') {
+      // Handled by renderCustomerFilters() above
     }
   }
 
@@ -745,7 +965,7 @@ export class ResourcesController {
     if (!this.state.showAllWorkCenters) {
       const usedMachines = new Set(
         this.state.scheduledJobs
-          .filter(j => isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobPdRangeVisible(j, this.state))
+          .filter(j => isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobCustomerVisible(j, this.state) && isJobPdRangeVisible(j, this.state))
           .map(j => j.machine)
           .filter(Boolean)
       );
@@ -896,7 +1116,7 @@ export class ResourcesController {
     const machines = this.getVisibleMachines();
     const hoursByMachine = machines.map(m => {
       const hours = this.state.scheduledJobs
-        .filter(j => j.machine === m && isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobPdRangeVisible(j, this.state))
+        .filter(j => j.machine === m && isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobCustomerVisible(j, this.state) && isJobPdRangeVisible(j, this.state))
         .reduce((sum, j) => sum + (j.estHours > 0 ? j.estHours : 0), 0);
       return { machine: m, name: this.state.getMachineDisplayName(m), hours };
     }).filter(m => m.hours > 0).sort((a, b) => b.hours - a.hours);
@@ -1158,33 +1378,4 @@ export class ResourcesController {
     });
   }
 
-  renderMachineLink() {
-    const listEl = document.getElementById('machinelink-sensors-list');
-    if (!listEl) return;
-
-    listEl.innerHTML = '';
-    
-    Object.keys(this.state.workCenters).forEach(machine => {
-      const row = document.createElement('div');
-      row.className = 'machinelink-row';
-
-      const jobs = this.state.scheduledJobs.filter(j => j.machine === machine);
-      const activeJob = jobs.find(j => j.status === 'Running');
-      const pausedJob = jobs.find(j => j.status === 'Paused');
-
-      const finalRed = (pausedJob) ? 'active' : '';
-      const finalYellow = (!activeJob && !pausedJob && jobs.length > 0) || (jobs.length === 0) ? 'active' : '';
-      const finalGreen = (activeJob) ? 'active' : '';
-
-      row.innerHTML = `
-        <span style="font-weight: 600;">${this.state.getMachineDisplayName(machine)}</span>
-        <div class="machinelink-tower">
-          <span class="machinelink-bulb red ${finalRed}" title="Machine Paused / Alarm"></span>
-          <span class="machinelink-bulb yellow ${finalYellow}" title="Machine Idle / Standby"></span>
-          <span class="machinelink-bulb green ${finalGreen}" title="Machine Running"></span>
-        </div>
-      `;
-      listEl.appendChild(row);
-    });
-  }
 }

@@ -1,6 +1,8 @@
 // Assembly Parts Tree Diagram Controller
 // Implements full GoDiagram-style Visual Parts Tree Hierarchy (BOM Tree)
 
+import { isJobPriorityVisible, isJobProjectVisible, isJobCustomerVisible } from './gantt.js';
+
 // Parses a search box entry like "PD2607785-PD2607795" into a numeric ID range, so
 // searching finds every PD whose number falls between two IDs instead of only
 // exact/substring text matches. Returns null when the query isn't range-shaped
@@ -262,6 +264,23 @@ export class AssemblyTreeController {
     return { parentOf, childrenOf, allWoIds };
   }
 
+  // True if this assembly (root PD) or any of its sub-PDs has at least one
+  // scheduled job passing the current Priority/Project/Customer/Work Center
+  // filters set from the Resources tab - so the Assembly list follows those
+  // filters too, instead of always listing every assembly regardless of them.
+  hasAnyVisibleJobInFamily(rootWoId) {
+    if (this.state.assemblyListFollowsFilters === false) return true; // filtering turned off
+    const familyIds = new Set(this.getAssemblyFamily(rootWoId).map(n => n.id));
+    const familyJobs = this.state.scheduledJobs.filter(j => familyIds.has(j.woId));
+    if (familyJobs.length === 0) return true; // nothing scheduled yet - don't hide it
+    return familyJobs.some(j =>
+      isJobPriorityVisible(j, this.state) &&
+      isJobProjectVisible(j, this.state) &&
+      isJobCustomerVisible(j, this.state) &&
+      this.state.activeWorkCenters[j.machine] !== false
+    );
+  }
+
   getAllAssemblies() {
     const { parentOf, childrenOf, allWoIds } = this.getAssemblyGraph();
 
@@ -270,6 +289,8 @@ export class AssemblyTreeController {
     const assemblies = [];
     allWoIds.forEach(woId => {
       if (!parentOf.has(woId) && childrenOf.has(woId) && childrenOf.get(woId).size > 0) {
+        if (!this.hasAnyVisibleJobInFamily(woId)) return;
+
         const jobs = this.state.scheduledJobs.filter(j => j.woId === woId);
         const backlog = this.state.workOrders.find(w => w.id === woId);
         const partName = jobs[0]?.partName || backlog?.partName || woId;
@@ -334,8 +355,9 @@ export class AssemblyTreeController {
       const parentId = depth === 0 ? null : (parentOf.get(id) || null);
       const hasChildren = childrenOf.has(id) && childrenOf.get(id).size > 0;
 
-      // Machine steps summary
-      const stepNames = jobs.map(j => j.machine || j.stepName).filter(Boolean);
+      // Operation name summary (falls back to the machine code only when a step
+      // has no operation name recorded at all)
+      const stepNames = jobs.map(j => j.stepName || j.name || j.machine).filter(Boolean);
 
       return {
         id,

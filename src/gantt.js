@@ -132,6 +132,18 @@ export function isJobProjectVisible(job, state) {
   return true;
 }
 
+export function isJobCustomerVisible(job, state) {
+  if (!state || !state.activeCustomers) return true;
+  const customer = String(job.customer || state.workOrders?.find(w => w.id === job.woId)?.customer || 'General').trim();
+  if (state.activeCustomers[customer] === false) return false;
+  for (const k in state.activeCustomers) {
+    if (String(k).trim() === customer && state.activeCustomers[k] === false) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function isJobPdRangeVisible(job, state) {
   if (!state || !state.activePdRanges || state.activePdRanges.length === 0) return true;
   
@@ -165,6 +177,9 @@ export class GanttController {
     this.state.ganttController = this;
     this.toastTimeout = null;
     this.collapsedParents = new Set();
+    // Keys of merged-bar groups the user double-clicked open - rendered as
+    // individual job cards (in place, no zoom) instead of a summary "×N" bar.
+    this.expandedMergeGroups = new Set();
     this.initElements();
     this.initEvents();
   }
@@ -412,6 +427,17 @@ export class GanttController {
         const d = workingHourToDate(workingHour);
         ticks.push(`${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`);
       }
+    } else if (scale === 'hr4') {
+      // Spans several working days at 4h resolution - unlike the other minute-
+      // level scales, the clock time alone (08:00/13:00) repeats every day, so
+      // the date has to be shown too or consecutive days look identical.
+      for (let i = 0; i < 8; i++) {
+        const workingHour = offset + i * 4.0;
+        const d = workingHourToDate(workingHour);
+        const dateStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+        const timeStr = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+        ticks.push(`${dateStr} ${timeStr}`);
+      }
     } else if (scale === 'day') {
       const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       for (let i = 0; i < 6; i++) {
@@ -465,6 +491,15 @@ export class GanttController {
       const startTime = start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
       const endTime = end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
       return `${dateStr} ${startTime} - ${endTime}`;
+    } else if (scale === 'hr4') {
+      // Spans multiple days (32h), so - unlike the single-day minute scales
+      // above - both the start and end need their own date.
+      const end = workingHourToDate(offset + 32.0);
+      const startStr = start.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const startTime = start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      const endStr = end.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const endTime = end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      return `${startStr} ${startTime} - ${endStr} ${endTime}`;
     } else if (scale === 'hr') {
       return start.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
     } else if (scale === 'day') {
@@ -531,13 +566,21 @@ export class GanttController {
           ticks: this.generateTicks('min30', offset),
           snapHours: 0.5
         };
+      case 'hr4':
+        return {
+          totalHours: 32.0,
+          startOffset: offset,
+          columns: 8,
+          ticks: this.generateTicks('hr4', offset),
+          snapHours: 4.0
+        };
       case 'day':
         return {
-          totalHours: 48.0, 
+          totalHours: 48.0,
           startOffset: offset,
           columns: 6,
           ticks: this.generateTicks('day', offset),
-          snapHours: 1.0 
+          snapHours: 1.0
         };
       case 'week':
         return {
@@ -669,7 +712,7 @@ export class GanttController {
     const boardRangeEl = document.getElementById('board-date-range-display');
     if (boardRangeEl) {
       const scheduledJobs = (this.state.scheduledJobs || []).filter(job => {
-        return isJobPriorityVisible(job, this.state) && isJobProjectVisible(job, this.state) && isJobPdRangeVisible(job, this.state) && this.state.activeWorkCenters[job.machine] !== false && typeof job.startHour === 'number' && !isNaN(job.startHour);
+        return isJobPriorityVisible(job, this.state) && isJobProjectVisible(job, this.state) && isJobCustomerVisible(job, this.state) && isJobPdRangeVisible(job, this.state) && this.state.activeWorkCenters[job.machine] !== false && typeof job.startHour === 'number' && !isNaN(job.startHour);
       });
       let startObj, endObj, lastTaskInfo = '';
       if (scheduledJobs.length > 0) {
@@ -714,8 +757,9 @@ export class GanttController {
       }
     }
 
-    // Update row header column title dynamically
-    const headerEl = document.getElementById('row-label-header');
+    // Update row header column title dynamically - uses the inner text span
+    // (not headerEl.textContent) so the resize-handle child element survives.
+    const headerEl = document.getElementById('row-label-header-text') || document.getElementById('row-label-header');
     if (headerEl) {
       if (scale === 'hr') {
         headerEl.textContent = 'เวลา';
@@ -850,7 +894,7 @@ export class GanttController {
         const isParent = directParentIdsAll.has(woId);
 
         const woJobs = getJobsForWo(woId).filter(j => {
-          return isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobPdRangeVisible(j, this.state) && this.state.activeWorkCenters[j.machine] !== false;
+          return isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobCustomerVisible(j, this.state) && isJobPdRangeVisible(j, this.state) && this.state.activeWorkCenters[j.machine] !== false;
         });
 
         if (woJobs.length === 0) return;
@@ -1132,9 +1176,31 @@ export class GanttController {
           });
         }
 
+        // Debounce single/double click so a single click still opens the PD edit
+        // modal, while a double click (fired after two clicks land) instead opens
+        // the Production Order search dialog.
+        let pdLabelClickTimeout = null;
         label.addEventListener('click', (e) => {
           if (e.target.closest('.pd-collapse-toggle')) return;
-          this.showPDPlanModal(woId);
+          if (pdLabelClickTimeout) {
+            clearTimeout(pdLabelClickTimeout);
+            pdLabelClickTimeout = null;
+          } else {
+            pdLabelClickTimeout = setTimeout(() => {
+              pdLabelClickTimeout = null;
+              this.showPDPlanModal(woId);
+            }, 250);
+          }
+        });
+
+        label.addEventListener('dblclick', (e) => {
+          if (e.target.closest('.pd-collapse-toggle')) return;
+          e.stopPropagation();
+          if (pdLabelClickTimeout) {
+            clearTimeout(pdLabelClickTimeout);
+            pdLabelClickTimeout = null;
+          }
+          this.showPdSearchModal();
         });
 
         const track = row.querySelector('.gantt-row-track');
@@ -1495,7 +1561,7 @@ export class GanttController {
       if (!this.state.showAllWorkCenters) {
         const usedMachines = new Set(
           this.state.scheduledJobs
-            .filter(j => isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobPdRangeVisible(j, this.state))
+            .filter(j => isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobCustomerVisible(j, this.state) && isJobPdRangeVisible(j, this.state))
             .map(j => j.machine)
             .filter(Boolean)
         );
@@ -1766,7 +1832,7 @@ export class GanttController {
 
       // Filter jobs/steps assigned to this machine and matching selected priorities
       const machineJobs = (jobsByMachine.get(machineName) || []).filter(j => {
-        return isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobPdRangeVisible(j, this.state);
+        return isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobCustomerVisible(j, this.state) && isJobPdRangeVisible(j, this.state);
       });
 
       // When zoomed out (day/week/month/quarter/year), adjacent same-priority jobs
@@ -1775,7 +1841,7 @@ export class GanttController {
       // created/laid out per pan/redraw - this is what keeps panning smooth at
       // wide time scales. Zooming below the threshold (hr and finer) renders
       // every job individually again, same as before.
-      const isWideScale = config.totalHours >= 48; // day, week, month, quarter, year
+      const isWideScale = this.state.mergeBarsEnabled !== false && config.totalHours >= 48; // day, week, month, quarter, year
       const mergedJobIds = new Set();
       const mergedGroups = [];
       if (isWideScale && machineJobs.length > 1) {
@@ -1794,11 +1860,13 @@ export class GanttController {
           }
         });
         mergedGroups.filter(g => g.jobs.length > 1).forEach(g => {
+          g.groupKey = `${machineName}|${g.priority}|${g.startHour}`;
+          if (this.expandedMergeGroups.has(g.groupKey)) return; // user double-clicked this one open
           g.jobs.forEach(j => mergedJobIds.add(j.id));
         });
       }
 
-      mergedGroups.filter(g => g.jobs.length > 1).forEach(group => {
+      mergedGroups.filter(g => g.jobs.length > 1 && !this.expandedMergeGroups.has(g.groupKey)).forEach(group => {
         const timelineEnd = config.startOffset + config.totalHours;
         if (group.startHour >= timelineEnd || group.endHour <= config.startOffset) return;
 
@@ -1823,7 +1891,7 @@ export class GanttController {
           card.style.borderColor = customColor;
           card.style.color = getReadableTextColor(customColor);
         }
-        card.setAttribute('title', `Priority: ${group.priority} — ${group.jobs.length} งาน\nStart: ${this.formatTime(group.startHour, scale)} | Finish: ${this.formatTime(group.endHour, scale)}\n(คลิกเพื่อซูมเข้าดูรายละเอียด)`);
+        card.setAttribute('title', `Priority: ${group.priority} — ${group.jobs.length} งาน\nStart: ${this.formatTime(group.startHour, scale)} | Finish: ${this.formatTime(group.endHour, scale)}\n(คลิก = ซูมเข้าดูรายละเอียด, ดับเบิลคลิก = ขยายดูทีละงานตรงนี้)`);
         card.innerHTML = `
           <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; overflow: hidden;">
             <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 9px; font-weight: 700;">×${group.jobs.length}</span>
@@ -1832,6 +1900,13 @@ export class GanttController {
         card.addEventListener('click', (e) => {
           e.stopPropagation();
           this.fitTasks(group.jobs);
+        });
+        card.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          // Expand this one group in place (no zoom) - shows every job it was
+          // hiding as individual cards, right where the summary bar was.
+          this.expandedMergeGroups.add(group.groupKey);
+          this.render();
         });
         track.appendChild(card);
       });
@@ -2001,6 +2076,7 @@ export class GanttController {
 
           const isJobLocked = this.state.isJobLocked(job);
           const lockIndicator = isJobLocked ? `<span style="font-size: 9px; margin-right: 2px;" title="โครงการนี้ถูกล็อคแผนงานไว้ (Locked Project)">🔒</span>` : '';
+          const customerName = job.customer || this.state.workOrders?.find(wo => wo.id === job.woId)?.customer || '';
 
           card.innerHTML = `
             <div class="gantt-card-id" style="display: flex; align-items: center; justify-content: space-between; width: 100%; white-space: nowrap; overflow: hidden;">
@@ -2010,9 +2086,11 @@ export class GanttController {
               ${lateIndicator}
             </div>
             <div class="gantt-card-bottom">
-              <span style="padding-left: 14px;">Qty: ${job.qty}</span>
-              <span>Fin: ${this.formatTime(jobEnd, scale)}</span>
+              <span style="padding-left: 14px; flex-shrink: 0;">Qty: ${job.qty}</span>
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 6px;" title="${customerName}">${customerName}</span>
+              <span style="flex-shrink: 0;">Fin: ${this.formatTime(jobEnd, scale)}</span>
             </div>
+            ${this.state.showPriorityBadge !== false && job.priority !== undefined && job.priority !== null && job.priority !== '' ? `<span class="gantt-card-priority-badge" title="Priority: ${job.priority}">${job.priority}</span>` : ''}
             <span class="gantt-card-remove" title="Unschedule step" data-id="${job.id}">×</span>
             ${relationIndicatorHtml}
             <svg class="gantt-card-qr-icon" data-id="${job.id}" viewBox="0 0 24 24" width="12" height="12">
@@ -2029,6 +2107,8 @@ export class GanttController {
             if (bottomEl) bottomEl.style.color = mutedColor;
             const removeEl = card.querySelector('.gantt-card-remove');
             if (removeEl) removeEl.style.color = readableTextColor === '#000' ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.4)';
+            const priorityBadgeEl = card.querySelector('.gantt-card-priority-badge');
+            if (priorityBadgeEl) priorityBadgeEl.style.color = readableTextColor;
           }
 
           // Bind drag event
@@ -2659,7 +2739,7 @@ export class GanttController {
       let lastJob = null;
 
       const activeJobs = this.state.scheduledJobs.filter(job => {
-        return isJobPriorityVisible(job, this.state) && isJobProjectVisible(job, this.state) && isJobPdRangeVisible(job, this.state) && this.state.activeWorkCenters[job.machine] !== false && typeof job.startHour === 'number' && !isNaN(job.startHour);
+        return isJobPriorityVisible(job, this.state) && isJobProjectVisible(job, this.state) && isJobCustomerVisible(job, this.state) && isJobPdRangeVisible(job, this.state) && this.state.activeWorkCenters[job.machine] !== false && typeof job.startHour === 'number' && !isNaN(job.startHour);
       });
 
       activeJobs.forEach(job => {
@@ -3031,6 +3111,79 @@ export class GanttController {
     modal.classList.remove('hidden');
   }
 
+  // Double-click on any Production Order / Assembly Set row label opens this -
+  // search by PD number, part name, or drawing number and jump straight to it.
+  showPdSearchModal() {
+    const modal = document.getElementById('pd-search-modal');
+    const input = document.getElementById('pd-search-input');
+    const resultsEl = document.getElementById('pd-search-results');
+    const emptyMsg = document.getElementById('pd-search-empty-msg');
+    if (!modal || !input || !resultsEl) return;
+
+    const renderResults = (query) => {
+      const q = query.trim().toLowerCase();
+      resultsEl.innerHTML = '';
+
+      if (!q) {
+        emptyMsg.textContent = 'พิมพ์เพื่อค้นหา Production Order';
+        emptyMsg.classList.remove('hidden');
+        return;
+      }
+
+      const byWoId = new Map();
+      this.state.scheduledJobs.forEach(job => {
+        if (!job.woId) return;
+        const woId = job.woId;
+        const partName = job.partName || '';
+        const dwgNo = job.dwgNo || '';
+        const matches = woId.toLowerCase().includes(q) || partName.toLowerCase().includes(q) || dwgNo.toLowerCase().includes(q);
+        if (!matches) return;
+        if (!byWoId.has(woId)) {
+          byWoId.set(woId, { woId, partName, dwgNo, customer: job.customer || '', jobs: [] });
+        }
+        byWoId.get(woId).jobs.push(job);
+      });
+
+      const results = Array.from(byWoId.values()).sort((a, b) => a.woId.localeCompare(b.woId));
+
+      if (results.length === 0) {
+        emptyMsg.textContent = `ไม่พบ Production Order ที่ตรงกับ "${query}"`;
+        emptyMsg.classList.remove('hidden');
+        return;
+      }
+
+      emptyMsg.classList.add('hidden');
+      results.forEach(r => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); border-left: 3px solid var(--accent-teal); border-radius: 6px; cursor: pointer;';
+        row.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+            <strong style="font-size: 12px; color: var(--accent-teal);">${r.woId}</strong>
+            <span style="font-size: 9.5px; color: var(--text-secondary); font-family: monospace;">${r.dwgNo || 'N/A'}</span>
+          </div>
+          <span style="font-size: 11px; color: var(--text-primary);">${r.partName || 'N/A'}</span>
+          ${r.customer ? `<span style="font-size: 10px; color: var(--text-secondary);">Customer: ${r.customer}</span>` : ''}
+        `;
+        row.addEventListener('click', () => {
+          this.fitTasks(r.jobs);
+          modal.classList.add('hidden');
+        });
+        resultsEl.appendChild(row);
+      });
+    };
+
+    if (!this._pdSearchModalBound) {
+      this._pdSearchModalBound = true;
+      input.addEventListener('input', () => renderResults(input.value));
+      document.getElementById('btn-close-pd-search')?.addEventListener('click', () => modal.classList.add('hidden'));
+    }
+
+    input.value = '';
+    renderResults('');
+    modal.classList.remove('hidden');
+    setTimeout(() => input.focus(), 50);
+  }
+
   fitTasks(jobs) {
     if (!jobs || jobs.length === 0) return;
 
@@ -3041,6 +3194,8 @@ export class GanttController {
     let targetScale = 'hr';
     if (span <= 8.0) {
       targetScale = 'hr';
+    } else if (span <= 32.0) {
+      targetScale = 'hr4';
     } else if (span <= 48.0) {
       targetScale = 'day';
     } else if (span <= 192.0) {
@@ -3056,6 +3211,7 @@ export class GanttController {
     // Offset margin so the Start Date dashed line & vertical badge on the left are clearly visible
     let leftMarginHours = 0;
     if (targetScale === 'hr') leftMarginHours = 0.5;
+    else if (targetScale === 'hr4') leftMarginHours = 1.0;
     else if (targetScale === 'day') leftMarginHours = 2.0;
     else if (targetScale === 'week') leftMarginHours = 8.0;
     else if (targetScale === 'month') leftMarginHours = 16.0;
@@ -3213,6 +3369,7 @@ export class GanttController {
     const btnSave = document.getElementById('btn-save-pd-changes');
     const btnExport = document.getElementById('btn-export-pd-csv');
     const btnDelete = document.getElementById('btn-delete-this-pd');
+    const inputCompletedHistory = document.getElementById('chk-pd-completed-history');
 
     // 1. Gather all info & steps for this PD
     const scheduledJobs = this.state.scheduledJobs
@@ -3243,6 +3400,7 @@ export class GanttController {
     if (inputPartName) inputPartName.value = partName;
     if (inputQty) inputQty.value = qty;
     if (inputPriority) inputPriority.value = priority;
+    if (inputCompletedHistory) inputCompletedHistory.checked = this.state.isPdInCompletedHistory(woId);
 
     if (inputTargetDate) {
       if (dueHour !== null && dueHour !== undefined) {
@@ -3581,6 +3739,19 @@ export class GanttController {
           });
         });
         this.exportPDPlanToCSV(woId, jobsForExport);
+      });
+    }
+
+    // "ผลิตจริงเสร็จแล้ว" checkbox handler
+    if (inputCompletedHistory) {
+      const cleanInputCompletedHistory = inputCompletedHistory.cloneNode(true);
+      cleanInputCompletedHistory.checked = this.state.isPdInCompletedHistory(woId);
+      inputCompletedHistory.parentNode.replaceChild(cleanInputCompletedHistory, inputCompletedHistory);
+      cleanInputCompletedHistory.addEventListener('change', () => {
+        this.state.markPdCompletedHistory(woId, cleanInputCompletedHistory.checked);
+        this.showToast(cleanInputCompletedHistory.checked
+          ? `✅ บันทึกว่า ${woId} ผลิตจริงเสร็จแล้ว - จะไม่ถูกนำกลับเข้าแผนอีก`
+          : `↩️ ยกเลิกสถานะผลิตเสร็จแล้วของ ${woId}`);
       });
     }
 

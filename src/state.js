@@ -26,12 +26,53 @@ class CentralState {
     this.activeProjects = {};
     this.projectColors = {};
 
+    // Active customer filters (defaults to true for all keys)
+    this.activeCustomers = {};
+    this.customerColors = {};
+
     // Active PD Ranges
     this.activePdRanges = [];
 
     // Manually selected Work Centers to show on the board (defaults to true for all keys)
     this.activeWorkCenters = {};
-    
+
+    // PD IDs marked "ผลิตจริงเสร็จแล้ว" (actually completed in production) - these
+    // are excluded from Excel imports and filtered back out on every app load, so a
+    // finished PD never comes back onto the board just because it's still in the
+    // source Excel file or an old backlog snapshot.
+    this.completedPdHistory = {};
+
+    // Step IDs (e.g. "PD2605309-30") manually removed from a PD's Routing Steps
+    // table in the edit modal - same idea as completedPdHistory but at the single
+    // step level. Excluded from Excel imports and filtered back out on every app
+    // load, so a step someone crossed off doesn't reappear just because the source
+    // Excel file or an old snapshot still has it.
+    this.removedStepHistory = {};
+
+    // Whether overlapping same-priority task bars collapse into a single summary
+    // bar when zoomed out (day scale and wider) to keep panning smooth. Off shows
+    // every job individually at every scale, same as before that feature existed.
+    this.mergeBarsEnabled = true;
+
+    // Whether the small Priority number badge in the top-right corner of each
+    // task bar is shown.
+    this.showPriorityBadge = true;
+
+    // Whether the scheduler is allowed to offload a job onto a work center's
+    // configured alt machine(s) to keep it running when the original machine
+    // is busy. Off restricts every job to strictly its own machine.
+    this.allowMachineOffload = true;
+
+    // Whether the Assembly Set list (left sidebar) only shows assemblies that still
+    // have at least one job passing the current Priority/Project/Customer/Work
+    // Center filters. Off lists every assembly regardless of those filters.
+    this.assemblyListFollowsFilters = true;
+
+    // Work mode: 'planning' (normal drag/edit of the plan) or 'terminal' - in
+    // terminal mode, clicking a task bar immediately opens the MIE Shop Floor Kiosk
+    // Simulator instead of just selecting the card.
+    this.workMode = 'planning';
+
     // Locked projects to prevent moving or rescheduling
     this.lockedProjects = {};
     
@@ -391,6 +432,10 @@ class CentralState {
   setActiveScale(scale) {
     this.activeScale = scale;
 
+    // A double-click-expanded merge group only stays expanded "temporarily" - once
+    // the zoom level changes, groups re-form fresh at the new scale anyway.
+    if (this.ganttController) this.ganttController.expandedMergeGroups.clear();
+
     // Auto-scroll timeline view to center on the current working hour for the new time scale
     const now = new Date();
     const nowWorkingHour = this.dateToWorkingHour(now);
@@ -399,14 +444,35 @@ class CentralState {
     if (this.schedulingModel === 'infinite') {
       this.scheduledJobs = Scheduler.applyBackwardsInfinite(this.scheduledJobs, scale);
     } else if (this.schedulingModel === 'finite') {
-      this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, scale, nowWorkingHour, this.workCenters);
+      this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, scale, nowWorkingHour, this.workCenters, this.allowMachineOffload);
     }
 
     const config = this.getScaleConfig(scale);
     const targetOffset = nowWorkingHour - config.totalHours / 3;
     const snap = config.snapHours;
     this.timelineOffset = Math.round(targetOffset / snap) * snap;
-    
+
+    this.notify();
+  }
+
+  // Re-runs the Forward Finite / Backward Infinite pass over the current board
+  // without touching the time scale or timeline offset - for when something
+  // that affects the schedule changed (Priority, Work Center lead/transfer
+  // time or capacity, Lock/Unlock Project) but the scale itself didn't, so
+  // setActiveScale() never re-fired on its own.
+  recomputeSchedule() {
+    if (this.ganttController) this.ganttController.expandedMergeGroups.clear();
+
+    const now = new Date();
+    const nowWorkingHour = this.dateToWorkingHour(now);
+
+    if (this.schedulingModel === 'infinite') {
+      this.scheduledJobs = Scheduler.applyBackwardsInfinite(this.scheduledJobs, this.activeScale);
+    } else if (this.schedulingModel === 'finite') {
+      this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, this.activeScale, nowWorkingHour, this.workCenters, this.allowMachineOffload);
+    }
+
+    this.savePlanToFile();
     this.notify();
   }
 
@@ -469,7 +535,8 @@ class CentralState {
     if (planData.timelineOffset !== undefined) this.timelineOffset = planData.timelineOffset;
     if (planData.priorityColors) this.priorityColors = planData.priorityColors;
     if (planData.projectColors) this.projectColors = planData.projectColors;
-    
+    if (planData.customerColors) this.customerColors = planData.customerColors;
+
     this.notify();
     this.dispatchHistoryEvent();
   }
@@ -699,6 +766,8 @@ class CentralState {
         return { totalHours: 2.0, startOffset: 0.0, snapHours: 15.0 / 60.0 };
       case 'min30':
         return { totalHours: 4.0, startOffset: 0.0, snapHours: 0.5 };
+      case 'hr4':
+        return { totalHours: 32.0, startOffset: 0.0, snapHours: 4.0 };
       case 'day':
         return { totalHours: 48.0, startOffset: 0.0, snapHours: 1.0 };
       case 'week':
@@ -1583,6 +1652,18 @@ class CentralState {
       }
     });
 
+    // Remember any scheduled step of this PD that the user manually removed from
+    // the modal's Routing Steps table, so a future Excel import or app reload
+    // never brings that exact step back onto the board. Keyed by (machine, name)
+    // rather than step id, since renumberWorkOrderSteps() rewrites step ids/numbers
+    // to close gaps on every load.
+    this.scheduledJobs.forEach(j => {
+      if ((j.woId === woId || j.id === woId) && !keptScheduledJobIds.has(j.id)) {
+        const key = this.getStepIdentityKey(woId, j.machine, j.stepName || j.name);
+        this.removedStepHistory[key] = true;
+      }
+    });
+
     // Remove any scheduled jobs of this PD that were deleted in the modal
     this.scheduledJobs = this.scheduledJobs.filter(j => {
       if (j.woId === woId || j.id === woId) {
@@ -1951,12 +2032,62 @@ class CentralState {
     return false;
   }
 
+  isPdInCompletedHistory(pdId) {
+    return Boolean(pdId && this.completedPdHistory[pdId]);
+  }
+
+  // Step IDs are NOT stable across reloads - renumberWorkOrderSteps() re-sequences
+  // stepNum (and the "-NN" suffix in the id) to close gaps every time it runs, so a
+  // step that used to be "-30" can become "-20" once an earlier step is removed.
+  // Track removed steps by (PD, machine, operation name) instead - the same triple
+  // renumberWorkOrderSteps() itself uses to recognize "the same step".
+  getStepIdentityKey(woId, machine, name) {
+    const baseName = (name || 'Operation').trim().replace(/\s+\d+$/, '');
+    return `${woId}::${machine || ''}::${baseName}`;
+  }
+
+  isStepIdentityRemoved(woId, machine, name) {
+    const key = this.getStepIdentityKey(woId, machine, name);
+    return Boolean(this.removedStepHistory[key]);
+  }
+
+  markPdCompletedHistory(pdId, completed) {
+    if (!pdId) return;
+    if (completed) {
+      this.completedPdHistory[pdId] = true;
+    } else {
+      delete this.completedPdHistory[pdId];
+    }
+    this.savePlanToFile();
+    this.notify();
+  }
+
+  // One-click "mark finished and take it off the board now" - same permanent
+  // record as the "ผลิตจริงเสร็จแล้ว" checkbox in the PD edit modal, but also
+  // pulls this PD's steps out of scheduledJobs immediately instead of waiting
+  // for the next reload to filter them out.
+  markPdCompletedAndRemove(pdId) {
+    if (!pdId) return;
+    this.saveStateToHistory();
+    this.completedPdHistory[pdId] = true;
+    this.scheduledJobs = this.scheduledJobs.filter(j => j.woId !== pdId);
+    this.savePlanToFile();
+    this.notify();
+    this.dispatchHistoryEvent();
+  }
+
   loadWorkOrdersFromFile() {
     fetch('/api/pd')
       .then(res => res.json())
       .then(data => {
         if (data && Array.isArray(data) && data.length > 0) {
-          this.workOrders = data;
+          // Never bring back a PD that was already marked "ผลิตจริงเสร็จแล้ว" - it may
+          // still be sitting in this backlog snapshot even though it's actually done.
+          this.workOrders = data.filter(wo => !this.isPdInCompletedHistory(wo.id));
+          // Nor a single step someone manually crossed off in the PD edit modal.
+          this.workOrders.forEach(wo => {
+            wo.steps = (wo.steps || []).filter(step => !this.isStepIdentityRemoved(wo.id, step.machine, step.name));
+          });
           this.deduplicateAllWorkOrders();
           this.notify();
         } else {
@@ -2009,10 +2140,22 @@ class CentralState {
           this.lockedProjects = data.lockedProjects || {};
           if (data.priorityColors) this.priorityColors = data.priorityColors;
           if (data.projectColors) this.projectColors = data.projectColors;
+          if (data.customerColors) this.customerColors = data.customerColors;
           if (data.workCenters) this.workCenters = data.workCenters;
           if (data.workCenterOrder) this.workCenterOrder = data.workCenterOrder;
           if (data.timelineOffset !== undefined) this.timelineOffset = data.timelineOffset;
           if (data.activeScale) this.activeScale = data.activeScale;
+          if (data.completedPdHistory) this.completedPdHistory = data.completedPdHistory;
+          if (data.removedStepHistory) this.removedStepHistory = data.removedStepHistory;
+          // A PD marked "ผลิตจริงเสร็จแล้ว" never comes back onto the board on load,
+          // whether it's sitting in this file's scheduledJobs or in the backlog
+          // snapshot loadWorkOrdersFromFile already applied (order between the two
+          // isn't guaranteed, so both re-apply the filter against the latest history).
+          this.scheduledJobs = this.scheduledJobs.filter(j => !this.isPdInCompletedHistory(j.woId) && !this.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name));
+          this.workOrders = this.workOrders.filter(wo => !this.isPdInCompletedHistory(wo.id));
+          this.workOrders.forEach(wo => {
+            wo.steps = wo.steps.filter(step => !this.isStepIdentityRemoved(wo.id, step.machine, step.name));
+          });
           this.deduplicateAllWorkOrders();
           if (this.ganttController && this.scheduledJobs.length > 0) {
             this.ganttController.fitTasks(this.scheduledJobs);
@@ -2050,10 +2193,13 @@ class CentralState {
       lockedProjects: this.lockedProjects || {},
       priorityColors: this.priorityColors || {},
       projectColors: this.projectColors || {},
+      customerColors: this.customerColors || {},
       workCenters: this.workCenters,
       workCenterOrder: this.workCenterOrder,
       timelineOffset: this.timelineOffset,
       activeScale: this.activeScale,
+      completedPdHistory: this.completedPdHistory || {},
+      removedStepHistory: this.removedStepHistory || {},
       formattedRows
     };
     

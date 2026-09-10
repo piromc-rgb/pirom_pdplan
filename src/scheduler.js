@@ -27,6 +27,11 @@ export class Scheduler {
   // Arranges all jobs backwards from a simulated due hour (dependent on scale)
   // For jobs belonging to the same WO, steps are sequenced backwards (Step 20 starts when Step 30 starts, etc.)
   static applyBackwardsInfinite(jobs, scale = 'hr') {
+    // Completed jobs are done - never recompute their startHour, or a finished PD
+    // would get bumped into a new future slot every time the scale changes.
+    const completedJobs = jobs.filter(j => j.status === 'Completed');
+    const pendingJobs = jobs.filter(j => j.status !== 'Completed');
+
     let deadline = 8.0;
     let minStart = 0.0;
 
@@ -38,7 +43,7 @@ export class Scheduler {
     const woGroups = {};
     const independentJobs = [];
 
-    jobs.forEach(job => {
+    pendingJobs.forEach(job => {
       if (!job.woId) {
         independentJobs.push(job);
       } else {
@@ -102,7 +107,7 @@ export class Scheduler {
       });
     });
 
-    return updatedJobs;
+    return [...completedJobs, ...updatedJobs];
   }
 
   // Apply Forwards Finite Scheduling model
@@ -119,7 +124,7 @@ export class Scheduler {
   // Schedules jobs dynamically, minimizing machine idle gaps by pulling ready tasks forward
   // when a machine is free, keeping work centers running as continuously as possible.
   // Enforces 10-minute move time buffer between different work stations for the same Production Order.
-  static applyActiveJobShopScheduling(jobs, scale = 'hr', nowWorkingHour = 0.0, existingScheduledJobs = [], workCenters = {}) {
+  static applyActiveJobShopScheduling(jobs, scale = 'hr', nowWorkingHour = 0.0, existingScheduledJobs = [], workCenters = {}, allowOffload = true) {
     const startOffset = Math.max((scale === 'hr' ? 8.0 : 0.0), nowWorkingHour);
 
     // Each machine gets `capacity` parallel lanes instead of a single busy-until
@@ -144,7 +149,7 @@ export class Scheduler {
     jobs.forEach(job => {
       const origM = job.originalMachine || job.machine;
       job.originalMachine = origM;
-      const altStr = workCenters[origM]?.altMachines || '';
+      const altStr = allowOffload ? (workCenters[origM]?.altMachines || '') : '';
       if (altStr) {
         const altList = altStr.split(',').map(s => s.trim()).filter(m => m && (workCenters[m] || machineSet.has(m)));
         job.altCandidates = [origM, ...altList];
@@ -366,7 +371,22 @@ export class Scheduler {
         return a.job.stepNum - b.job.stepNum;
       });
 
-      const best = validCandidates[0];
+      let best = validCandidates[0];
+
+      // Gap-filling: the highest-priority candidate may still have to wait
+      // (gap > 0) on its own routing/lead time before it can actually start.
+      // Rather than let the machine sit idle for that whole stretch, look for
+      // a lower-priority candidate that's ready sooner and finishes before
+      // the high-priority job would even become available - it doesn't delay
+      // the high-priority job at all, so run it in the gap instead.
+      // validCandidates is already sorted by priority, so the first match is
+      // the highest-priority one among those that actually fit.
+      if (best.gap > 0) {
+        const filler = validCandidates.find(c => c !== best && (c.readyTime + c.job.estHours) <= best.readyTime);
+        if (filler) {
+          best = filler;
+        }
+      }
       const job = best.job;
       const origM = job.originalMachine || job.machine;
       job.originalMachine = origM;
@@ -402,8 +422,14 @@ export class Scheduler {
   }
 
   // Wrapper to support legacy finite scheduling calls in UI
-  static applyForwardsFinite(jobs, scale = 'hr', nowWorkingHour = 0.0, workCenters = {}) {
-    return this.applyActiveJobShopScheduling(jobs, scale, nowWorkingHour, [], workCenters);
+  static applyForwardsFinite(jobs, scale = 'hr', nowWorkingHour = 0.0, workCenters = {}, allowOffload = true) {
+    // Completed jobs are done - keep them fixed (as already-occupied machine time)
+    // instead of feeding them back into the dispatch pool, or a finished PD would
+    // get a brand-new startHour (and look "reloaded into the plan") every time the
+    // scale changes.
+    const completedJobs = jobs.filter(j => j.status === 'Completed');
+    const pendingJobs = jobs.filter(j => j.status !== 'Completed');
+    return this.applyActiveJobShopScheduling(pendingJobs, scale, nowWorkingHour, completedJobs, workCenters, allowOffload);
   }
 
   // Backward Active Job Shop Scheduling Pass
@@ -725,7 +751,7 @@ export class Scheduler {
   // 2. Sort by Priority (High / 1.1 first)
   // 3. Find earliest free slot on machine (or best alternate machine) sequentially for each step (10 -> 20 -> 30)
   // 4. Starts strictly from current time (nowWorkingHour)
-  static applyMultiPDSimulationPlacement(backlogWOs = [], scheduledJobs = [], scale = 'day', nowWorkingHour = 0.0, workCenters = {}, lockedProjects = {}) {
+  static applyMultiPDSimulationPlacement(backlogWOs = [], scheduledJobs = [], scale = 'day', nowWorkingHour = 0.0, workCenters = {}, lockedProjects = {}, allowOffload = true) {
     const startOffset = Math.max(0.0, typeof nowWorkingHour === 'number' && !isNaN(nowWorkingHour) ? nowWorkingHour : 0.0);
 
     const isJobFixed = (j) => j.status === 'Completed' || Boolean(lockedProjects && lockedProjects[j.project || 'General']);
@@ -828,7 +854,7 @@ export class Scheduler {
 
       steps.forEach(step => {
         const origM = step.machine;
-        const altStr = workCenters[origM]?.altMachines || '';
+        const altStr = allowOffload ? (workCenters[origM]?.altMachines || '') : '';
         const candidates = [origM];
         if (altStr) {
           altStr.split(',').map(s => s.trim()).filter(Boolean).forEach(m => {
@@ -905,7 +931,7 @@ export class Scheduler {
 
   // AI Simulation / APS Optimizer
   // Schedules backlog and scheduled steps sequentially using Multi-PD Simulation Placement principles.
-  static runAISimulation(backlog, scheduledJobs, scale = 'hr', nowWorkingHour = 0.0, workCenters = {}, lockedProjects = {}) {
-    return this.applyMultiPDSimulationPlacement(backlog, scheduledJobs, scale, nowWorkingHour, workCenters, lockedProjects);
+  static runAISimulation(backlog, scheduledJobs, scale = 'hr', nowWorkingHour = 0.0, workCenters = {}, lockedProjects = {}, allowOffload = true) {
+    return this.applyMultiPDSimulationPlacement(backlog, scheduledJobs, scale, nowWorkingHour, workCenters, lockedProjects, allowOffload);
   }
 }

@@ -7,6 +7,7 @@ import { ResourcesController } from './resources.js';
 import { KioskController } from './kiosk.js';
 import { DailyScheduleController } from './dailySchedule.js';
 import { AssemblyTreeController, matchesAssemblyQuery } from './assemblyTree.js';
+import { ContinuityAnalysisController } from './continuityAnalysis.js';
 
 function getBaseDate() {
   return new Date(2026, 5, 22, 8, 0, 0); // Fixed epoch: Mon June 22 2026 8:00
@@ -94,7 +95,9 @@ class App {
     this.renderKPIs();
     this.initHeaderDateTime();
     this.initWorkCenterSettings();
-    
+    this.initCompletedPdList();
+    this.initGanttLabelColumnResize();
+
     // Default Gantt view: Time Scale Fit (start day left-aligned)
     if (state.scheduledJobs && state.scheduledJobs.length > 0) {
       this.gantt.fitTasks(state.scheduledJobs);
@@ -135,6 +138,7 @@ class App {
     this.kiosk = new KioskController(state);
     this.dailySchedule = new DailyScheduleController(state);
     this.assemblyTree = new AssemblyTreeController(state, this.gantt);
+    this.continuityAnalysis = new ContinuityAnalysisController(state);
     
     // Subscribe controllers to state changes
     state.subscribe(() => this.renderAll());
@@ -147,8 +151,19 @@ class App {
     this.btnCloseWcSettings = document.getElementById('btn-close-workcenter-settings');
     this.btnCancelWcSettings = document.getElementById('btn-cancel-workcenter-settings');
     this.btnSaveWcSettings = document.getElementById('btn-save-workcenter-settings');
+    this.btnLoadWcConfigFile = document.getElementById('btn-load-workcenter-config-file');
+    this.btnSaveWcConfigFile = document.getElementById('btn-save-workcenter-config-file');
+    this.inputLoadWcConfigFile = document.getElementById('input-load-wc-config-file');
+    this.wcConfigFilenameLabel = document.getElementById('wc-config-filename-label');
     this.btnAddWc = document.getElementById('btn-add-workcenter');
     this.wcSettingsList = document.getElementById('workcenter-settings-list');
+
+    const WC_CONFIG_FILENAME_KEY = 'chaken_wc_config_filename';
+    this.updateWcConfigFilenameLabel = (name) => {
+      if (!this.wcConfigFilenameLabel) return;
+      this.wcConfigFilenameLabel.textContent = name ? `Config: ${name}` : 'Config: (ค่าเริ่มต้นของระบบ)';
+    };
+    this.updateWcConfigFilenameLabel(localStorage.getItem(WC_CONFIG_FILENAME_KEY));
 
     const openSettings = () => {
       this.renderWcSettingsList(state.workCenters, state.workCenterOrder);
@@ -175,63 +190,131 @@ class App {
       });
     }
 
+    // Reads and validates the editable table into { workCenters, workCenterOrder } -
+    // shared by "Save Settings" (apply to the live plan) and "Save File" (export to disk).
+    this.readWcSettingsFromTable = () => {
+      const rows = this.wcSettingsList.querySelectorAll('tr');
+      const newWorkCenters = {};
+      const newOrder = [];
+      let hasInvalid = false;
+
+      rows.forEach(row => {
+        const idInput = row.querySelector('.wc-id-input');
+        const nameInput = row.querySelector('.wc-name-input');
+        const capacityInput = row.querySelector('.wc-capacity-input');
+        const workHoursInput = row.querySelector('.wc-workhours-input');
+        const altInput = row.querySelector('.wc-alt-input');
+        const transferInput = row.querySelector('.wc-transfer-input');
+        const leadTimeInput = row.querySelector('.wc-leadtime-input');
+        const colorSelect = row.querySelector('.wc-color-select');
+
+        if (idInput && nameInput) {
+          const id = idInput.value.trim();
+          const name = nameInput.value.trim();
+          const capacity = parseInt(capacityInput.value) || 1;
+          const workHoursPerDay = workHoursInput ? (parseFloat(workHoursInput.value) || 8) : 8;
+          const altMachines = altInput ? altInput.value.trim() : '';
+          const transferMinutes = transferInput ? (parseFloat(transferInput.value) >= 0 ? parseFloat(transferInput.value) : 10) : 10;
+          const leadTimeDays = leadTimeInput ? (parseFloat(leadTimeInput.value) || 0) : 0;
+          const color = colorSelect.value;
+
+          if (!id) {
+            hasInvalid = true;
+            return;
+          }
+
+          newWorkCenters[id] = {
+            capacity,
+            workHoursPerDay,
+            color,
+            name: name || id,
+            altMachines,
+            transferMinutes,
+            leadTimeDays
+          };
+          newOrder.push(id);
+        }
+      });
+
+      if (hasInvalid) {
+        alert('กรุณากรอกรหัสเครื่องจักรให้ครบถ้วน');
+        return null;
+      }
+
+      if (newOrder.length === 0) {
+        alert('กรุณาเพิ่มเครื่องจักรอย่างน้อย 1 รายการ');
+        return null;
+      }
+
+      return { workCenters: newWorkCenters, workCenterOrder: newOrder };
+    };
+
     if (this.btnSaveWcSettings) {
       this.btnSaveWcSettings.addEventListener('click', () => {
-        const rows = this.wcSettingsList.querySelectorAll('tr');
-        const newWorkCenters = {};
-        const newOrder = [];
-        let hasInvalid = false;
-
-        rows.forEach(row => {
-          const idInput = row.querySelector('.wc-id-input');
-          const nameInput = row.querySelector('.wc-name-input');
-          const capacityInput = row.querySelector('.wc-capacity-input');
-          const workHoursInput = row.querySelector('.wc-workhours-input');
-          const altInput = row.querySelector('.wc-alt-input');
-          const transferInput = row.querySelector('.wc-transfer-input');
-          const leadTimeInput = row.querySelector('.wc-leadtime-input');
-          const colorSelect = row.querySelector('.wc-color-select');
-
-          if (idInput && nameInput) {
-            const id = idInput.value.trim();
-            const name = nameInput.value.trim();
-            const capacity = parseInt(capacityInput.value) || 1;
-            const workHoursPerDay = workHoursInput ? (parseFloat(workHoursInput.value) || 8) : 8;
-            const altMachines = altInput ? altInput.value.trim() : '';
-            const transferMinutes = transferInput ? (parseFloat(transferInput.value) >= 0 ? parseFloat(transferInput.value) : 10) : 10;
-            const leadTimeDays = leadTimeInput ? (parseFloat(leadTimeInput.value) || 0) : 0;
-            const color = colorSelect.value;
-
-            if (!id) {
-              hasInvalid = true;
-              return;
-            }
-
-            newWorkCenters[id] = {
-              capacity,
-              workHoursPerDay,
-              color,
-              name: name || id,
-              altMachines,
-              transferMinutes,
-              leadTimeDays
-            };
-            newOrder.push(id);
-          }
-        });
-
-        if (hasInvalid) {
-          alert('กรุณากรอกรหัสเครื่องจักรให้ครบถ้วน');
-          return;
-        }
-
-        if (newOrder.length === 0) {
-          alert('กรุณาเพิ่มเครื่องจักรอย่างน้อย 1 รายการ');
-          return;
-        }
-
-        state.updateWorkCenters(newWorkCenters, newOrder);
+        const result = this.readWcSettingsFromTable();
+        if (!result) return;
+        state.updateWorkCenters(result.workCenters, result.workCenterOrder);
         this.wcSettingsModal.classList.add('hidden');
+      });
+    }
+
+    if (this.btnSaveWcConfigFile) {
+      this.btnSaveWcConfigFile.addEventListener('click', () => {
+        const result = this.readWcSettingsFromTable();
+        if (!result) return;
+
+        const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+        const defaultName = `machine-settings-${stamp}.json`;
+        const fileName = (prompt('ตั้งชื่อไฟล์ config:', defaultName) || '').trim() || defaultName;
+        const finalName = fileName.toLowerCase().endsWith('.json') ? fileName : `${fileName}.json`;
+
+        const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = finalName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+
+        localStorage.setItem(WC_CONFIG_FILENAME_KEY, finalName);
+        this.updateWcConfigFilenameLabel(finalName);
+        state.ganttController?.showToast(`💾 บันทึกไฟล์ config: ${finalName}`);
+      });
+    }
+
+    if (this.btnLoadWcConfigFile && this.inputLoadWcConfigFile) {
+      this.btnLoadWcConfigFile.addEventListener('click', () => {
+        this.inputLoadWcConfigFile.value = '';
+        this.inputLoadWcConfigFile.click();
+      });
+
+      this.inputLoadWcConfigFile.addEventListener('change', () => {
+        const file = this.inputLoadWcConfigFile.files && this.inputLoadWcConfigFile.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          let parsed;
+          try {
+            parsed = JSON.parse(reader.result);
+          } catch (err) {
+            alert('ไฟล์ config ไม่ถูกต้อง (ไม่ใช่ JSON ที่ถูกต้อง)');
+            return;
+          }
+
+          if (!parsed || typeof parsed.workCenters !== 'object' || !Array.isArray(parsed.workCenterOrder)) {
+            alert('ไฟล์ config ไม่ถูกต้อง (ต้องมี workCenters และ workCenterOrder)');
+            return;
+          }
+
+          this.renderWcSettingsList(parsed.workCenters, parsed.workCenterOrder);
+          localStorage.setItem(WC_CONFIG_FILENAME_KEY, file.name);
+          this.updateWcConfigFilenameLabel(file.name);
+          state.ganttController?.showToast(`📂 โหลดไฟล์ config: ${file.name} (กด Save Settings เพื่อนำไปใช้)`);
+        };
+        reader.readAsText(file);
       });
     }
 
@@ -354,6 +437,102 @@ class App {
     });
   }
 
+  initGanttLabelColumnResize() {
+    const resizer = document.getElementById('gantt-label-col-resizer');
+    if (!resizer) return;
+
+    const STORAGE_KEY = 'chaken_gantt_label_col_width';
+    const MIN_WIDTH = 90;
+    const MAX_WIDTH = 400;
+
+    const applyWidth = (px) => {
+      document.documentElement.style.setProperty('--gantt-label-col-width', `${px}px`);
+    };
+
+    const savedWidth = parseInt(localStorage.getItem(STORAGE_KEY), 10);
+    if (savedWidth && savedWidth >= MIN_WIDTH && savedWidth <= MAX_WIDTH) {
+      applyWidth(savedWidth);
+    }
+
+    let startX = 0;
+    let startWidth = 0;
+
+    const onMouseMove = (e) => {
+      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + (e.clientX - startX)));
+      applyWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      resizer.classList.remove('resizing');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      const finalWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gantt-label-col-width'), 10);
+      if (finalWidth) localStorage.setItem(STORAGE_KEY, finalWidth);
+    };
+
+    resizer.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      startX = e.clientX;
+      const headerEl = document.getElementById('row-label-header');
+      startWidth = headerEl ? headerEl.getBoundingClientRect().width : 140;
+      resizer.classList.add('resizing');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+  }
+
+  initCompletedPdList() {
+    const modal = document.getElementById('completed-pd-list-modal');
+    const btnOpen = document.getElementById('btn-view-completed-pd');
+    const btnClose = document.getElementById('btn-close-completed-pd-list');
+    const btnCloseFooter = document.getElementById('btn-close-completed-pd-list-footer');
+    const listBody = document.getElementById('completed-pd-list-body');
+    const emptyMsg = document.getElementById('completed-pd-list-empty-msg');
+    const countEl = document.getElementById('completed-pd-list-count');
+    if (!modal || !btnOpen || !listBody) return;
+
+    const renderList = () => {
+      const ids = Object.keys(state.completedPdHistory || {}).sort();
+      listBody.innerHTML = '';
+      emptyMsg.classList.toggle('hidden', ids.length > 0);
+      if (countEl) countEl.textContent = ids.length;
+
+      ids.forEach(pdId => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(22, 163, 74, 0.06); border: 1px solid var(--border-glass); border-left: 3px solid var(--accent-green, #16a34a); border-radius: 6px;';
+        row.innerHTML = `
+          <strong style="font-size: 12px; color: var(--text-primary);">${pdId}</strong>
+          <button type="button" class="btn-unmark-completed-pd" data-pd-id="${pdId}" title="ยกเลิกสถานะผลิตเสร็จแล้ว - PD นี้จะกลับมารับการวางแผนได้อีกครั้ง (ต้อง Import กลับเข้า backlog เอง)" style="font-size: 9.5px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--accent-red); background: rgba(239, 68, 68, 0.08); color: var(--accent-red); cursor: pointer; font-weight: bold;">↩️ ยกเลิกสถานะ</button>
+        `;
+        listBody.appendChild(row);
+      });
+
+      listBody.querySelectorAll('.btn-unmark-completed-pd').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const pdId = btn.getAttribute('data-pd-id');
+          if (confirm(`ยกเลิกสถานะ "ผลิตเสร็จแล้ว" ของ ${pdId} ใช่หรือไม่?`)) {
+            state.markPdCompletedHistory(pdId, false);
+            renderList();
+          }
+        });
+      });
+    };
+
+    btnOpen.addEventListener('click', () => {
+      renderList();
+      modal.classList.remove('hidden');
+    });
+
+    const close = () => modal.classList.add('hidden');
+    if (btnClose) btnClose.addEventListener('click', close);
+    if (btnCloseFooter) btnCloseFooter.addEventListener('click', close);
+  }
+
   initGlobalEvents() {
     // 1. Scheduling Model Selector
     const modelSelect = document.getElementById('model-select');
@@ -366,7 +545,7 @@ class App {
         state.notify();
       } else if (selectedModel === 'finite') {
         const nowWorkingHour = state.dateToWorkingHour(new Date());
-        state.scheduledJobs = Scheduler.applyForwardsFinite(state.scheduledJobs, state.activeScale, nowWorkingHour, state.workCenters);
+        state.scheduledJobs = Scheduler.applyForwardsFinite(state.scheduledJobs, state.activeScale, nowWorkingHour, state.workCenters, state.allowMachineOffload);
         state.notify();
       }
     });
@@ -376,6 +555,18 @@ class App {
     if (btnAIOptimize) {
       btnAIOptimize.addEventListener('click', () => {
         this.showBacklogSelectionModal(btnAIOptimize);
+      });
+    }
+
+    // 2a. Reschedule Button - re-run the scheduling pass over the whole board
+    // (e.g. after editing Priority, Work Center settings, or Lock/Unlock
+    // Project) without needing to change the time scale to trigger it.
+    const btnReschedule = document.getElementById('btn-reschedule');
+    if (btnReschedule) {
+      btnReschedule.addEventListener('click', () => {
+        if (confirm('คำนวณแผนงานทั้งหมดใหม่ตาม Scheduling Model ปัจจุบันใช่หรือไม่?\n(ตำแหน่งงานที่ยังไม่ Completed ทั้งกระดานอาจเปลี่ยนแปลง)')) {
+          state.recomputeSchedule();
+        }
       });
     }
 
@@ -414,10 +605,11 @@ class App {
       });
     }
 
-    // 4. Left/Right sidebar tabs - Backlog, Assembly, Resources - are exclusive:
-    // exactly one is active at a time (radio-button style, like the Work
-    // Center/PD/Assembly Set mode buttons), rather than each being an independent
-    // show/hide toggle. Picking one puts away whichever of the other two was showing.
+    // 4. Backlog/Assembly (left sidebar) vs Resources (right sidebar) toggles.
+    // Backlog and Assembly share the same left-panel space, so picking one puts
+    // away the other (radio-button style). Resources lives in the separate right
+    // sidebar and toggles independently - it can be open or closed at the same
+    // time as either Backlog or Assembly.
     const btnTabBacklog = document.getElementById('btn-toggle-backlog-header');
     const btnTabAssembly = document.getElementById('btn-toggle-assembly-list-header');
     const btnTabResources = document.getElementById('btn-toggle-resources-header');
@@ -488,69 +680,69 @@ class App {
       }
     };
 
-    let activeSidebarTab = 'backlog'; // 'backlog' | 'assembly' | 'resources' - mutually exclusive
+    let leftSidebarMode = 'backlog'; // 'backlog' | 'assembly' - exclusive with each other only
 
     const btnAddPd = document.getElementById('btn-add-pd');
     const btnImportExcel = document.getElementById('btn-import-excel');
 
-    const applySidebarTab = () => {
-      const mainLayout = document.querySelector('.main-layout');
-      setTabButtonActive(btnTabBacklog, activeSidebarTab === 'backlog');
-      setTabButtonActive(btnTabAssembly, activeSidebarTab === 'assembly');
-      setTabButtonActive(btnTabResources, activeSidebarTab === 'resources');
+    const applyLeftSidebarMode = () => {
+      setTabButtonActive(btnTabBacklog, leftSidebarMode === 'backlog');
+      setTabButtonActive(btnTabAssembly, leftSidebarMode === 'assembly');
 
-      if (activeSidebarTab === 'resources') {
-        // Resources takes over the whole board: put away the left Backlog/Assembly panel.
-        mainLayout.classList.add('hide-backlog');
-        mainLayout.classList.remove('hide-resources');
-      } else {
-        mainLayout.classList.remove('hide-backlog');
-        mainLayout.classList.add('hide-resources');
-
-        const showAssembly = activeSidebarTab === 'assembly';
-        if (backlogTabContent) backlogTabContent.style.display = showAssembly ? 'none' : 'flex';
-        if (assemblyListTabContent) {
-          assemblyListTabContent.style.display = showAssembly ? 'flex' : 'none';
-          assemblyListTabContent.classList.toggle('hidden', !showAssembly);
-        }
-        if (backlogHeaderTitle) {
-          backlogHeaderTitle.textContent = showAssembly ? 'ASSEMBLY SET LIST' : `PD BACKLOG (${state.workOrders.length})`;
-        }
-        // "Add Production Order" / "Import from Excel" only make sense for the
-        // Backlog itself, not while browsing the Assembly Set list.
-        if (btnAddPd) btnAddPd.style.display = showAssembly ? 'none' : '';
-        if (btnImportExcel) btnImportExcel.style.display = showAssembly ? 'none' : '';
-        if (showAssembly) renderAssemblySetList(assemblySearchInput ? assemblySearchInput.value : '');
+      const showAssembly = leftSidebarMode === 'assembly';
+      if (backlogTabContent) backlogTabContent.style.display = showAssembly ? 'none' : 'flex';
+      if (assemblyListTabContent) {
+        assemblyListTabContent.style.display = showAssembly ? 'flex' : 'none';
+        assemblyListTabContent.classList.toggle('hidden', !showAssembly);
       }
+      if (backlogHeaderTitle) {
+        backlogHeaderTitle.textContent = showAssembly ? 'ASSEMBLY SET LIST' : `PD BACKLOG (${state.workOrders.length})`;
+      }
+      // "Add Production Order" / "Import from Excel" only make sense for the
+      // Backlog itself, not while browsing the Assembly Set list.
+      if (btnAddPd) btnAddPd.style.display = showAssembly ? 'none' : '';
+      if (btnImportExcel) btnImportExcel.style.display = showAssembly ? 'none' : '';
+      if (showAssembly) renderAssemblySetList(assemblySearchInput ? assemblySearchInput.value : '');
 
       // Force redraw Gantt to resize cards to the newly available planning board width
       this.gantt.render();
     };
 
+    // Resources (right sidebar) is a plain independent show/hide toggle - it does
+    // not touch the left sidebar's Backlog/Assembly mode at all.
+    const toggleResourcesSidebar = () => {
+      const mainLayout = document.querySelector('.main-layout');
+      mainLayout.classList.toggle('hide-resources');
+      setTabButtonActive(btnTabResources, !mainLayout.classList.contains('hide-resources'));
+      this.gantt.render();
+    };
+
     if (btnTabBacklog) {
-      btnTabBacklog.addEventListener('click', () => { activeSidebarTab = 'backlog'; applySidebarTab(); });
+      btnTabBacklog.addEventListener('click', () => { leftSidebarMode = 'backlog'; applyLeftSidebarMode(); });
     }
     if (btnTabAssembly) {
-      btnTabAssembly.addEventListener('click', () => { activeSidebarTab = 'assembly'; applySidebarTab(); });
+      btnTabAssembly.addEventListener('click', () => { leftSidebarMode = 'assembly'; applyLeftSidebarMode(); });
     }
     if (btnTabResources) {
-      btnTabResources.addEventListener('click', () => { activeSidebarTab = 'resources'; applySidebarTab(); });
+      btnTabResources.addEventListener('click', toggleResourcesSidebar);
     }
 
-    // Legacy entry points (Options dropdown, the ◀ collapse button) just flip
-    // between the left panel and Resources, reusing the same exclusive state.
+    // Legacy entry points (Options dropdown, the ◀ collapse button)
     const btnToggleResources = document.getElementById('btn-toggle-resources');
     const btnHideSidebar = document.getElementById('btn-hide-sidebar');
     const btnToggleBacklog = document.getElementById('btn-toggle-backlog');
     const btnCollapseBacklogX = document.getElementById('btn-collapse-backlog-x');
 
-    const goToResourcesTab = () => { activeSidebarTab = 'resources'; applySidebarTab(); };
-    const goToBacklogTab = () => { activeSidebarTab = 'backlog'; applySidebarTab(); };
+    const toggleLeftSidebarCollapsed = () => {
+      const mainLayout = document.querySelector('.main-layout');
+      mainLayout.classList.toggle('hide-backlog');
+      this.gantt.render();
+    };
 
-    if (btnToggleResources) btnToggleResources.addEventListener('click', goToResourcesTab);
-    if (btnHideSidebar) btnHideSidebar.addEventListener('click', goToResourcesTab);
-    if (btnToggleBacklog) btnToggleBacklog.addEventListener('click', goToBacklogTab);
-    if (btnCollapseBacklogX) btnCollapseBacklogX.addEventListener('click', goToResourcesTab);
+    if (btnToggleResources) btnToggleResources.addEventListener('click', toggleResourcesSidebar);
+    if (btnHideSidebar) btnHideSidebar.addEventListener('click', toggleResourcesSidebar);
+    if (btnToggleBacklog) btnToggleBacklog.addEventListener('click', toggleLeftSidebarCollapsed);
+    if (btnCollapseBacklogX) btnCollapseBacklogX.addEventListener('click', toggleLeftSidebarCollapsed);
 
     if (assemblySearchInput) {
       assemblySearchInput.addEventListener('input', () => {
@@ -558,7 +750,19 @@ class App {
       });
     }
 
-    applySidebarTab();
+    const chkAssemblyFollowFilters = document.getElementById('chk-assembly-follow-filters');
+    if (chkAssemblyFollowFilters) {
+      chkAssemblyFollowFilters.checked = state.assemblyListFollowsFilters !== false;
+      chkAssemblyFollowFilters.addEventListener('change', () => {
+        state.assemblyListFollowsFilters = chkAssemblyFollowFilters.checked;
+        renderAssemblySetList(assemblySearchInput ? assemblySearchInput.value : '');
+      });
+    }
+
+    applyLeftSidebarMode();
+    // Sync the Resources tab button's highlight with the sidebar's actual initial
+    // visibility (it starts visible - no "hide-resources" class in the markup).
+    setTabButtonActive(btnTabResources, !document.querySelector('.main-layout')?.classList.contains('hide-resources'));
 
     // 5. Undo / Redo / Clear Board Buttons
     const btnUndo = document.getElementById('btn-undo');
@@ -1170,13 +1374,41 @@ class App {
         const nowWorkingHour = dateToWorkingHour(now);
         const scale = state.activeScale;
         const config = state.getScaleConfig(scale);
-        
+
         // Center the view by placing the current working hour at about 1/3 of the visible board width
         // so that the user sees some past hours and mostly future hours.
         const targetOffset = nowWorkingHour - config.totalHours / 3;
         const snap = config.snapHours;
         const snappedOffset = Math.round(targetOffset / snap) * snap;
         state.setTimelineOffset(snappedOffset);
+      });
+    }
+
+    const btnTimelineGotoDate = document.getElementById('btn-timeline-goto-date');
+    const timelineGotoDateInput = document.getElementById('timeline-goto-date-input');
+    if (btnTimelineGotoDate && timelineGotoDateInput) {
+      btnTimelineGotoDate.addEventListener('click', () => {
+        timelineGotoDateInput.style.display = timelineGotoDateInput.style.display === 'none' ? 'inline-block' : 'none';
+        if (timelineGotoDateInput.style.display !== 'none') {
+          timelineGotoDateInput.focus();
+          if (typeof timelineGotoDateInput.showPicker === 'function') {
+            try { timelineGotoDateInput.showPicker(); } catch (e) {}
+          }
+        }
+      });
+      timelineGotoDateInput.addEventListener('change', () => {
+        if (!timelineGotoDateInput.value) return;
+        const [year, month, day] = timelineGotoDateInput.value.split('-').map(Number);
+        const targetDate = new Date(year, month - 1, day, 8, 0, 0);
+        const targetWorkingHour = state.dateToWorkingHour(targetDate);
+        const scale = state.activeScale;
+        const config = state.getScaleConfig(scale);
+
+        const targetOffset = targetWorkingHour - config.totalHours / 3;
+        const snap = config.snapHours;
+        const snappedOffset = Math.round(targetOffset / snap) * snap;
+        state.setTimelineOffset(snappedOffset);
+        timelineGotoDateInput.style.display = 'none';
       });
     }
 
@@ -1380,71 +1612,141 @@ class App {
       });
     }
 
-    // 12. Toggle Task Dependency Lines (Show/Hide)
-    const btnToggleDep = document.getElementById('btn-toggle-dep-lines');
-    const depText = document.getElementById('dep-lines-text');
-
-    const updateDepButtonUI = () => {
-      const isShow = state.showDependencyLines !== false;
-      if (btnToggleDep) {
-        if (isShow) {
-          btnToggleDep.style.background = 'rgba(0, 242, 254, 0.15)';
-          btnToggleDep.style.borderColor = 'var(--accent-teal)';
-          btnToggleDep.style.color = 'var(--accent-teal)';
-          if (depText) depText.textContent = 'เส้นเชื่อมโยง: ON';
-        } else {
-          btnToggleDep.style.background = 'rgba(255, 255, 255, 0.05)';
-          btnToggleDep.style.borderColor = 'var(--border-glass)';
-          btnToggleDep.style.color = 'var(--text-secondary)';
-          if (depText) depText.textContent = 'เส้นเชื่อมโยง: OFF';
+    // 12. Display Options dropdown - dep lines / hide-unused-WC / priority
+    // badge / merge bars / machine offload, each bound to a checkbox styled
+    // as an iOS-style toggle switch instead of its own standalone button.
+    const btnDisplayOptions = document.getElementById('btn-display-options');
+    const displayOptionsPanel = document.getElementById('display-options-panel');
+    if (btnDisplayOptions && displayOptionsPanel) {
+      btnDisplayOptions.addEventListener('click', (e) => {
+        e.stopPropagation();
+        displayOptionsPanel.classList.toggle('hidden');
+      });
+      document.addEventListener('click', (e) => {
+        if (!displayOptionsPanel.classList.contains('hidden') &&
+            !displayOptionsPanel.contains(e.target) &&
+            e.target !== btnDisplayOptions) {
+          displayOptionsPanel.classList.add('hidden');
         }
-      }
-    };
-
-    if (btnToggleDep) {
-      btnToggleDep.addEventListener('click', () => {
-        state.toggleDependencyLines();
-        updateDepButtonUI();
       });
     }
 
-    // 12b. Toggle Hide/Unhide unused Work Centers (respects current Priority/Project filters)
-    const btnToggleHideUnusedWc = document.getElementById('btn-toggle-hide-unused-wc');
-    const hideUnusedWcText = document.getElementById('hide-unused-wc-text');
+    const toggleDepLines = document.getElementById('toggle-dep-lines');
+    if (toggleDepLines) {
+      toggleDepLines.checked = state.showDependencyLines !== false;
+      toggleDepLines.addEventListener('change', () => {
+        state.toggleDependencyLines();
+        toggleDepLines.checked = state.showDependencyLines !== false;
+      });
+    }
 
-    const updateHideUnusedWcButtonUI = () => {
-      const isHiding = !state.showAllWorkCenters;
-      if (btnToggleHideUnusedWc) {
-        if (isHiding) {
-          btnToggleHideUnusedWc.style.background = 'rgba(0, 242, 254, 0.15)';
-          btnToggleHideUnusedWc.style.borderColor = 'var(--accent-teal)';
-          btnToggleHideUnusedWc.style.color = 'var(--accent-teal)';
-          if (hideUnusedWcText) hideUnusedWcText.textContent = 'WC ว่าง: ซ่อน';
-        } else {
-          btnToggleHideUnusedWc.style.background = 'rgba(255, 255, 255, 0.05)';
-          btnToggleHideUnusedWc.style.borderColor = 'var(--border-glass)';
-          btnToggleHideUnusedWc.style.color = 'var(--text-secondary)';
-          if (hideUnusedWcText) hideUnusedWcText.textContent = 'WC ว่าง: แสดง';
-        }
-      }
+    const toggleHideUnusedWc = document.getElementById('toggle-hide-unused-wc');
+    const syncHideUnusedWcUI = () => {
+      if (toggleHideUnusedWc) toggleHideUnusedWc.checked = !state.showAllWorkCenters;
       const checkShowAllWc = document.getElementById('check-show-all-wc');
       if (checkShowAllWc) checkShowAllWc.checked = state.showAllWorkCenters;
     };
-
-    if (btnToggleHideUnusedWc) {
-      btnToggleHideUnusedWc.addEventListener('click', () => {
-        state.showAllWorkCenters = !state.showAllWorkCenters;
-        updateHideUnusedWcButtonUI();
+    if (toggleHideUnusedWc) {
+      syncHideUnusedWcUI();
+      toggleHideUnusedWc.addEventListener('change', () => {
+        state.showAllWorkCenters = !toggleHideUnusedWc.checked;
+        syncHideUnusedWcUI();
         state.notify();
       });
     }
 
+    const togglePriorityBadge = document.getElementById('toggle-priority-badge');
+    if (togglePriorityBadge) {
+      togglePriorityBadge.checked = state.showPriorityBadge !== false;
+      togglePriorityBadge.addEventListener('change', () => {
+        state.showPriorityBadge = togglePriorityBadge.checked;
+        state.notify();
+      });
+    }
+
+    const toggleMergeBars = document.getElementById('toggle-merge-bars');
+    if (toggleMergeBars) {
+      toggleMergeBars.checked = state.mergeBarsEnabled !== false;
+      toggleMergeBars.addEventListener('change', () => {
+        state.mergeBarsEnabled = toggleMergeBars.checked;
+        state.notify();
+      });
+    }
+
+    // Allows the scheduler to offload jobs onto a work center's configured
+    // alt machine(s) when the original machine is busy.
+    const toggleMachineOffload = document.getElementById('toggle-machine-offload');
+    if (toggleMachineOffload) {
+      toggleMachineOffload.checked = state.allowMachineOffload !== false;
+      toggleMachineOffload.addEventListener('change', () => {
+        state.allowMachineOffload = toggleMachineOffload.checked;
+      });
+    }
+
+    // 12d. Work Mode: "วางแผน" (planning, normal drag/edit) vs "Work Center Terminal"
+    // (clicking a task bar opens the MIE Shop Floor Kiosk Simulator - see kiosk.js)
+    const btnToggleWorkMode = document.getElementById('btn-toggle-work-mode');
+    const workModeText = document.getElementById('work-mode-text');
+
+    const updateWorkModeButtonUI = () => {
+      const isTerminal = state.workMode === 'terminal';
+      if (btnToggleWorkMode) {
+        if (isTerminal) {
+          btnToggleWorkMode.style.background = 'rgba(0, 242, 254, 0.15)';
+          btnToggleWorkMode.style.borderColor = 'var(--accent-teal)';
+          btnToggleWorkMode.style.color = 'var(--accent-teal)';
+          if (workModeText) workModeText.textContent = 'โหมด: Work Center Terminal';
+        } else {
+          btnToggleWorkMode.style.background = 'rgba(255, 255, 255, 0.05)';
+          btnToggleWorkMode.style.borderColor = 'var(--border-glass)';
+          btnToggleWorkMode.style.color = 'var(--text-secondary)';
+          if (workModeText) workModeText.textContent = 'โหมด: วางแผน';
+        }
+      }
+      // The kiosk drawer (and its toggle handle) only exists in Work Center
+      // Terminal mode - hidden entirely in วางแผน (planning) mode, not just closed.
+      const kioskDrawer = document.getElementById('kiosk-drawer');
+      if (kioskDrawer) kioskDrawer.style.display = isTerminal ? '' : 'none';
+      // Reclaim the bottom bar's reserved 40px too, so the board uses the full
+      // viewport height. Also kill the CSS height transition first - .main-layout
+      // is re-touched on every state.notify() (there are many during initial data
+      // load), and each touch was restarting the 0.3s transition before it ever
+      // finished, so it visually never left its starting height.
+      const mainLayout = document.querySelector('.main-layout');
+      if (mainLayout) {
+        mainLayout.style.transition = 'none';
+        if (isTerminal) {
+          mainLayout.style.removeProperty('height');
+        } else {
+          mainLayout.style.setProperty('height', 'calc(100vh - 70px)', 'important');
+        }
+      }
+    };
+
+    if (btnToggleWorkMode) {
+      btnToggleWorkMode.addEventListener('click', () => {
+        state.workMode = state.workMode === 'terminal' ? 'planning' : 'terminal';
+        updateWorkModeButtonUI();
+        state.notify();
+      });
+    }
+
+    // Keeps the Display Options toggles in sync when state changes from
+    // elsewhere (e.g. loading a plan from file).
+    const syncDisplayOptionsUI = () => {
+      if (toggleDepLines) toggleDepLines.checked = state.showDependencyLines !== false;
+      syncHideUnusedWcUI();
+      if (togglePriorityBadge) togglePriorityBadge.checked = state.showPriorityBadge !== false;
+      if (toggleMergeBars) toggleMergeBars.checked = state.mergeBarsEnabled !== false;
+      if (toggleMachineOffload) toggleMachineOffload.checked = state.allowMachineOffload !== false;
+    };
+
     state.subscribe(() => {
-      updateDepButtonUI();
-      updateHideUnusedWcButtonUI();
+      syncDisplayOptionsUI();
+      updateWorkModeButtonUI();
     });
-    updateDepButtonUI();
-    updateHideUnusedWcButtonUI();
+    syncDisplayOptionsUI();
+    updateWorkModeButtonUI();
 
     // Dispatch initial history state to align button disabled states
     state.dispatchHistoryEvent();
@@ -1636,12 +1938,13 @@ class App {
     // Run AI scheduler engine in background starting strictly from nowWorkingHour
     console.log('[AI Auto] now:', now, 'nowWorkingHour:', nowWorkingHour);
     const optimized = Scheduler.runAISimulation(
-      backlogToOptimize, 
-      state.scheduledJobs, 
-      state.activeScale, 
-      nowWorkingHour, 
-      state.workCenters, 
-      state.lockedProjects
+      backlogToOptimize,
+      state.scheduledJobs,
+      state.activeScale,
+      nowWorkingHour,
+      state.workCenters,
+      state.lockedProjects,
+      state.allowMachineOffload
     );
 
     // Check late jobs

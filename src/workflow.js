@@ -36,6 +36,12 @@ export class WorkflowController {
     this.btnCloseImportExcel = document.getElementById('btn-close-import-excel');
     this.btnCancelImportExcel = document.getElementById('btn-cancel-import-excel');
     this.btnConfirmImportExcel = document.getElementById('btn-confirm-import-excel');
+
+    // Import Excel Report Modal elements
+    this.importExcelReportModal = document.getElementById('import-excel-report-modal');
+    this.importExcelReportBody = document.getElementById('import-excel-report-body');
+    this.btnCloseImportExcelReport = document.getElementById('btn-close-import-excel-report');
+    this.btnCloseImportExcelReportFooter = document.getElementById('btn-close-import-excel-report-footer');
   }
 
   bindEvents() {
@@ -55,6 +61,10 @@ export class WorkflowController {
     if (this.btnCloseImportExcel) this.btnCloseImportExcel.addEventListener('click', () => this.closeImportExcelModal());
     if (this.btnCancelImportExcel) this.btnCancelImportExcel.addEventListener('click', () => this.closeImportExcelModal());
     if (this.btnConfirmImportExcel) this.btnConfirmImportExcel.addEventListener('click', () => this.importExcelPD());
+
+    const closeImportReport = () => this.importExcelReportModal?.classList.add('hidden');
+    if (this.btnCloseImportExcelReport) this.btnCloseImportExcelReport.addEventListener('click', closeImportReport);
+    if (this.btnCloseImportExcelReportFooter) this.btnCloseImportExcelReportFooter.addEventListener('click', closeImportReport);
 
     const btnCustomChoose = document.getElementById('btn-custom-choose-file');
     const fileInput = document.getElementById('new-pd-excel-file');
@@ -1030,6 +1040,59 @@ export class WorkflowController {
     return 'DEA012'; // default fallback
   }
 
+  showImportExcelReport({ filename, importedCount, skippedCompletedIds, inferredCompletedIds, stepsCompletedReport }) {
+    if (!this.importExcelReportModal || !this.importExcelReportBody) return;
+
+    const section = (title, color, bodyHtml) => `
+      <div>
+        <div style="font-size: 12px; font-weight: bold; color: ${color}; margin-bottom: 6px;">${title}</div>
+        ${bodyHtml}
+      </div>
+    `;
+    const pdChips = (ids) => `
+      <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+        ${ids.map(id => `<span style="font-size: 11px; font-family: monospace; padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-primary);">${id}</span>`).join('')}
+      </div>
+    `;
+    const emptyNote = '<div style="font-size: 11px; color: var(--text-secondary);">ไม่มี</div>';
+
+    let html = `<div style="font-size: 11px; color: var(--text-secondary);">ไฟล์: <strong style="color: var(--text-primary);">${filename}</strong> · นำเข้าสำเร็จ <strong style="color: var(--accent-teal);">${importedCount}</strong> Production Orders</div>`;
+
+    html += section(
+      `1) ข้ามการนำเข้า - PD ที่บันทึกว่าผลิตเสร็จแล้ว (${skippedCompletedIds.length})`,
+      'var(--accent-green, #16a34a)',
+      skippedCompletedIds.length > 0 ? pdChips(skippedCompletedIds) : emptyNote
+    );
+
+    html += section(
+      `2) หายไปจากไฟล์ทั้งหมด - สันนิษฐานว่าผลิตเสร็จแล้ว (${inferredCompletedIds.length})`,
+      'var(--accent-orange)',
+      inferredCompletedIds.length > 0 ? pdChips(inferredCompletedIds) : emptyNote
+    );
+
+    let stepsHtml = emptyNote;
+    if (stepsCompletedReport.length > 0) {
+      stepsHtml = `
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          ${stepsCompletedReport.map(r => `
+            <div style="font-size: 11px; padding: 6px 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 6px;">
+              <strong style="color: var(--accent-cyan); font-family: monospace;">${r.pdId}</strong>
+              <span style="color: var(--text-secondary);"> - ขั้นตอนที่หายไป: ${r.steps.join(', ')}</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+    html += section(
+      `3) Operation ที่หายไปจาก PD เดิม - สันนิษฐานว่าเสร็จแล้ว (${stepsCompletedReport.length} PD)`,
+      'var(--accent-cyan)',
+      stepsHtml
+    );
+
+    this.importExcelReportBody.innerHTML = html;
+    this.importExcelReportModal.classList.remove('hidden');
+  }
+
   importExcelPD() {
     const fileInput = document.getElementById('new-pd-excel-file');
     const rangePD = document.getElementById('new-pd-excel-range')?.value.trim() || '';
@@ -1284,23 +1347,81 @@ export class WorkflowController {
           const machineCode = this.matchWorkCenter(wcDesc, wcCode);
           const cycleMinutes = parseFloat(rawRow[col.cycleTime]) || 1.0;
           const setupMinutes = parseFloat(rawRow[col.setupTime]) || 0.0;
-          
+
+          // Skip a step someone manually removed from this PD's Routing Steps table
+          // (edit modal) - it must not come back just because the Excel file still
+          // has it. Identified by (machine, name) since step numbers get renumbered.
+          const stepNameForCheck = wcDesc || this.state.workCenters[machineCode]?.name || machineCode;
+          if (this.state.isStepIdentityRemoved(pdId, machineCode, stepNameForCheck)) continue;
+
           groups[pdId].steps.push({
             stepNum: stepNumRaw,
-            name: wcDesc || this.state.workCenters[machineCode]?.name || machineCode,
+            name: stepNameForCheck,
             machine: machineCode,
             cycleMinutes: cycleMinutes,
             setupMinutes: setupMinutes
           });
         }
         
-        // Filter out work orders with empty steps
-        const importedWOs = Object.values(groups).filter(wo => wo.steps.length > 0);
-        if (importedWOs.length === 0) {
+        // Snapshot of the backlog as it stood before this import, used below to
+        // infer which PDs / steps have quietly finished production since the
+        // last import (conditions 2 and 3).
+        const workOrdersBeforeImport = this.state.workOrders;
+
+        // All PDs that matched this import's filters (priority/project/range/
+        // unclosed/incomplete) and have at least one step - the "new" data set.
+        const groupsAll = Object.values(groups).filter(wo => wo.steps.length > 0);
+        const groupsAllMap = new Map(groupsAll.map(wo => [wo.id, wo]));
+
+        // Condition 1: PD already marked "ผลิตจริงเสร็จแล้ว" - never bring it back.
+        const skippedCompletedIds = groupsAll
+          .filter(wo => this.state.isPdInCompletedHistory(wo.id))
+          .map(wo => wo.id);
+
+        const importedWOs = groupsAll.filter(wo => !this.state.isPdInCompletedHistory(wo.id));
+        if (importedWOs.length === 0 && skippedCompletedIds.length === 0) {
           alert('ไม่พบ Production Order หรือขั้นตอนการผลิตในเงื่อนไขและช่วงที่กำหนด');
           return;
         }
-        
+
+        // Condition 2: a PD that existed in the backlog before this import, isn't
+        // already marked completed, and doesn't appear anywhere in this import's
+        // data at all - infer it finished production and never bring it back.
+        const inferredCompletedIds = workOrdersBeforeImport
+          .filter(wo => !groupsAllMap.has(wo.id) && !this.state.isPdInCompletedHistory(wo.id))
+          .map(wo => wo.id);
+
+        // Condition 3: a PD survives the import, but one or more of its previous
+        // operations (identified by machine + operation name, since step numbers
+        // get renumbered) are missing from the newly imported routing - infer
+        // those specific steps finished production.
+        const stepsCompletedReport = [];
+        workOrdersBeforeImport.forEach(oldWO => {
+          if (this.state.isPdInCompletedHistory(oldWO.id)) return;
+          const newWO = groupsAllMap.get(oldWO.id);
+          if (!newWO) return; // handled by condition 2
+
+          const newStepKeys = new Set(
+            newWO.steps.map(s => this.state.getStepIdentityKey(oldWO.id, s.machine, s.name))
+          );
+          const missingSteps = (oldWO.steps || []).filter(s =>
+            !newStepKeys.has(this.state.getStepIdentityKey(oldWO.id, s.machine, s.name || s.stepName))
+          );
+          if (missingSteps.length > 0) {
+            stepsCompletedReport.push({ pdId: oldWO.id, steps: missingSteps.map(s => s.name || s.stepName || s.machine) });
+            missingSteps.forEach(s => {
+              const key = this.state.getStepIdentityKey(oldWO.id, s.machine, s.name || s.stepName);
+              this.state.removedStepHistory[key] = true;
+            });
+          }
+        });
+
+        // Apply condition 2's inference before merging, so those PDs don't
+        // linger in the backlog just because they weren't part of this import.
+        inferredCompletedIds.forEach(id => {
+          this.state.completedPdHistory[id] = true;
+        });
+
         // For each work order, sort steps by stepNum and assign step IDs
         importedWOs.forEach(wo => {
           wo.steps.sort((a, b) => a.stepNum - b.stepNum);
@@ -1350,17 +1471,32 @@ export class WorkflowController {
             }
           });
         });
-        
+
+        // Apply conditions 2 & 3's inferences: drop the now-completed PDs and the
+        // now-completed individual steps out of both the backlog and the board.
+        if (inferredCompletedIds.length > 0) {
+          this.state.workOrders = this.state.workOrders.filter(wo => !this.state.isPdInCompletedHistory(wo.id));
+        }
+        this.state.scheduledJobs = this.state.scheduledJobs.filter(j =>
+          !this.state.isPdInCompletedHistory(j.woId) && !this.state.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name)
+        );
+
         // Automatically link assembly relationships
         this.state.autoLinkAssemblies();
-        
+
         // Save to file and refresh
         this.state.saveWorkOrdersToFile();
         this.state.savePlanToFile();
         this.state.notify();
-        
-        alert(`ดึงข้อมูลสำเร็จ: นำเข้า ${importedWOs.length} Production Orders จากไฟล์ ${filename}!`);
+
         this.closeImportExcelModal();
+        this.showImportExcelReport({
+          filename,
+          importedCount: importedWOs.length,
+          skippedCompletedIds,
+          inferredCompletedIds,
+          stepsCompletedReport
+        });
       } catch (err) {
         console.error(err);
         alert('เกิดข้อผิดพลาดในการนำเข้าไฟล์ Excel: ' + err.message);
