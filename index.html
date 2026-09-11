@@ -59,7 +59,7 @@
                 </label>
                 <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
                   <span title="แสดงเลข Priority มุมขวาบนของ Task Bar">Priority</span>
-                  <span class="ios-toggle"><input type="checkbox" id="toggle-priority-badge" checked><span class="ios-toggle-slider"></span></span>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-priority-badge"><span class="ios-toggle-slider"></span></span>
                 </label>
                 <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
                   <span title="รวม Task Bar ที่ทับซ้อนกัน (Priority เดียวกัน) เป็นแท่งเดียวตอน Zoom Out">Merge Bar</span>
@@ -1033,6 +1033,12 @@
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            <!-- Memo -->
+            <div class="form-group" style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary);">Memo (หมายเหตุ)</label>
+              <input type="text" id="edit-pd-memo" placeholder="หมายเหตุเพิ่มเติม..." style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 6px 8px; border-radius: 6px; font-size: 11px; outline: none;">
             </div>
 
           </div>

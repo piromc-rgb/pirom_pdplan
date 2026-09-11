@@ -994,18 +994,10 @@ export class WorkflowController {
   matchWorkCenter(desc, code = '') {
     const dLower = String(desc || '').toLowerCase().trim();
     const cLower = String(code || '').toLowerCase().trim();
-    
-    // 1. Try matching description against Work Center display names (e.g. "เลื่อย", "CNC VF4", "TAP", "ปรับแต่ง", "ทำสี")
-    if (dLower) {
-      for (let wc of this.state.workCenterOrder) {
-        const name = (this.state.workCenters[wc]?.name || '').toLowerCase();
-        if (name && (dLower === name || dLower.includes(name) || name.includes(dLower))) {
-          return wc;
-        }
-      }
-    }
 
-    // 2. Try exact match with Work Center codes (e.g. "DEA011", "DEA024", "DEA052", "DEA062", "DEB021")
+    // 1. Code is the authoritative identifier - try it first, before description text
+    // (description text from Excel can be misspelled/abbreviated differently than
+    // the configured workCenter name, e.g. missing a word, causing false fallbacks).
     if (cLower && this.state.workCenters[code]) {
       return code;
     }
@@ -1016,6 +1008,18 @@ export class WorkflowController {
         }
       }
     }
+
+    // 2. Description didn't come with a valid code - try matching it against
+    // Work Center display names (e.g. "เลื่อย", "CNC VF4", "TAP", "ปรับแต่ง", "ทำสี")
+    if (dLower) {
+      for (let wc of this.state.workCenterOrder) {
+        const name = (this.state.workCenters[wc]?.name || '').toLowerCase();
+        if (name && (dLower === name || dLower.includes(name) || name.includes(dLower))) {
+          return wc;
+        }
+      }
+    }
+
     if (dLower && this.state.workCenters[desc]) {
       return desc;
     }
@@ -1036,7 +1040,7 @@ export class WorkflowController {
         }
       }
     }
-    
+
     return 'DEA012'; // default fallback
   }
 
@@ -1210,7 +1214,7 @@ export class WorkflowController {
           dwg: findColIdx(['item_5', 'drawing', 'dwg', 'dwg_no', 'dwg no', 'part number'], 10),
           partName: findColIdx(['description', 'part name', 'part_name', 'part description', 'partname'], 11),
           step: findColIdx(['operation', 'step', 'oper', 'op'], 12),
-          wcCode: findColIdx(['item_4', 'machine code', 'wc code', 'work center code', 'work center', 'wc'], 13),
+          wcCode: findColIdx(['work center code', 'wc code', 'machine code', 'work center', 'wc', 'item_4'], 13),
           wcDesc: findColIdx(['r.ref.oper.desc', 'machine description', 'machine name', 'department'], 14),
           opStatus: findColIdx(['operation status', 'op status'], 15),
           qty: findColIdx(['quantity ordered', 'qty', 'quantity', 'orderqty'], 16),

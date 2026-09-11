@@ -3363,6 +3363,7 @@ export class GanttController {
     const inputPartName = document.getElementById('edit-pd-partname');
     const inputQty = document.getElementById('edit-pd-qty');
     const inputPriority = document.getElementById('edit-pd-priority');
+    const inputMemo = document.getElementById('edit-pd-memo');
     const inputTargetDate = document.getElementById('edit-pd-targetdate');
     const tbody = document.getElementById('pd-plan-table-body');
     const btnAddStep = document.getElementById('btn-add-step-to-edit-pd');
@@ -3389,6 +3390,7 @@ export class GanttController {
     const partName = backlogWO?.partName || firstSource?.partName || '';
     const qty = backlogWO?.qty || firstSource?.qty || 100;
     const priority = backlogWO?.priority || firstSource?.priority || 'Normal';
+    const memo = backlogWO?.memo || firstSource?.memo || '';
     const dueHour = backlogWO?.dueHour !== undefined ? backlogWO.dueHour : (firstSource?.dueHour !== undefined ? firstSource.dueHour : null);
 
     // 2. Populate form fields
@@ -3400,6 +3402,7 @@ export class GanttController {
     if (inputPartName) inputPartName.value = partName;
     if (inputQty) inputQty.value = qty;
     if (inputPriority) inputPriority.value = priority;
+    if (inputMemo) inputMemo.value = memo;
     if (inputCompletedHistory) inputCompletedHistory.checked = this.state.isPdInCompletedHistory(woId);
 
     if (inputTargetDate) {
@@ -3646,7 +3649,8 @@ export class GanttController {
         const partNameVal = inputPartName.value.trim() || '';
         const qtyVal = parseInt(cleanInputQty.value) || 1;
         const priorityVal = inputPriority.value.trim() || 'Normal';
-        
+        const memoVal = inputMemo ? inputMemo.value.trim() : '';
+
         let dueHourVal = dueHour;
         if (inputTargetDate && inputTargetDate.value) {
           const [y, m, d] = inputTargetDate.value.split('-').map(Number);
@@ -3688,6 +3692,7 @@ export class GanttController {
           partName: partNameVal,
           qty: qtyVal,
           priority: priorityVal,
+          memo: memoVal,
           dueHour: dueHourVal,
           steps: collectedSteps
         });

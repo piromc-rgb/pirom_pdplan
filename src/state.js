@@ -56,7 +56,7 @@ class CentralState {
 
     // Whether the small Priority number badge in the top-right corner of each
     // task bar is shown.
-    this.showPriorityBadge = true;
+    this.showPriorityBadge = false;
 
     // Whether the scheduler is allowed to offload a job onto a work center's
     // configured alt machine(s) to keep it running when the original machine
@@ -1594,6 +1594,7 @@ class CentralState {
     const partName = data.partName !== undefined ? data.partName : '';
     const qty = parseInt(data.qty) || 1;
     const priority = data.priority !== undefined ? data.priority : 'Normal';
+    const memo = data.memo !== undefined ? data.memo : '';
     const dueHour = data.dueHour !== undefined ? data.dueHour : null;
     const steps = Array.isArray(data.steps) ? data.steps : [];
 
@@ -1624,6 +1625,7 @@ class CentralState {
         existingJob.partName = partName;
         existingJob.qty = qty;
         existingJob.priority = priority;
+        existingJob.memo = memo;
         existingJob.dueHour = dueHour;
         existingJob.stepNum = sNum;
         existingJob.stepName = name;
@@ -1681,6 +1683,7 @@ class CentralState {
         backlogWO.partName = partName;
         backlogWO.qty = qty;
         backlogWO.priority = priority;
+        backlogWO.memo = memo;
         backlogWO.dueHour = dueHour;
         backlogWO.steps = newBacklogSteps;
       } else {
@@ -1692,6 +1695,7 @@ class CentralState {
           partName,
           qty,
           priority,
+          memo,
           status: 'Unscheduled',
           delayReason: '',
           dueHour,
