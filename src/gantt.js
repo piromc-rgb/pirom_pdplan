@@ -3355,6 +3355,7 @@ export class GanttController {
 
     const titleEl = document.getElementById('pd-plan-title');
     const statusBadgeEl = document.getElementById('pd-plan-status-badge');
+    const favoriteBtnEl = document.getElementById('btn-pd-plan-favorite');
     const stepCountEl = document.getElementById('pd-plan-step-count');
     const inputPdId = document.getElementById('edit-pd-id');
     const inputProject = document.getElementById('edit-pd-project');
@@ -3395,6 +3396,19 @@ export class GanttController {
 
     // 2. Populate form fields
     if (titleEl) titleEl.textContent = `Production Order: ${woId}`;
+    if (favoriteBtnEl) {
+      const renderFavoriteIcon = () => {
+        const isFav = this.state.isPdFavorite(woId);
+        favoriteBtnEl.innerHTML = isFav ? '&#9733;' : '&#9734;';
+        favoriteBtnEl.title = isFav ? 'เอาออกจากรายการโปรด' : 'เพิ่มเป็นรายการโปรด';
+        favoriteBtnEl.style.color = isFav ? '#ffd54a' : 'var(--text-secondary)';
+      };
+      renderFavoriteIcon();
+      favoriteBtnEl.onclick = () => {
+        this.state.togglePdFavorite(woId);
+        renderFavoriteIcon();
+      };
+    }
     if (inputPdId) inputPdId.value = woId;
     if (inputProject) inputProject.value = project;
     if (inputCustomer) inputCustomer.value = customer;

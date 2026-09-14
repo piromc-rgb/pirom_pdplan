@@ -42,6 +42,9 @@ class CentralState {
     // source Excel file or an old backlog snapshot.
     this.completedPdHistory = {};
 
+    // PD IDs marked as favorite (starred) by the user
+    this.favoritePDs = {};
+
     // Step IDs (e.g. "PD2605309-30") manually removed from a PD's Routing Steps
     // table in the edit modal - same idea as completedPdHistory but at the single
     // step level. Excluded from Excel imports and filtered back out on every app
@@ -2040,6 +2043,21 @@ class CentralState {
     return Boolean(pdId && this.completedPdHistory[pdId]);
   }
 
+  isPdFavorite(pdId) {
+    return Boolean(pdId && this.favoritePDs[pdId]);
+  }
+
+  togglePdFavorite(pdId) {
+    if (!pdId) return;
+    if (this.favoritePDs[pdId]) {
+      delete this.favoritePDs[pdId];
+    } else {
+      this.favoritePDs[pdId] = true;
+    }
+    this.savePlanToFile();
+    this.notify();
+  }
+
   // Step IDs are NOT stable across reloads - renumberWorkOrderSteps() re-sequences
   // stepNum (and the "-NN" suffix in the id) to close gaps every time it runs, so a
   // step that used to be "-30" can become "-20" once an earlier step is removed.
@@ -2075,6 +2093,22 @@ class CentralState {
     this.saveStateToHistory();
     this.completedPdHistory[pdId] = true;
     this.scheduledJobs = this.scheduledJobs.filter(j => j.woId !== pdId);
+    this.workOrders = this.workOrders.filter(wo => wo.id !== pdId);
+    this.savePlanToFile();
+    this.notify();
+    this.dispatchHistoryEvent();
+  }
+
+  // Same as markPdCompletedAndRemove() but for many PDs at once (e.g. every PD
+  // that falls inside a checked PD Range Filter entry) - one history snapshot
+  // and one save/notify instead of one per PD.
+  markPdsCompletedAndRemoveBulk(pdIds) {
+    if (!pdIds || pdIds.length === 0) return;
+    this.saveStateToHistory();
+    const idSet = new Set(pdIds);
+    idSet.forEach(id => { this.completedPdHistory[id] = true; });
+    this.scheduledJobs = this.scheduledJobs.filter(j => !idSet.has(j.woId));
+    this.workOrders = this.workOrders.filter(wo => !idSet.has(wo.id));
     this.savePlanToFile();
     this.notify();
     this.dispatchHistoryEvent();
@@ -2150,6 +2184,7 @@ class CentralState {
           if (data.timelineOffset !== undefined) this.timelineOffset = data.timelineOffset;
           if (data.activeScale) this.activeScale = data.activeScale;
           if (data.completedPdHistory) this.completedPdHistory = data.completedPdHistory;
+          if (data.favoritePDs) this.favoritePDs = data.favoritePDs;
           if (data.removedStepHistory) this.removedStepHistory = data.removedStepHistory;
           // A PD marked "ผลิตจริงเสร็จแล้ว" never comes back onto the board on load,
           // whether it's sitting in this file's scheduledJobs or in the backlog
@@ -2203,6 +2238,7 @@ class CentralState {
       timelineOffset: this.timelineOffset,
       activeScale: this.activeScale,
       completedPdHistory: this.completedPdHistory || {},
+      favoritePDs: this.favoritePDs || {},
       removedStepHistory: this.removedStepHistory || {},
       formattedRows
     };

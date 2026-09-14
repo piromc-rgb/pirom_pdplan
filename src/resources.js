@@ -126,7 +126,7 @@ export class ResourcesController {
         // Prevent duplicate exact same ranges
         const exists = this.state.activePdRanges.some(r => r.start === start && r.end === end);
         if (!exists) {
-          this.state.activePdRanges.push({ start, end, enabled: true });
+          this.state.activePdRanges.push({ start, end, enabled: true, favorite: false });
           inputPdRange.value = '';
           this.state.notify();
         }
@@ -147,6 +147,14 @@ export class ResourcesController {
     document.getElementById('btn-pdrange-clear-all')?.addEventListener('click', () => {
       this.state.activePdRanges = [];
       this.state.notify();
+    });
+
+    document.getElementById('btn-pdrange-mark-completed')?.addEventListener('click', () => {
+      const pdIds = this.getPdIdsInEnabledRanges();
+      if (pdIds.length === 0) return;
+      const confirmed = window.confirm(`ยืนยันผลิตเสร็จแล้ว ${pdIds.length} PD?\nรายการจะถูกลบออกจากบอร์ดและบันทึกเป็น PD ที่ผลิตเสร็จแล้ว`);
+      if (!confirmed) return;
+      this.state.markPdsCompletedAndRemoveBulk(pdIds);
     });
 
     // Priority filter Select All / Deselect All
@@ -949,6 +957,7 @@ export class ResourcesController {
     } else if (this.activeRightTab === 'project') {
       // Handled by renderProjectFilters() above
     } else if (this.activeRightTab === 'pdrange') {
+      this.renderFavoritePDs();
       this.renderPdRangeFilters();
     } else if (this.activeRightTab === 'customer') {
       // Handled by renderCustomerFilters() above
@@ -1328,24 +1337,128 @@ export class ResourcesController {
     }
   }
 
+  renderFavoritePDs() {
+    const container = document.getElementById('pdrange-favorites-container');
+    if (!container) return;
+
+    const pdIds = Object.keys(this.state.favoritePDs || {}).sort();
+
+    if (pdIds.length === 0) {
+      container.style.display = 'none';
+      container.innerHTML = '';
+      return;
+    }
+
+    container.style.display = 'flex';
+    container.innerHTML = '';
+
+    const heading = document.createElement('div');
+    heading.textContent = `PD รายการโปรด (${pdIds.length})`;
+    heading.style = 'font-size: 10px; font-weight: bold; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;';
+    container.appendChild(heading);
+
+    const list = document.createElement('div');
+    list.style = 'display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--bg-darkest); border-radius: 8px; border: 1px solid var(--border-glass); max-height: 160px; overflow-y: auto;';
+
+    pdIds.forEach(pdId => {
+      const row = document.createElement('div');
+      row.style = 'display: flex; align-items: center; justify-content: space-between; padding: 4px 6px; background: rgba(255, 213, 74, 0.08); border-radius: 4px; border: 1px solid rgba(255, 213, 74, 0.3);';
+
+      const leftDiv = document.createElement('div');
+      leftDiv.style = 'display: flex; align-items: center; gap: 8px; cursor: pointer;';
+      leftDiv.title = 'เปิดรายละเอียด PD นี้';
+      leftDiv.addEventListener('click', () => {
+        window.dispatchEvent(new CustomEvent('open-pd-modal', { detail: { woId: pdId } }));
+      });
+
+      const star = document.createElement('span');
+      star.innerHTML = '&#9733;';
+      star.style = 'font-size: 12px; color: #ffd54a;';
+
+      const label = document.createElement('span');
+      label.textContent = pdId;
+      label.style = 'font-size: 11px; color: var(--text-primary); font-family: monospace;';
+
+      leftDiv.appendChild(star);
+      leftDiv.appendChild(label);
+
+      const btnRemove = document.createElement('button');
+      btnRemove.innerHTML = '&times;';
+      btnRemove.title = 'เอาออกจากรายการโปรด';
+      btnRemove.style = 'background: none; border: none; color: var(--accent-red); cursor: pointer; font-size: 14px; font-weight: bold; padding: 0 4px;';
+      btnRemove.addEventListener('click', () => {
+        this.state.togglePdFavorite(pdId);
+      });
+
+      row.appendChild(leftDiv);
+      row.appendChild(btnRemove);
+      list.appendChild(row);
+    });
+
+    container.appendChild(list);
+  }
+
+  // PD ids (job.woId / workOrder.id) that fall inside any currently-checked
+  // (enabled) PD Range Filter entry - same range-matching rule as
+  // isJobPdRangeVisible() in gantt.js, applied directly to PD number strings.
+  getPdIdsInEnabledRanges() {
+    const enabledRanges = (this.state.activePdRanges || []).filter(r => r.enabled);
+    if (enabledRanges.length === 0) return [];
+
+    const matches = (pd) => enabledRanges.some(range => {
+      if (range.start && !range.end) return pd === range.start;
+      if (range.start && range.end) return pd >= range.start && pd <= range.end;
+      return false;
+    });
+
+    const pdIds = new Set();
+    (this.state.scheduledJobs || []).forEach(job => {
+      const pd = String(job.woId || '').trim();
+      if (pd && matches(pd)) pdIds.add(pd);
+    });
+    (this.state.workOrders || []).forEach(wo => {
+      const pd = String(wo.id || '').trim();
+      if (pd && matches(pd)) pdIds.add(pd);
+    });
+
+    return Array.from(pdIds);
+  }
+
+  updatePdRangeMarkCompletedButton() {
+    const btn = document.getElementById('btn-pdrange-mark-completed');
+    if (!btn) return;
+    const pdIds = this.getPdIdsInEnabledRanges();
+    if (pdIds.length === 0) {
+      btn.classList.add('hidden');
+      return;
+    }
+    btn.classList.remove('hidden');
+    btn.textContent = `✓ ผลิตเสร็จแล้ว (${pdIds.length} PD)`;
+  }
+
   renderPdRangeFilters() {
     const container = document.getElementById('pdrange-filters-container');
     if (!container) return;
-    
+
     container.innerHTML = '';
-    
+    this.updatePdRangeMarkCompletedButton();
+
     if (this.state.activePdRanges.length === 0) {
       container.innerHTML = '<div style="font-size: 10px; color: var(--text-secondary); text-align: center; padding: 10px;">ไม่มีรายการช่วง PD ที่กำหนด<br>แสดงผลทั้งหมด</div>';
       return;
     }
     
-    this.state.activePdRanges.forEach((range, idx) => {
+    const ordered = this.state.activePdRanges
+      .map((range, idx) => ({ range, idx }))
+      .sort((a, b) => (b.range.favorite ? 1 : 0) - (a.range.favorite ? 1 : 0));
+
+    ordered.forEach(({ range, idx }) => {
       const row = document.createElement('div');
       row.style = 'display: flex; align-items: center; justify-content: space-between; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; border: 1px solid var(--border-glass);';
-      
+
       const leftDiv = document.createElement('div');
       leftDiv.style = 'display: flex; align-items: center; gap: 8px;';
-      
+
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.checked = range.enabled;
@@ -1354,15 +1467,25 @@ export class ResourcesController {
         range.enabled = e.target.checked;
         this.state.notify();
       });
-      
+
+      const btnStar = document.createElement('button');
+      btnStar.innerHTML = range.favorite ? '&#9733;' : '&#9734;';
+      btnStar.title = range.favorite ? 'เอาออกจากรายการโปรด' : 'เพิ่มเป็นรายการโปรด';
+      btnStar.style = `background: none; border: none; cursor: pointer; font-size: 13px; padding: 0 2px; color: ${range.favorite ? '#ffd54a' : 'var(--text-secondary)'};`;
+      btnStar.addEventListener('click', () => {
+        range.favorite = !range.favorite;
+        this.state.notify();
+      });
+
       const label = document.createElement('label');
       label.textContent = range.end ? `${range.start} - ${range.end}` : range.start;
       label.style = 'font-size: 11px; cursor: pointer; color: var(--text-primary); font-family: monospace;';
       label.addEventListener('click', () => { cb.click(); });
-      
+
       leftDiv.appendChild(cb);
+      leftDiv.appendChild(btnStar);
       leftDiv.appendChild(label);
-      
+
       const btnDel = document.createElement('button');
       btnDel.innerHTML = '&times;';
       btnDel.style = 'background: none; border: none; color: var(--accent-red); cursor: pointer; font-size: 14px; font-weight: bold; padding: 0 4px;';
@@ -1371,7 +1494,7 @@ export class ResourcesController {
         this.state.activePdRanges.splice(idx, 1);
         this.state.notify();
       });
-      
+
       row.appendChild(leftDiv);
       row.appendChild(btnDel);
       container.appendChild(row);
