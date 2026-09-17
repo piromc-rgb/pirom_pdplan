@@ -1854,19 +1854,15 @@ class CentralState {
       }
     });
 
-    // Assign new stepNums and update IDs on the kept steps
+    // Only close numbering gaps (10,20,30 -> 10,20 after a middle step is gone)
+    // when a real duplicate-name merge happened above. A step removed on its own
+    // (e.g. marked "ผลิตจริงเสร็จแล้ว" and deleted from Routing Steps) is NOT a
+    // duplicate - the remaining steps should keep their original step numbers so
+    // they still match the source ERP numbering (step 20 stays 20 even once step
+    // 10 is gone), instead of sliding down to fill the gap.
+    const shouldCloseGaps = stepsToRemove.length > 0;
+
     keptSteps.forEach((item, index) => {
-      const newStepNum = (index + 1) * 10;
-      item.ref.stepNum = newStepNum;
-
-      // Extract trailing letter suffix (like 'A' or 'B') if present
-      const suffixMatch = item.id.match(/-[0-9]+(.*)$/);
-      const suffix = suffixMatch ? suffixMatch[1] : '';
-      const newId = `${woId}-${newStepNum}${suffix}`;
-
-      // Update ID
-      item.ref.id = newId;
-
       // Clean name of any sequence number suffix
       let currentName = item.type === 'scheduled' ? item.ref.stepName : item.ref.name;
       let cleanName = (currentName || 'Operation').trim();
@@ -1877,6 +1873,16 @@ class CentralState {
       } else {
         item.ref.name = cleanName;
       }
+
+      if (!shouldCloseGaps) return;
+
+      const newStepNum = (index + 1) * 10;
+      item.ref.stepNum = newStepNum;
+
+      // Extract trailing letter suffix (like 'A' or 'B') if present
+      const suffixMatch = item.id.match(/-[0-9]+(.*)$/);
+      const suffix = suffixMatch ? suffixMatch[1] : '';
+      item.ref.id = `${woId}-${newStepNum}${suffix}`;
     });
 
     if (parentWO) {

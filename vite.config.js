@@ -138,6 +138,28 @@ export default defineConfig({
               return;
             }
           }
+
+          if (req.url === '/api/qc-log' || req.url?.startsWith('/api/qc-log?')) {
+            try {
+              const fetchUrl = 'https://docs.google.com/spreadsheets/d/1w8B0DyG7PEy_YLHM5HCI_eVU_nt4HvA8xHWShuLRL_8/export?format=csv&gid=1814251242';
+              const fetchRes = await fetch(fetchUrl);
+              if (!fetchRes.ok) {
+                res.statusCode = fetchRes.status;
+                res.end(JSON.stringify({ error: `Google Sheets returned status ${fetchRes.status}` }));
+                return;
+              }
+              const csvText = await fetchRes.text();
+              res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+              res.statusCode = 200;
+              res.end(csvText);
+              return;
+            } catch (err) {
+              console.error('Error fetching QC Log from Google Sheets:', err);
+              res.statusCode = 500;
+              res.end(JSON.stringify({ error: err.message }));
+              return;
+            }
+          }
           next();
         });
       }

@@ -2,12 +2,19 @@ import './style.css';
 import { state } from './state.js';
 import { Scheduler, getPriorityWeight } from './scheduler.js';
 import { WorkflowController } from './workflow.js';
-import { GanttController } from './gantt.js';
+import { 
+  GanttController, 
+  isJobPriorityVisible, 
+  isJobProjectVisible, 
+  isJobCustomerVisible, 
+  isJobPdRangeVisible 
+} from './gantt.js';
 import { ResourcesController } from './resources.js';
 import { KioskController } from './kiosk.js';
 import { DailyScheduleController } from './dailySchedule.js';
 import { AssemblyTreeController, matchesAssemblyQuery } from './assemblyTree.js';
 import { ContinuityAnalysisController } from './continuityAnalysis.js';
+import { QcCheckController } from './qcCheck.js';
 
 function getBaseDate() {
   return new Date(2026, 5, 22, 8, 0, 0); // Fixed epoch: Mon June 22 2026 8:00
@@ -139,6 +146,7 @@ class App {
     this.dailySchedule = new DailyScheduleController(state);
     this.assemblyTree = new AssemblyTreeController(state, this.gantt);
     this.continuityAnalysis = new ContinuityAnalysisController(state);
+    this.qcCheck = new QcCheckController(state);
     
     // Subscribe controllers to state changes
     state.subscribe(() => this.renderAll());
@@ -585,6 +593,14 @@ class App {
         state.setGanttMode(selectedMode);
       });
     });
+
+    // 2d. Production Order List Button (Visible in PD mode)
+    const btnPdOrderList = document.getElementById('btn-pd-order-list');
+    if (btnPdOrderList) {
+      btnPdOrderList.addEventListener('click', () => {
+        this.showProductionOrderListModal();
+      });
+    }
     // 3. Time Scale Selector (Trading Chart Zoom)
     const scaleButtons = document.querySelectorAll('.scale-btn');
     scaleButtons.forEach(btn => {
@@ -2521,6 +2537,18 @@ class App {
       }
     });
 
+    // Sync Production Order List button visibility (only in PD view)
+    const btnPdOrderList = document.getElementById('btn-pd-order-list');
+    if (btnPdOrderList) {
+      if (state.ganttMode === 'pd') {
+        btnPdOrderList.style.display = 'inline-flex';
+        btnPdOrderList.classList.remove('hidden');
+      } else {
+        btnPdOrderList.style.display = 'none';
+        btnPdOrderList.classList.add('hidden');
+      }
+    }
+
     this.renderKPIs();
   }
 
@@ -2720,6 +2748,560 @@ class App {
         // Reopen to show updated list!
         this.showLateWOsListModal();
       });
+    });
+  }
+
+  showProductionOrderListModal() {
+    // 1. Filter scheduledJobs according to current Board filters
+    const scheduledJobs = (state.scheduledJobs || []).filter(job => {
+      return isJobPriorityVisible(job, state) && 
+             isJobProjectVisible(job, state) && 
+             isJobCustomerVisible(job, state) && 
+             isJobPdRangeVisible(job, state) && 
+             state.activeWorkCenters[job.machine] !== false;
+    });
+
+    // 2. Group by Production Order ID (woId)
+    const pdMap = new Map();
+    scheduledJobs.forEach(job => {
+      const woId = job.woId || job.id;
+      if (!woId) return;
+      if (!pdMap.has(woId)) {
+        pdMap.set(woId, []);
+      }
+      pdMap.get(woId).push(job);
+    });
+
+    const backlogWoById = new Map((state.workOrders || []).map(w => [w.id, w]));
+
+    // Helper to extract clean operation name (e.g. "DEA062 - ปรับแต่ง" -> "ปรับแต่ง")
+    const extractCleanOp = (step) => {
+      if (!step) return '';
+      const rawOpName = (step.stepName || step.name || '').trim();
+      const machCode = (step.machine || step.originalMachine || '').trim();
+      const wcName = (state.workCenters[machCode]?.name || '').trim();
+
+      const cleanStr = (str) => {
+        if (!str) return '';
+        let s = str.replace(/^\((.*)\)$/, '$1').trim();
+        const m = s.match(/^[A-Za-z0-9_]+\s*[-–]\s*(.+)$/);
+        if (m && m[1]) return m[1].trim();
+        return s;
+      };
+
+      const cleanOp = cleanStr(rawOpName);
+      const cleanWc = cleanStr(wcName);
+
+      if (cleanOp && cleanOp !== machCode) return cleanOp;
+      if (cleanWc && cleanWc !== machCode) return cleanWc;
+      if (cleanOp) return cleanOp;
+      if (rawOpName) return rawOpName;
+      if (machCode) return machCode;
+      return '';
+    };
+
+    // 3. Build array of Production Order items
+    const rawItems = [];
+    for (const [woId, jobs] of pdMap.entries()) {
+      const backlogWO = backlogWoById.get(woId);
+      const firstJob = jobs[0];
+
+      const dwgNo = (firstJob?.dwgNo || backlogWO?.dwgNo || '').trim() || '-';
+      const partName = (firstJob?.partName || backlogWO?.partName || '').trim() || '-';
+      const qty = (typeof firstJob?.qty === 'number' && firstJob.qty > 0) ? firstJob.qty : (backlogWO?.qty || 1);
+      const project = (firstJob?.project || backlogWO?.project || '').trim();
+      const customer = (firstJob?.customer || backlogWO?.customer || '').trim();
+      
+      let soNo = (firstJob?.soNo || backlogWO?.soNo || '').trim();
+      if (!soNo && project && /^SO/i.test(project)) {
+        soNo = project;
+      }
+
+      // Find Operations across all steps of this PD
+      const allSteps = [];
+      const seenStepNums = new Set();
+      jobs.forEach(j => {
+        const sNum = typeof j.stepNum === 'number' ? j.stepNum : parseInt(j.stepNum, 10) || 0;
+        allSteps.push({
+          id: j.id,
+          stepNum: sNum,
+          stepName: (j.stepName || j.name || '').trim(),
+          machine: (j.machine || j.originalMachine || '').trim(),
+          status: j.status || 'Scheduled'
+        });
+        seenStepNums.add(sNum);
+      });
+      if (backlogWO && Array.isArray(backlogWO.steps)) {
+        backlogWO.steps.forEach(s => {
+          const sNum = typeof s.stepNum === 'number' ? s.stepNum : parseInt(s.stepNum, 10) || 0;
+          if (!seenStepNums.has(sNum)) {
+            allSteps.push({
+              id: s.id,
+              stepNum: sNum,
+              stepName: (s.name || s.stepName || '').trim(),
+              machine: (s.machine || '').trim(),
+              status: s.status || 'Unscheduled'
+            });
+            seenStepNums.add(sNum);
+          }
+        });
+      }
+
+      allSteps.sort((a, b) => a.stepNum - b.stepNum);
+
+      // Current Operation logic:
+      // 1. Step currently 'Running' or 'Setup'
+      // 2. Step currently 'Paused'
+      // 3. First step that is NOT 'Completed'
+      // 4. If all steps are Completed, the final step
+      let currentIdx = allSteps.findIndex(s => s.status === 'Running' || s.status === 'Setup');
+      if (currentIdx === -1) {
+        currentIdx = allSteps.findIndex(s => s.status === 'Paused');
+      }
+      if (currentIdx === -1) {
+        currentIdx = allSteps.findIndex(s => s.status !== 'Completed');
+      }
+      if (currentIdx === -1 && allSteps.length > 0) {
+        currentIdx = allSteps.length - 1;
+      }
+
+      const doingStep = (currentIdx >= 0 && currentIdx < allSteps.length) ? allSteps[currentIdx] : null;
+      const doingOp = extractCleanOp(doingStep);
+      const doingStatus = doingStep ? (doingStep.status || '') : '';
+      const remainingSteps = (currentIdx >= 0) ? allSteps.slice(currentIdx + 1) : [];
+
+      rawItems.push({
+        woId,
+        dwgNo,
+        partName,
+        qty,
+        project,
+        customer,
+        soNo,
+        allSteps,
+        doingOp,
+        doingStatus,
+        remainingSteps
+      });
+    }
+
+    // Sort naturally by PD ID
+    rawItems.sort((a, b) => a.woId.localeCompare(b.woId, undefined, { numeric: true, sensitivity: 'base' }));
+
+    // 4. Determine number of Next columns (at least 6 Nexts as requested, or dynamic if more remain)
+    const maxRemaining = Math.max(...rawItems.map(item => item.remainingSteps.length), 0);
+    const numNextCols = Math.max(6, maxRemaining);
+
+    // Populate Next step properties onto rawItems for sorting, search, and table rendering
+    rawItems.forEach(item => {
+      for (let i = 0; i < numNextCols; i++) {
+        const nextStep = item.remainingSteps[i];
+        item['nextOp_' + i] = nextStep ? extractCleanOp(nextStep) : '';
+        item['nextStatus_' + i] = nextStep ? (nextStep.status || '') : '';
+      }
+    });
+
+    // Extract summary header info
+    const distinctSos = Array.from(new Set(rawItems.map(p => p.soNo).filter(Boolean)));
+    const soNoDisplay = distinctSos.length > 0 ? distinctSos.join(', ') : '.......';
+
+    const distinctProjects = Array.from(new Set(rawItems.map(p => p.project).filter(Boolean)));
+    const projectDisplay = distinctProjects.length > 0 ? distinctProjects.join(', ') : '........';
+
+    const distinctCustomers = Array.from(new Set(rawItems.map(p => p.customer).filter(Boolean)));
+    const customerDisplay = distinctCustomers.length > 0 ? distinctCustomers.join(', ') : '..............';
+
+    const pdFromDisplay = rawItems.length > 0 ? rawItems[0].woId : '..................';
+    const pdToDisplay = rawItems.length > 0 ? rawItems[rawItems.length - 1].woId : '....................';
+
+    // Create Modal
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay pd-order-list-modal-overlay';
+    modal.style.zIndex = '350';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+
+    let currentSort = { col: 'woId', asc: true };
+    let searchQuery = '';
+
+    modal.innerHTML = `
+      <div class="modal-content card-glass" style="max-width: 1200px; width: 96%; max-height: 90vh; display: flex; flex-direction: column; padding: 20px; box-shadow: 0 15px 40px rgba(0,0,0,0.6); border: 1px solid var(--border-glass); border-radius: 12px;">
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-glass); padding-bottom: 12px; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 18px;">📋</span>
+            <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--accent-teal); letter-spacing: 0.5px;">
+              Production Order ที่คงเหลือใน line ผลิต
+            </h3>
+            <span id="pd-list-count-badge" style="font-size: 11px; background: rgba(0, 242, 254, 0.12); border: 1px solid var(--accent-teal); color: var(--accent-teal); padding: 2px 8px; border-radius: 12px; font-weight: 600;">
+              ${rawItems.length} รายการ
+            </span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button id="btn-print-pd-list" class="btn btn-action-small" title="พิมพ์รายงาน" style="background: rgba(255, 255, 255, 0.08); border: 1px solid var(--border-glass); color: var(--text-primary); padding: 5px 12px; font-size: 11px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: 600;">
+              🖨️ พิมพ์
+            </button>
+            <button id="btn-export-pd-list-csv" class="btn btn-action-small" title="ส่งออกข้อมูลเป็น CSV" style="background: rgba(22, 163, 74, 0.15); border: 1px solid var(--accent-green, #16a34a); color: var(--accent-green, #16a34a); padding: 5px 12px; font-size: 11px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: 600;">
+              📥 Export CSV
+            </button>
+            <button id="btn-close-pd-list" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 18px; line-height: 1; padding: 4px 8px; border-radius: 4px;" title="ปิด (Close)">
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <!-- Summary Header Box (Framed with clean spacing, no dashed line) -->
+        <div class="pd-header-summary-box">
+          <div class="pd-header-title">
+            <span>Production Order ที่คงเหลือใน line ผลิต</span>
+          </div>
+          <div class="pd-header-grid">
+            <div class="pd-header-item">
+              <span class="pd-header-label">SO No:</span>
+              <span class="pd-header-val accent">${soNoDisplay}</span>
+            </div>
+            <div class="pd-header-item">
+              <span class="pd-header-label">Project:</span>
+              <span class="pd-header-val">${projectDisplay}</span>
+            </div>
+            <div class="pd-header-item">
+              <span class="pd-header-label">Customer:</span>
+              <span class="pd-header-val">${customerDisplay}</span>
+            </div>
+            <div class="pd-header-item">
+              <span class="pd-header-label">PD No:</span>
+              <span class="pd-header-val accent mono">${pdFromDisplay} <span style="color: var(--text-secondary); font-weight: normal; margin: 0 4px;">to</span> ${pdToDisplay}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Search & Filter Controls -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; flex-wrap: wrap;">
+          <input type="text" id="pd-order-list-search-input" placeholder="🔍 ค้นหา PD No, DWG, Part Name, หรือชื่อขั้นตอน Doing / Next..." style="flex: 1; min-width: 260px; max-width: 380px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-glass); border-radius: 6px; padding: 6px 12px; font-size: 11.5px; color: var(--text-primary); outline: none;">
+          <div style="font-size: 10.5px; color: var(--text-secondary);">
+            💡 คลิกหัวตารางเพื่อเรียงลำดับ | คลิกเลขที่ PD เพื่อเปิดดูรายละเอียด
+          </div>
+        </div>
+
+        <!-- Table Container -->
+        <div style="flex: 1; overflow-x: auto; overflow-y: auto; border: 1px solid var(--border-glass); border-radius: 8px; background: rgba(0,0,0,0.2); min-height: 250px;">
+          <table class="pd-order-list-table">
+            <thead>
+              <tr>
+                <th class="sortable" data-col="woId" style="min-width: 120px;">PD No. <span class="sort-icon" data-col="woId">↕</span></th>
+                <th class="sortable" data-col="dwgNo" style="min-width: 130px;">DWG No. <span class="sort-icon" data-col="dwgNo">↕</span></th>
+                <th class="sortable" data-col="partName" style="min-width: 160px;">Part Name <span class="sort-icon" data-col="partName">↕</span></th>
+                <th class="sortable" data-col="qty" style="min-width: 60px; text-align: center;">QTY <span class="sort-icon" data-col="qty">↕</span></th>
+                <th class="sortable" data-col="doingOp" style="min-width: 100px; color: var(--accent-teal);" title="ขั้นตอนที่กำลังผลิตอยู่">Doing <span class="sort-icon" data-col="doingOp">↕</span></th>
+                ${Array.from({ length: numNextCols }, (_, i) => `
+                  <th class="sortable" data-col="nextOp_${i}" style="min-width: 90px; white-space: nowrap;" title="ขั้นตอนถัดไปลำดับที่ ${i + 1}">Next <span class="sort-icon" data-col="nextOp_${i}">↕</span></th>
+                `).join('')}
+              </tr>
+            </thead>
+            <tbody id="pd-list-table-body">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Footer -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-glass); padding-top: 12px; margin-top: 12px;">
+          <div id="pd-list-footer-stats" style="font-size: 11px; color: var(--text-secondary);">
+            แสดงผลเฉพาะรายการที่กรองและแสดงอยู่บน Board
+          </div>
+          <button id="btn-close-pd-list-bottom" class="btn btn-secondary" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-primary); padding: 6px 18px; border-radius: 6px; font-size: 11.5px; cursor: pointer;">
+            ปิด (Close)
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const renderRows = () => {
+      let filtered = rawItems;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        filtered = rawItems.filter(item => {
+          if (item.woId.toLowerCase().includes(q)) return true;
+          if (item.dwgNo.toLowerCase().includes(q)) return true;
+          if (item.partName.toLowerCase().includes(q)) return true;
+          if (String(item.qty).includes(q)) return true;
+          if ((item.doingOp || '').toLowerCase().includes(q)) return true;
+          for (let i = 0; i < numNextCols; i++) {
+            if ((item['nextOp_' + i] || '').toLowerCase().includes(q)) return true;
+          }
+          return false;
+        });
+      }
+
+      filtered.sort((a, b) => {
+        let valA = a[currentSort.col];
+        let valB = b[currentSort.col];
+        if (currentSort.col === 'qty') {
+          valA = Number(valA) || 0;
+          valB = Number(valB) || 0;
+          return currentSort.asc ? valA - valB : valB - valA;
+        }
+        valA = String(valA || '');
+        valB = String(valB || '');
+        const cmp = valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
+        return currentSort.asc ? cmp : -cmp;
+      });
+
+      const totalFilteredQty = filtered.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+
+      const countBadge = modal.querySelector('#pd-list-count-badge');
+      if (countBadge) {
+        countBadge.textContent = `${filtered.length} รายการ (จำนวนผลิตรวม: ${totalFilteredQty.toLocaleString()} ชิ้น)`;
+      }
+
+      const statsEl = modal.querySelector('#pd-list-footer-stats');
+      if (statsEl) {
+        statsEl.textContent = `รายการที่แสดง: ${filtered.length} / ${rawItems.length} PD (ยอดผลิตรวม: ${totalFilteredQty.toLocaleString()} ชิ้น)`;
+      }
+
+      // Update sort indicators
+      modal.querySelectorAll('.sort-icon').forEach(icon => {
+        const col = icon.getAttribute('data-col');
+        if (col === currentSort.col) {
+          icon.textContent = currentSort.asc ? '▲' : '▼';
+          icon.style.color = 'var(--accent-teal)';
+        } else {
+          icon.textContent = '↕';
+          icon.style.color = 'var(--text-secondary)';
+        }
+      });
+
+      const tbody = modal.querySelector('#pd-list-table-body');
+      if (!tbody) return;
+
+      const totalCols = 5 + numNextCols;
+      if (filtered.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="${totalCols}" style="text-align: center; padding: 35px 20px; color: var(--text-secondary); font-size: 12px;">
+              ${rawItems.length === 0 ? '⚠️ ไม่มีรายการ Production Order ที่ตรงกับตัวกรอง หรือไม่มีงานบน Board ในขณะนี้' : '🔍 ไม่พบข้อมูลที่ตรงกับคำค้นหา'}
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(item => `
+        <tr>
+          <td style="font-family: monospace; font-weight: 700; color: var(--accent-teal); cursor: pointer; text-decoration: underline; white-space: nowrap;" class="pd-no-link" data-wo-id="${item.woId}" title="คลิกเพื่อดูรายละเอียด Production Order: ${item.woId}">
+            ${item.woId}
+          </td>
+          <td style="font-family: monospace; color: var(--text-secondary); font-weight: 500; white-space: nowrap;">${item.dwgNo}</td>
+          <td style="font-weight: 600; color: var(--text-primary); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.partName}">${item.partName}</td>
+          <td style="text-align: center; font-weight: 700; color: var(--text-primary);">${item.qty}</td>
+          <td style="color: var(--accent-cyan); font-weight: 600; white-space: nowrap;">
+            ${item.doingStatus === 'Running' || item.doingStatus === 'Setup' ? '<span style="color: #39ff14; font-weight: bold; margin-right: 4px;" title="Running">⚡</span>' : (item.doingStatus === 'Paused' ? '<span style="color: var(--accent-orange); margin-right: 4px;" title="Paused">⏸️</span>' : (item.doingStatus === 'Completed' ? '<span style="color: #4ade80; margin-right: 4px;" title="Completed">✓</span>' : ''))}${item.doingOp || '-'}
+          </td>
+          ${Array.from({ length: numNextCols }, (_, i) => {
+            const opName = item['nextOp_' + i];
+            if (!opName) {
+              return `<td style="color: var(--text-secondary); text-align: center; opacity: 0.35;">-</td>`;
+            }
+            return `
+              <td style="color: var(--text-primary); font-weight: 500; white-space: nowrap;">
+                ${opName}
+              </td>
+            `;
+          }).join('')}
+        </tr>
+      `).join('');
+
+      // Add click handler to PD No. cells to open PD Plan Modal
+      tbody.querySelectorAll('.pd-no-link').forEach(cell => {
+        cell.addEventListener('click', (e) => {
+          const woId = e.currentTarget.getAttribute('data-wo-id');
+          if (woId && this.gantt && this.gantt.showPDPlanModal) {
+            this.gantt.showPDPlanModal(woId);
+          }
+        });
+      });
+    };
+
+    // Initial render of rows
+    renderRows();
+
+    // Search input event listener
+    const searchInput = modal.querySelector('#pd-order-list-search-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        searchQuery = (e.target.value || '').trim();
+        renderRows();
+      });
+    }
+
+    // Column sort headers event listeners
+    modal.querySelectorAll('th.sortable').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.getAttribute('data-col');
+        if (currentSort.col === col) {
+          currentSort.asc = !currentSort.asc;
+        } else {
+          currentSort.col = col;
+          currentSort.asc = true;
+        }
+        renderRows();
+      });
+    });
+
+    // Close listeners
+    const closeModal = () => {
+      document.removeEventListener('keydown', handleEsc);
+      modal.remove();
+    };
+
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') closeModal();
+    };
+    document.addEventListener('keydown', handleEsc);
+
+    modal.querySelector('#btn-close-pd-list')?.addEventListener('click', closeModal);
+    modal.querySelector('#btn-close-pd-list-bottom')?.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+
+    // Print Listener
+    modal.querySelector('#btn-print-pd-list')?.addEventListener('click', () => {
+      const printWin = window.open('', '_blank');
+      if (!printWin) {
+        alert('กรุณาอนุญาต Pop-up ในเบราว์เซอร์เพื่อเปิดหน้าต่างพิมพ์รายงาน');
+        return;
+      }
+
+      const totalQtyAll = rawItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+      const printRowsHtml = rawItems.map(item => `
+        <tr>
+          <td style="border: 1px solid #333; padding: 6px 8px; font-family: monospace; font-weight: bold; white-space: nowrap;">${item.woId}</td>
+          <td style="border: 1px solid #333; padding: 6px 8px; font-family: monospace; white-space: nowrap;">${item.dwgNo}</td>
+          <td style="border: 1px solid #333; padding: 6px 8px;">${item.partName}</td>
+          <td style="border: 1px solid #333; padding: 6px 8px; text-align: center; font-weight: bold;">${item.qty}</td>
+          <td style="border: 1px solid #333; padding: 6px 8px; font-weight: bold; white-space: nowrap;">${item.doingOp || '-'}</td>
+          ${Array.from({ length: numNextCols }, (_, i) => `
+            <td style="border: 1px solid #333; padding: 6px 8px; white-space: nowrap;">${item['nextOp_' + i] || '-'}</td>
+          `).join('')}
+        </tr>
+      `).join('');
+
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Production Order ที่คงเหลือใน line ผลิต</title>
+          <style>
+            body { font-family: 'Sarabun', 'Helvetica Neue', Arial, sans-serif; padding: 25px; color: #000; font-size: 12px; }
+            .print-header-box { border: 1.5px solid #000; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; background: #fafafa; }
+            .print-title { font-size: 15px; font-weight: bold; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #ccc; }
+            .print-grid { display: flex; flex-wrap: wrap; gap: 10px 24px; font-size: 12px; }
+            .print-item { display: inline-flex; gap: 6px; align-items: center; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+            th { background-color: #f2f2f2; border: 1px solid #333; padding: 6px 8px; text-align: left; font-weight: bold; }
+            td { border: 1px solid #333; padding: 5px 8px; }
+            .footer-info { margin-top: 15px; display: flex; justify-content: space-between; font-size: 11px; }
+            @media print {
+              body { padding: 0; }
+              @page { size: A4 landscape; margin: 1cm; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-header-box">
+            <div class="print-title">Production Order ที่คงเหลือใน line ผลิต</div>
+            <div class="print-grid">
+              <div class="print-item"><strong>SO No:</strong> <span>${soNoDisplay}</span></div>
+              <div class="print-item"><strong>Project:</strong> <span>${projectDisplay}</span></div>
+              <div class="print-item"><strong>Customer:</strong> <span>${customerDisplay}</span></div>
+              <div class="print-item"><strong>PD No:</strong> <span style="font-family: monospace; font-weight: bold;">${pdFromDisplay} to ${pdToDisplay}</span></div>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 12%;">PD No.</th>
+                <th style="width: 13%;">DWG No.</th>
+                <th style="width: 20%;">Part Name</th>
+                <th style="width: 5%; text-align: center;">QTY</th>
+                <th style="text-align: left;">Doing</th>
+                ${Array.from({ length: numNextCols }, () => `<th style="text-align: left; white-space: nowrap;">Next</th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>
+              ${printRowsHtml}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th colspan="3" style="text-align: right; border: 1px solid #333; padding: 8px;">รวมทั้งหมด (${rawItems.length} รายการ):</th>
+                <th style="text-align: center; border: 1px solid #333; padding: 8px;">${totalQtyAll.toLocaleString()}</th>
+                <th colspan="${1 + numNextCols}" style="border: 1px solid #333; padding: 8px;"></th>
+              </tr>
+            </tfoot>
+          </table>
+          <div class="footer-info">
+            <div>พิมพ์เมื่อ: ${new Date().toLocaleString('th-TH')}</div>
+            <div>CHAKEN Planing Pro - APS Scheduling</div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+        </html>
+      `);
+      printWin.document.close();
+    });
+
+    // Export CSV Listener
+    modal.querySelector('#btn-export-pd-list-csv')?.addEventListener('click', () => {
+      const escapeCsv = (str) => {
+        const s = String(str ?? '').replace(/"/g, '""');
+        return `"${s}"`;
+      };
+      const csvHeader = [
+        "PD No.", 
+        "DWG No.", 
+        "Part Name", 
+        "QTY", 
+        "Doing", 
+        ...Array.from({ length: numNextCols }, (_, i) => `Next ${i + 1}`), 
+        "SO No", 
+        "Project", 
+        "Customer"
+      ];
+      const csvRows = rawItems.map(item => [
+        escapeCsv(item.woId),
+        escapeCsv(item.dwgNo),
+        escapeCsv(item.partName),
+        escapeCsv(item.qty),
+        escapeCsv(item.doingOp || '-'),
+        ...Array.from({ length: numNextCols }, (_, i) => escapeCsv(item['nextOp_' + i] || '-')),
+        escapeCsv(item.soNo),
+        escapeCsv(item.project),
+        escapeCsv(item.customer)
+      ].join(','));
+
+      const csvContent = "\uFEFF" + [
+        `"Production Order ที่คงเหลือใน line ผลิต (SO No: ${soNoDisplay}, Project: ${projectDisplay}, Customer: ${customerDisplay}, PD No: ${pdFromDisplay} to ${pdToDisplay})"`,
+        csvHeader.map(escapeCsv).join(','),
+        ...csvRows
+      ].join('\r\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Production_Order_Remaining_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     });
   }
 }

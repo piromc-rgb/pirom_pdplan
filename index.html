@@ -115,6 +115,14 @@
             </svg>
             วิเคราะห์ความต่อเนื่อง
           </button>
+
+          <button id="btn-qc-check" class="btn btn-glowing" title="ตรวจสอบกับ Google Sheets QC Log เพื่อปิดและลบ PD ที่ส่งเข้าคลัง PRD/SEMI ออกจากผังการผลิต" style="margin-left: 8px; background: linear-gradient(135deg, #059669, #047857);">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 11l3 3L22 4"/>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            </svg>
+            ตรวจ QC Log
+          </button>
         </div>
 
         <!-- Global Metrics -->
@@ -266,6 +274,17 @@
                   <button class="mode-btn" data-mode="pd">Production Order (PD)</button>
                   <button class="mode-btn" data-mode="assembly">Assembly Set</button>
                 </div>
+                <button id="btn-pd-order-list" class="btn-action-small hidden" title="แสดงสรุปรายการ Production Order ที่กำลังกรอง/แสดงผลอยู่บน Board ในรูปแบบตาราง" style="display: none; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700; padding: 4px 10px; border-radius: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="8" y1="6" x2="21" y2="6"></line>
+                    <line x1="8" y1="12" x2="21" y2="12"></line>
+                    <line x1="8" y1="18" x2="21" y2="18"></line>
+                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                  </svg>
+                  <span>Production Order List</span>
+                </button>
                 <div class="timeline-nav-controls" style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
                   <div style="display: flex; align-items: center;">
                     <button id="btn-timeline-now" class="btn-action-small" title="Scroll to Current Time" style="margin: 0; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--text-primary);">Go to Now</button>
