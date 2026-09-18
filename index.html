@@ -1433,7 +1433,7 @@
           </div>
 
           <!-- Secondary Actions: ด้านซ้าย Cloud Load / ด้านขวา Local Load -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
             <button id="btn-modal-cloud-pull" class="btn" style="padding: 8px 12px; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(2, 132, 199, 0.08); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 6px; cursor: pointer;">
               <span>🔄 Cloud Load (ดึงจาก Cloud)</span>
             </button>
@@ -1441,6 +1441,21 @@
               <span>📂 Local Load (เปิด Plan.json)</span>
               <input type="file" id="input-import-backup" accept=".json" style="display: none;">
             </label>
+          </div>
+
+          <!-- Quick Individual Export Buttons -->
+          <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 16px; flex-wrap: wrap;">
+            <button id="btn-export-machine-json" class="btn" style="padding: 5px 10px; font-size: 10.5px; border-radius: 6px; border: 1px solid #38bdf8; background: rgba(56, 189, 248, 0.08); color: #38bdf8; cursor: pointer;">
+              ⚙️ ดาวน์โหลด machine_settings.json
+            </button>
+            <button id="btn-export-completed-json" class="btn" style="padding: 5px 10px; font-size: 10.5px; border-radius: 6px; border: 1px solid #22c55e; background: rgba(34, 197, 94, 0.08); color: #22c55e; cursor: pointer;">
+              ✅ ดาวน์โหลด completed_pds.json
+            </button>
+          </div>
+
+          <!-- Auto-Sync on Close/Open Callout -->
+          <div style="background: rgba(56, 189, 248, 0.08); border-left: 3px solid #38bdf8; border-radius: 4px; padding: 8px 12px; margin-bottom: 16px; font-size: 11px; color: var(--text-secondary);">
+            ⚡ <strong>Auto-Save & Load อัตโนมัติ:</strong> เมื่อปิดแอป ระบบจะบันทึก Plan & Machine Settings ขึ้น Cloud และ Local Cache ทันที และเมื่อเปิดแอปใหม่ จะโหลดข้อมูลล่าสุดมาใช้งานให้อัตโนมัติ
           </div>
 
           <!-- Guide & Code Snippet Accordion -->

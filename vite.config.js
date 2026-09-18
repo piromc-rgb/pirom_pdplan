@@ -91,21 +91,40 @@ export default defineConfig({
 
           if (req.url === '/api/plan' || req.url?.startsWith('/api/plan?')) {
             const planFilePath = path.resolve(__dirname, 'Plan.json');
+            const machineFilePath = path.resolve(__dirname, 'machine_settings.json');
+            const completedFilePath = path.resolve(__dirname, 'completed_pds.json');
             
             if (req.method === 'GET') {
               res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              let content = { scheduledJobs: [], nests: {}, completedPdHistory: {}, workCenters: {}, workCenterOrder: [] };
               if (fs.existsSync(planFilePath)) {
                 try {
-                  const content = fs.readFileSync(planFilePath, 'utf-8');
-                  res.statusCode = 200;
-                  res.end(content);
-                  return;
+                  const raw = fs.readFileSync(planFilePath, 'utf-8');
+                  content = Object.assign(content, JSON.parse(raw));
                 } catch (err) {
                   console.error('Error reading Plan.json:', err);
                 }
               }
+              if (fs.existsSync(machineFilePath)) {
+                try {
+                  const mRaw = JSON.parse(fs.readFileSync(machineFilePath, 'utf-8'));
+                  if (mRaw.workCenters) content.workCenters = mRaw.workCenters;
+                  if (mRaw.workCenterOrder) content.workCenterOrder = mRaw.workCenterOrder;
+                } catch (e) {}
+              }
+              if (fs.existsSync(completedFilePath)) {
+                try {
+                  const cRaw = JSON.parse(fs.readFileSync(completedFilePath, 'utf-8'));
+                  if (Array.isArray(cRaw)) {
+                    content.completedPdHistory = content.completedPdHistory || {};
+                    cRaw.forEach(x => { const id = typeof x === 'string' ? x : (x.id || x.woId || x.pdId); if (id) content.completedPdHistory[id] = true; });
+                  } else if (typeof cRaw === 'object') {
+                    content.completedPdHistory = Object.assign(content.completedPdHistory || {}, cRaw);
+                  }
+                } catch (e) {}
+              }
               res.statusCode = 200;
-              res.end(JSON.stringify({ scheduledJobs: [], nests: {} }));
+              res.end(JSON.stringify(content));
               return;
             }
             
@@ -120,6 +139,19 @@ export default defineConfig({
                   delete payload.formattedRows; // Not needed in Plan.json
                   
                   fs.writeFileSync(planFilePath, JSON.stringify(payload, null, 2), 'utf-8');
+
+                  if (payload.workCenters) {
+                    const mPayload = {
+                      updatedAt: new Date().toISOString(),
+                      workCenters: payload.workCenters,
+                      workCenterOrder: payload.workCenterOrder || Object.keys(payload.workCenters)
+                    };
+                    fs.writeFileSync(machineFilePath, JSON.stringify(mPayload, null, 2), 'utf-8');
+                  }
+
+                  if (payload.completedPdHistory) {
+                    fs.writeFileSync(completedFilePath, JSON.stringify(payload.completedPdHistory, null, 2), 'utf-8');
+                  }
                   
                   // Also clean up old plan.md if it exists to keep workspace tidy
                   const oldPlanMd = path.resolve(__dirname, 'plan.md');
