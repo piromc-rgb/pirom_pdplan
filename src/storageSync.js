@@ -445,6 +445,19 @@ export class StorageSyncManager {
       if (file) this.importBackupJson(file);
     });
 
+    document.getElementById('btn-hero-copy-link')?.addEventListener('click', () => {
+      const url = this.getDriveFolderUrl();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+          this.showToast('📋 คัดลอกลิงก์เรียบร้อย: ' + url, 'success');
+        }).catch(() => {
+          prompt('คัดลอกลิงก์ Google Drive:', url);
+        });
+      } else {
+        prompt('คัดลอกลิงก์ Google Drive:', url);
+      }
+    });
+
     document.getElementById('btn-copy-gas-code')?.addEventListener('click', () => {
       const code = this.generateGasCode();
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -479,6 +492,7 @@ export class StorageSyncManager {
     if (!modal) return;
     this.updateModalValues();
     modal.classList.remove('hidden');
+    this.showToast('📁 ที่เก็บไฟล์ข้อมูล: ' + this.getDriveFolderUrl(), 'info');
   }
 
   closeSyncModal() {
@@ -493,6 +507,23 @@ export class StorageSyncManager {
     const lastSyncDisplay = this.lastSyncTime ? new Date(this.lastSyncTime).toLocaleString('th-TH') : 'ยังไม่มีการซิงค์';
     const completedCount = Object.keys(this.state?.completedPdHistory || {}).length;
     const scheduledCount = (this.state?.scheduledJobs || []).length;
+
+    // Update Hero link card
+    const displayDriveFolder = document.getElementById('display-drive-folder-link');
+    if (displayDriveFolder) {
+      displayDriveFolder.href = currentFolderUrl;
+      displayDriveFolder.textContent = currentFolderUrl;
+    }
+
+    const heroOpenDrive = document.getElementById('btn-hero-open-drive');
+    if (heroOpenDrive) {
+      heroOpenDrive.href = currentFolderUrl;
+    }
+
+    const menuDirectLink = document.getElementById('menu-direct-drive-link');
+    if (menuDirectLink) {
+      menuDirectLink.href = currentFolderUrl;
+    }
 
     const statusTextEl = document.getElementById('sync-modal-status-text');
     if (statusTextEl) {
