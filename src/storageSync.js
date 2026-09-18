@@ -348,14 +348,13 @@ export class StorageSyncManager {
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const dateStr = new Date().toISOString().slice(0, 10);
     a.href = url;
-    a.download = `Plan_backup_${dateStr}.json`;
+    a.download = `Plan.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    this.showToast('📥 ดาวน์โหลดไฟล์ Plan_backup.json สำเร็จ', 'success');
+    this.showToast('💾 บันทึกไฟล์ Plan.json (Local Save) สำเร็จ', 'success');
   }
 
   importBackupJson(file) {
@@ -426,14 +425,29 @@ export class StorageSyncManager {
       }
     });
 
-    document.getElementById('btn-modal-pull-sync')?.addEventListener('click', () => {
+    document.getElementById('btn-modal-cloud-save')?.addEventListener('click', () => {
+      const payload = this.state.buildPlanPayload();
+      this.pushToCloud(payload, true);
+      this.showToast('☁️ บันทึกข้อมูลขึ้น Cloud (Cloud Save)...', 'info');
+    });
+
+    document.getElementById('btn-modal-local-save')?.addEventListener('click', () => {
+      this.exportBackupJson();
+    });
+
+    document.getElementById('btn-modal-cloud-pull')?.addEventListener('click', () => {
       this.pullFromCloud(false);
     });
 
+    // Backwards compatibility bindings
     document.getElementById('btn-modal-push-sync')?.addEventListener('click', () => {
       const payload = this.state.buildPlanPayload();
       this.pushToCloud(payload, true);
       this.showToast('☁️ กำลังส่งข้อมูลขึ้น Cloud...', 'info');
+    });
+
+    document.getElementById('btn-modal-pull-sync')?.addEventListener('click', () => {
+      this.pullFromCloud(false);
     });
 
     document.getElementById('btn-export-backup')?.addEventListener('click', () => {

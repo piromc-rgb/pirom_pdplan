@@ -1414,28 +1414,27 @@
             </div>
           </div>
 
-          <!-- Quick Sync Action Buttons -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px;">
-            <button id="btn-modal-pull-sync" class="btn" style="padding: 10px; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(2, 132, 199, 0.1); border: 1.5px solid var(--accent-teal); color: var(--accent-teal); border-radius: 8px; cursor: pointer;">
-              <span>🔄 ดึงข้อมูลล่าสุด (Pull from Cloud)</span>
+          <!-- Action Buttons: ด้านซ้าย Cloud Save / ด้านขวา Local Save -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <button id="btn-modal-cloud-save" class="btn btn-glowing" style="padding: 12px; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(135deg, #0284c7, #00f2fe); border: none; color: #fff; border-radius: 8px; cursor: pointer; box-shadow: 0 0 14px rgba(0, 242, 254, 0.35);">
+              <span style="font-size: 16px;">☁️</span>
+              <span>Cloud Save</span>
             </button>
-            <button id="btn-modal-push-sync" class="btn" style="padding: 10px; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(22, 163, 74, 0.1); border: 1.5px solid var(--accent-green, #16a34a); color: var(--accent-green, #16a34a); border-radius: 8px; cursor: pointer;">
-              <span>☁️ บันทึกขึ้น Cloud ทันที (Push)</span>
+            <button id="btn-modal-local-save" class="btn" style="padding: 12px; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(34, 197, 94, 0.15); border: 1.5px solid #22c55e; color: #22c55e; border-radius: 8px; cursor: pointer;">
+              <span style="font-size: 16px;">💾</span>
+              <span>Local Save</span>
             </button>
           </div>
 
-          <!-- Backup & Restore from local file -->
-          <div style="border-top: 1px solid var(--border-glass); padding-top: 14px; margin-bottom: 16px;">
-            <div style="font-size: 12px; font-weight: 700; margin-bottom: 8px;">💾 สำรองและกู้คืนไฟล์ข้อมูลในเครื่อง (Offline Backup):</div>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-              <button id="btn-export-backup" class="btn" style="flex: 1; padding: 7px 12px; font-size: 11px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;">
-                📥 ดาวน์โหลด Plan_backup.json
-              </button>
-              <label class="btn" style="flex: 1; padding: 7px 12px; font-size: 11px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; text-align: center;">
-                📂 กู้คืนจากไฟล์ Plan.json
-                <input type="file" id="input-import-backup" accept=".json" style="display: none;">
-              </label>
-            </div>
+          <!-- Secondary Actions: ด้านซ้าย Cloud Load / ด้านขวา Local Load -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px;">
+            <button id="btn-modal-cloud-pull" class="btn" style="padding: 8px 12px; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(2, 132, 199, 0.08); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 6px; cursor: pointer;">
+              <span>🔄 Cloud Load (ดึงจาก Cloud)</span>
+            </button>
+            <label class="btn" style="padding: 8px 12px; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 6px; cursor: pointer; text-align: center; margin: 0;">
+              <span>📂 Local Load (เปิด Plan.json)</span>
+              <input type="file" id="input-import-backup" accept=".json" style="display: none;">
+            </label>
           </div>
 
           <!-- Guide & Code Snippet Accordion -->
