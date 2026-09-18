@@ -279,7 +279,18 @@ export class StorageSyncManager {
     if (data.workCenterOrder) this.state.workCenterOrder = data.workCenterOrder;
     if (data.timelineOffset !== undefined) this.state.timelineOffset = data.timelineOffset;
     if (data.activeScale) this.state.activeScale = data.activeScale;
-    if (data.completedPdHistory) this.state.completedPdHistory = data.completedPdHistory;
+    if (data.completedPdHistory) {
+      if (Array.isArray(data.completedPdHistory)) {
+        const obj = {};
+        data.completedPdHistory.forEach(item => {
+          const id = typeof item === 'string' ? item : (item.id || item.woId || item.pdId);
+          if (id) obj[id] = true;
+        });
+        this.state.completedPdHistory = obj;
+      } else if (typeof data.completedPdHistory === 'object') {
+        this.state.completedPdHistory = data.completedPdHistory;
+      }
+    }
     if (data.favoritePDs) this.state.favoritePDs = data.favoritePDs;
     if (data.removedStepHistory) this.state.removedStepHistory = data.removedStepHistory;
 
@@ -591,6 +602,32 @@ export class StorageSyncManager {
     const fId = this.getDriveFolderId();
     return `const TARGET_FOLDER_ID = '${fId}';
 const TARGET_FILE_NAME = 'Plan.json';
+const MACHINE_SETTINGS_FILE_NAME = 'machine_settings.json';
+const COMPLETED_PDS_FILE_NAME = 'completed_pds.json';
+
+function saveTextFile(folder, filename, textContent, mimeType) {
+  const files = folder.getFilesByName(filename);
+  if (files.hasNext()) {
+    const file = files.next();
+    file.setContent(textContent);
+    return file;
+  } else {
+    return folder.createFile(filename, textContent, mimeType || MimeType.PLAIN_TEXT);
+  }
+}
+
+function readJsonFile(folder, filename) {
+  const files = folder.getFilesByName(filename);
+  if (files.hasNext()) {
+    try {
+      const rawText = files.next().getBlob().getDataAsString('UTF-8');
+      return JSON.parse(rawText);
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
 
 function doGet(e) {
   try {
@@ -621,15 +658,49 @@ function doGet(e) {
         })).setMimeType(ContentService.MimeType.JSON);
       }
     }
-    const files = folder.getFilesByName(TARGET_FILE_NAME);
-    let content = { scheduledJobs: [], nests: {}, completedPdHistory: {} };
-    let lastModified = null;
-    if (files.hasNext()) {
-      const file = files.next();
-      lastModified = file.getLastUpdated().toISOString();
-      content = JSON.parse(file.getBlob().getDataAsString('UTF-8'));
+
+    if (e && e.parameter && (e.parameter.action === 'machine-settings' || e.parameter.file === 'machine-settings')) {
+      const msData = readJsonFile(folder, MACHINE_SETTINGS_FILE_NAME);
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'success',
+        fileName: MACHINE_SETTINGS_FILE_NAME,
+        data: msData || {}
+      })).setMimeType(ContentService.MimeType.JSON);
     }
-    return ContentService.createTextOutput(JSON.stringify({ status: 'success', lastModified, data: content })).setMimeType(ContentService.MimeType.JSON);
+
+    let content = { scheduledJobs: [], nests: {}, completedPdHistory: {}, workCenters: {}, workCenterOrder: [] };
+    let lastModified = null;
+
+    const planFiles = folder.getFilesByName(TARGET_FILE_NAME);
+    if (planFiles.hasNext()) {
+      const file = planFiles.next();
+      lastModified = file.getLastUpdated().toISOString();
+      try {
+        const parsed = JSON.parse(file.getBlob().getDataAsString('UTF-8'));
+        if (parsed && typeof parsed === 'object') content = Object.assign(content, parsed);
+      } catch (err) {}
+    }
+
+    const machineSettings = readJsonFile(folder, MACHINE_SETTINGS_FILE_NAME);
+    if (machineSettings) {
+      if (machineSettings.workCenters) content.workCenters = machineSettings.workCenters;
+      if (machineSettings.workCenterOrder) content.workCenterOrder = machineSettings.workCenterOrder;
+    }
+
+    const completedPds = readJsonFile(folder, COMPLETED_PDS_FILE_NAME);
+    if (completedPds) {
+      if (Array.isArray(completedPds)) {
+        content.completedPdHistory = content.completedPdHistory || {};
+        completedPds.forEach(item => {
+          const id = typeof item === 'string' ? item : (item.id || item.woId || item.pdId);
+          if (id) content.completedPdHistory[id] = true;
+        });
+      } else if (typeof completedPds === 'object') {
+        content.completedPdHistory = Object.assign(content.completedPdHistory || {}, completedPds);
+      }
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ status: 'success', folderId: TARGET_FOLDER_ID, fileName: TARGET_FILE_NAME, lastModified, data: content })).setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: error.toString() })).setMimeType(ContentService.MimeType.JSON);
   }
@@ -641,16 +712,23 @@ function doPost(e) {
     const postData = e.postData.contents;
     const parsed = JSON.parse(postData);
     delete parsed.formattedRows;
-    const formatted = JSON.stringify(parsed, null, 2);
-    const files = folder.getFilesByName(TARGET_FILE_NAME);
-    let targetFile;
-    if (files.hasNext()) {
-      targetFile = files.next();
-      targetFile.setContent(formatted);
-    } else {
-      targetFile = folder.createFile(TARGET_FILE_NAME, formatted, MimeType.PLAIN_TEXT);
+
+    const targetFile = saveTextFile(folder, TARGET_FILE_NAME, JSON.stringify(parsed, null, 2), MimeType.PLAIN_TEXT);
+
+    if (parsed.workCenters) {
+      const machinePayload = {
+        updatedAt: new Date().toISOString(),
+        workCenters: parsed.workCenters,
+        workCenterOrder: parsed.workCenterOrder || Object.keys(parsed.workCenters)
+      };
+      saveTextFile(folder, MACHINE_SETTINGS_FILE_NAME, JSON.stringify(machinePayload, null, 2), MimeType.PLAIN_TEXT);
     }
-    return ContentService.createTextOutput(JSON.stringify({ status: 'success', message: 'Plan.json saved', fileId: targetFile.getId() })).setMimeType(ContentService.MimeType.JSON);
+
+    if (parsed.completedPdHistory) {
+      saveTextFile(folder, COMPLETED_PDS_FILE_NAME, JSON.stringify(parsed.completedPdHistory, null, 2), MimeType.PLAIN_TEXT);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ status: 'success', message: 'Plan.json, machine_settings.json, completed_pds.json saved', fileId: targetFile.getId() })).setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: error.toString() })).setMimeType(ContentService.MimeType.JSON);
   }

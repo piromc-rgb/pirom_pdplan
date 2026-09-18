@@ -2252,7 +2252,18 @@ class CentralState {
       if (data.workCenterOrder) this.workCenterOrder = data.workCenterOrder;
       if (data.timelineOffset !== undefined) this.timelineOffset = data.timelineOffset;
       if (data.activeScale) this.activeScale = data.activeScale;
-      if (data.completedPdHistory) this.completedPdHistory = data.completedPdHistory;
+      if (data.completedPdHistory) {
+        if (Array.isArray(data.completedPdHistory)) {
+          const obj = {};
+          data.completedPdHistory.forEach(item => {
+            const id = typeof item === 'string' ? item : (item.id || item.woId || item.pdId);
+            if (id) obj[id] = true;
+          });
+          this.completedPdHistory = obj;
+        } else if (typeof data.completedPdHistory === 'object') {
+          this.completedPdHistory = data.completedPdHistory;
+        }
+      }
       if (data.favoritePDs) this.favoritePDs = data.favoritePDs;
       if (data.removedStepHistory) this.removedStepHistory = data.removedStepHistory;
 

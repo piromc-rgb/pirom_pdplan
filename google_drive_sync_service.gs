@@ -33,15 +33,47 @@
 // โฟลเดอร์เป้าหมายใน Google Drive
 const TARGET_FOLDER_ID = '1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA';
 const TARGET_FILE_NAME = 'Plan.json';
+const MACHINE_SETTINGS_FILE_NAME = 'machine_settings.json';
+const COMPLETED_PDS_FILE_NAME = 'completed_pds.json';
 
 /**
- * จัดการคำขอแบบ GET (ดึงข้อมูล Plan.json ล่าสุด)
+ * ฟังก์ชันช่วยสร้างหรืออัปเดตไฟล์ข้อความในโฟลเดอร์
+ */
+function saveTextFile(folder, filename, textContent, mimeType) {
+  const files = folder.getFilesByName(filename);
+  if (files.hasNext()) {
+    const file = files.next();
+    file.setContent(textContent);
+    return file;
+  } else {
+    return folder.createFile(filename, textContent, mimeType || MimeType.PLAIN_TEXT);
+  }
+}
+
+/**
+ * ฟังก์ชันช่วยอ่านไฟล์ JSON จากโฟลเดอร์
+ */
+function readJsonFile(folder, filename) {
+  const files = folder.getFilesByName(filename);
+  if (files.hasNext()) {
+    try {
+      const rawText = files.next().getBlob().getDataAsString('UTF-8');
+      return JSON.parse(rawText);
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * จัดการคำขอแบบ GET (ดึงข้อมูล Plan.json, machine_settings.json, completed_pds.json, LN Status Overview)
  */
 function doGet(e) {
   try {
     const folder = DriveApp.getFolderById(TARGET_FOLDER_ID);
 
-    // 1. ดึงไฟล์ LN Status Overview.xls จาก Google Drive (ถ้ามีการเรียก action=status-overview)
+    // 1. ดึงไฟล์ LN Status Overview (Excel)
     if (e && e.parameter && (e.parameter.action === 'status-overview' || e.parameter.file === 'status-overview')) {
       const allFiles = folder.getFiles();
       let overviewFile = null;
@@ -69,23 +101,56 @@ function doGet(e) {
       }
     }
 
-    // 2. ดึงไฟล์ Plan.json ตามปกติ
-    const files = folder.getFilesByName(TARGET_FILE_NAME);
-    
-    let content = { scheduledJobs: [], nests: {}, completedPdHistory: {} };
+    // 2. ดึงไฟล์ machine_settings.json โดยตรง (ถ้ามี parameter action=machine-settings)
+    if (e && e.parameter && (e.parameter.action === 'machine-settings' || e.parameter.file === 'machine-settings')) {
+      const msData = readJsonFile(folder, MACHINE_SETTINGS_FILE_NAME);
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'success',
+        fileName: MACHINE_SETTINGS_FILE_NAME,
+        data: msData || {}
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 3. ดึงข้อมูลรวม (Plan.json รวมกับ machine_settings.json และ completed_pds.json)
+    let content = { scheduledJobs: [], nests: {}, completedPdHistory: {}, workCenters: {}, workCenterOrder: [] };
     let lastModified = null;
-    
-    if (files.hasNext()) {
-      const file = files.next();
+
+    // อ่าน Plan.json
+    const planFiles = folder.getFilesByName(TARGET_FILE_NAME);
+    if (planFiles.hasNext()) {
+      const file = planFiles.next();
       lastModified = file.getLastUpdated().toISOString();
-      const rawText = file.getBlob().getDataAsString('UTF-8');
       try {
-        content = JSON.parse(rawText);
+        const parsed = JSON.parse(file.getBlob().getDataAsString('UTF-8'));
+        if (parsed && typeof parsed === 'object') {
+          content = Object.assign(content, parsed);
+        }
       } catch (err) {
-        content = { raw: rawText, error: 'JSON parse warning' };
+        // ignore parse error
       }
     }
-    
+
+    // อ่าน machine_settings.json เพื่อรวมค่าการตั้งค่าเครื่องจักรล่าสุด
+    const machineSettings = readJsonFile(folder, MACHINE_SETTINGS_FILE_NAME);
+    if (machineSettings) {
+      if (machineSettings.workCenters) content.workCenters = machineSettings.workCenters;
+      if (machineSettings.workCenterOrder) content.workCenterOrder = machineSettings.workCenterOrder;
+    }
+
+    // อ่าน completed_pds.json เพื่อรวมรายการ PD ที่เสร็จแล้ว
+    const completedPds = readJsonFile(folder, COMPLETED_PDS_FILE_NAME);
+    if (completedPds) {
+      if (Array.isArray(completedPds)) {
+        content.completedPdHistory = content.completedPdHistory || {};
+        completedPds.forEach(item => {
+          const id = typeof item === 'string' ? item : (item.id || item.woId || item.pdId);
+          if (id) content.completedPdHistory[id] = true;
+        });
+      } else if (typeof completedPds === 'object') {
+        content.completedPdHistory = Object.assign(content.completedPdHistory || {}, completedPds);
+      }
+    }
+
     const responsePayload = {
       status: 'success',
       folderId: TARGET_FOLDER_ID,
@@ -93,11 +158,11 @@ function doGet(e) {
       lastModified: lastModified,
       data: content
     };
-    
+
     return ContentService
       .createTextOutput(JSON.stringify(responsePayload))
       .setMimeType(ContentService.MimeType.JSON);
-      
+
   } catch (error) {
     return ContentService
       .createTextOutput(JSON.stringify({
@@ -109,21 +174,21 @@ function doGet(e) {
 }
 
 /**
- * จัดการคำขอแบบ POST (บันทึก / ปรับปรุงข้อมูล Plan.json)
+ * จัดการคำขอแบบ POST (บันทึกข้อมูล Plan.json พร้อมแยก machine_settings.json และ completed_pds.json)
  */
 function doPost(e) {
   try {
     const folder = DriveApp.getFolderById(TARGET_FOLDER_ID);
     let postData = '';
-    
+
     if (e && e.postData && e.postData.contents) {
       postData = e.postData.contents;
     }
-    
+
     if (!postData) {
       throw new Error('No data received in payload');
     }
-    
+
     // ตรวจสอบความถูกต้องของ JSON
     let parsedJson;
     try {
@@ -131,37 +196,43 @@ function doPost(e) {
     } catch (err) {
       throw new Error('Invalid JSON format: ' + err.message);
     }
-    
+
     // ลบ formattedRows หากมี เพื่อประหยัดพื้นที่จัดเก็บ
     if (parsedJson && parsedJson.formattedRows) {
       delete parsedJson.formattedRows;
     }
-    
+
+    // 1. บันทึกไฟล์ Plan.json (แผนงานรวมทั้งหมด)
     const formattedContent = JSON.stringify(parsedJson, null, 2);
-    const files = folder.getFilesByName(TARGET_FILE_NAME);
-    let targetFile;
-    
-    if (files.hasNext()) {
-      // เขียนทับไฟล์เดิม
-      targetFile = files.next();
-      targetFile.setContent(formattedContent);
-    } else {
-      // สร้างไฟล์ใหม่
-      targetFile = folder.createFile(TARGET_FILE_NAME, formattedContent, MimeType.PLAIN_TEXT);
+    const targetFile = saveTextFile(folder, TARGET_FILE_NAME, formattedContent, MimeType.PLAIN_TEXT);
+
+    // 2. แยกบันทึกไฟล์ machine_settings.json (ข้อมูลตั้งค่าเครื่องจักร)
+    if (parsedJson.workCenters) {
+      const machinePayload = {
+        updatedAt: new Date().toISOString(),
+        workCenters: parsedJson.workCenters,
+        workCenterOrder: parsedJson.workCenterOrder || Object.keys(parsedJson.workCenters)
+      };
+      saveTextFile(folder, MACHINE_SETTINGS_FILE_NAME, JSON.stringify(machinePayload, null, 2), MimeType.PLAIN_TEXT);
     }
-    
+
+    // 3. แยกบันทึกไฟล์ completed_pds.json (ข้อมูล PD ที่ผลิตเสร็จ)
+    if (parsedJson.completedPdHistory) {
+      saveTextFile(folder, COMPLETED_PDS_FILE_NAME, JSON.stringify(parsedJson.completedPdHistory, null, 2), MimeType.PLAIN_TEXT);
+    }
+
     const responsePayload = {
       status: 'success',
-      message: 'Plan.json updated successfully in Google Drive',
+      message: 'Plan.json, machine_settings.json, and completed_pds.json updated successfully in Google Drive',
       fileId: targetFile.getId(),
       lastModified: targetFile.getLastUpdated().toISOString(),
       sizeBytes: targetFile.getSize()
     };
-    
+
     return ContentService
       .createTextOutput(JSON.stringify(responsePayload))
       .setMimeType(ContentService.MimeType.JSON);
-      
+
   } catch (error) {
     return ContentService
       .createTextOutput(JSON.stringify({

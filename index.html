@@ -1372,9 +1372,11 @@
           <!-- Data Files Overview -->
           <div style="background: rgba(0,0,0,0.03); border: 1px solid var(--border-glass); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 11px;">
             <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">📂 รายการไฟล์ข้อมูลที่เชื่อมต่อกับโฟลเดอร์นี้:</div>
-            <div style="display: flex; flex-direction: column; gap: 4px; color: var(--text-secondary);">
-              <div>• <strong style="color: var(--text-primary);">Plan.json:</strong> เก็บแผนงาน Gantt, PD ที่ผลิตเสร็จ, และค่า Setting เครื่องจักร Work Center ทั้งหมด (ชม.ทำงาน/วัน, เครื่องช่วยงาน, เวลาย้ายงาน, Lead Time)</div>
-              <div>• <strong style="color: var(--text-primary);">LN Status Overview.xls:</strong> ข้อมูล Status Overview สำหรับนำเข้า Backlog (อ่านจาก Sheet: <strong>data</strong>)</div>
+            <div style="display: flex; flex-direction: column; gap: 5px; color: var(--text-secondary);">
+              <div>• <strong style="color: var(--text-primary);">Plan.json:</strong> แผนงานหลักบน Gantt Chart, สถานะงาน, และการตั้งค่าทั้งหมด</div>
+              <div>• <strong style="color: #38bdf8;">machine_settings.json:</strong> ค่า Setting เครื่องจักร Work Centers ทั้งหมด (ชม.ทำงาน/วัน, เครื่องช่วยงาน, เวลาย้ายงาน, Lead Time)</div>
+              <div>• <strong style="color: #22c55e;">completed_pds.json:</strong> รายการ PD ที่ผลิตเสร็จแล้ว (Completed PDs History)</div>
+              <div>• <strong style="color: #f59e0b;">LN Status Overview.xlsx / .xls:</strong> ไฟล์สถานะภาพรวมสำหรับนำเข้า Backlog (อ่านจาก Sheet: <strong>data</strong>)</div>
             </div>
           </div>
 
