@@ -268,6 +268,7 @@ class App {
         if (!result) return;
         state.updateWorkCenters(result.workCenters, result.workCenterOrder);
         this.wcSettingsModal.classList.add('hidden');
+        state.ganttController?.showToast('💾 บันทึกค่า Work Center Settings และซิงค์ขึ้น Cloud สำเร็จ', 'success');
       });
     }
 

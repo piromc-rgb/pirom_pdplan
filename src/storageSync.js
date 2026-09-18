@@ -267,7 +267,15 @@ export class StorageSyncManager {
     if (data.priorityColors) this.state.priorityColors = data.priorityColors;
     if (data.projectColors) this.state.projectColors = data.projectColors;
     if (data.customerColors) this.state.customerColors = data.customerColors;
-    if (data.workCenters) this.state.workCenters = data.workCenters;
+    if (data.workCenters) {
+      this.state.workCenters = data.workCenters;
+      try {
+        localStorage.setItem('pdplan_machine_settings', JSON.stringify({
+          workCenters: data.workCenters,
+          workCenterOrder: data.workCenterOrder || this.state.workCenterOrder
+        }));
+      } catch (e) {}
+    }
     if (data.workCenterOrder) this.state.workCenterOrder = data.workCenterOrder;
     if (data.timelineOffset !== undefined) this.state.timelineOffset = data.timelineOffset;
     if (data.activeScale) this.state.activeScale = data.activeScale;
@@ -428,11 +436,14 @@ export class StorageSyncManager {
     document.getElementById('btn-modal-cloud-save')?.addEventListener('click', () => {
       const payload = this.state.buildPlanPayload();
       this.pushToCloud(payload, true);
-      this.showToast('☁️ บันทึกข้อมูลขึ้น Cloud (Cloud Save)...', 'info');
+      const wcCount = Object.keys(this.state?.workCenters || {}).length;
+      this.showToast(`☁️ Cloud Save: บันทึกแผนงาน และค่า Setting Work Center (${wcCount} เครื่อง) ขึ้น Cloud สำเร็จ`, 'success');
     });
 
     document.getElementById('btn-modal-local-save')?.addEventListener('click', () => {
       this.exportBackupJson();
+      const wcCount = Object.keys(this.state?.workCenters || {}).length;
+      this.showToast(`💾 Local Save: บันทึกไฟล์ Plan.json (รวม Work Center Settings ${wcCount} เครื่อง) ลงเครื่องสำเร็จ`, 'success');
     });
 
     document.getElementById('btn-modal-cloud-pull')?.addEventListener('click', () => {
@@ -552,6 +563,10 @@ export class StorageSyncManager {
 
     const scheduledEl = document.getElementById('sync-modal-scheduled-count');
     if (scheduledEl) scheduledEl.innerText = `${scheduledCount} Tasks`;
+
+    const wcCount = Object.keys(this.state?.workCenters || {}).length;
+    const wcEl = document.getElementById('sync-modal-wc-count');
+    if (wcEl) wcEl.innerText = `${wcCount} เครื่อง`;
 
     const inputFolder = document.getElementById('input-drive-folder-url');
     if (inputFolder) inputFolder.value = currentFolderUrl;

@@ -1345,7 +1345,7 @@
 
           <!-- Summary Status Box -->
           <div style="background: rgba(2, 132, 199, 0.06); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; font-size: 11.5px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 10px; font-size: 11.5px;">
               <div>
                 <span style="color: var(--text-secondary);">สถานะการเชื่อมต่อ:</span>
                 <div id="sync-modal-status-text" style="font-weight: bold; margin-top: 2px;">พร้อมใช้งาน</div>
@@ -1362,6 +1362,10 @@
                 <span style="color: var(--text-secondary);">งานที่วางแผนอยู่:</span>
                 <div id="sync-modal-scheduled-count" style="font-weight: bold; color: var(--accent-teal); margin-top: 2px;">0 Tasks</div>
               </div>
+              <div>
+                <span style="color: var(--text-secondary);">Work Center (เครื่องจักร):</span>
+                <div id="sync-modal-wc-count" style="font-weight: bold; color: #38bdf8; margin-top: 2px;">0 เครื่อง</div>
+              </div>
             </div>
           </div>
 
@@ -1369,7 +1373,7 @@
           <div style="background: rgba(0,0,0,0.03); border: 1px solid var(--border-glass); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 11px;">
             <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">📂 รายการไฟล์ข้อมูลที่เชื่อมต่อกับโฟลเดอร์นี้:</div>
             <div style="display: flex; flex-direction: column; gap: 4px; color: var(--text-secondary);">
-              <div>• <strong style="color: var(--text-primary);">Plan.json:</strong> เก็บแผนงานบน Gantt, PD ที่ complete และ Machine Settings</div>
+              <div>• <strong style="color: var(--text-primary);">Plan.json:</strong> เก็บแผนงาน Gantt, PD ที่ผลิตเสร็จ, และค่า Setting เครื่องจักร Work Center ทั้งหมด (ชม.ทำงาน/วัน, เครื่องช่วยงาน, เวลาย้ายงาน, Lead Time)</div>
               <div>• <strong style="color: var(--text-primary);">LN Status Overview.xls:</strong> ข้อมูล Status Overview สำหรับนำเข้า Backlog (อ่านจาก Sheet: <strong>data</strong>)</div>
             </div>
           </div>

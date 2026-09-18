@@ -129,65 +129,79 @@ class CentralState {
 
     // Work Centers / Machines metadata
     this.workCenters = {
-      'DEA012': { capacity: 1, color: 'var(--accent-teal)', name: 'CNC Laser' },
-      'DEA013': { capacity: 1, color: 'var(--accent-purple)', name: 'CNC ตัดแก๊ส' },
-      'DEA016': { capacity: 1, color: 'var(--accent-blue)', name: 'CNC Laser 2' },
-      'DEA021': { capacity: 1, color: 'var(--accent-cyan)', name: 'CNC TL2 2' },
-      'DEA022': { capacity: 1, color: 'var(--accent-red)', name: 'CNC ST30' },
-      'DEA023': { capacity: 1, color: 'var(--accent-orange)', name: 'CNC VF7' },
-      'DEA024': { capacity: 1, color: 'var(--accent-magenta)', name: 'CNC VF4' },
-      'DEA025': { capacity: 1, color: 'var(--accent-green)', name: 'CNC HDT1870' },
-      'DEA026': { capacity: 1, color: 'var(--accent-teal)', name: 'CNC TM3' },
-      'DEA027': { capacity: 1, color: 'var(--accent-cyan)', name: 'CNC CK6' },
-      'DEA042': { capacity: 1, color: 'var(--accent-purple)', name: 'เครื่องอัดไฮดรอลิก RAS306 30T' },
-      'DEA051': { capacity: 1, color: 'var(--accent-blue)', name: 'เจาะ' },
-      'DEA052': { capacity: 1, color: 'var(--accent-cyan)', name: 'TAP' },
-      'DEA062': { capacity: 1, color: 'var(--accent-red)', name: 'ปรับแต่ง' },
-      'DEB013': { capacity: 1, color: 'var(--accent-orange)', name: 'เชื่อม CO2 WD' },
-      'DEB021': { capacity: 1, color: 'var(--accent-magenta)', name: 'ทำสี' },
-      'DEB011': { capacity: 1, color: 'var(--accent-green)', name: 'เชื่อม ROBOT WD' },
-      'DEC001': { capacity: 1, color: 'var(--accent-teal)', name: 'ASSY ประกอบแมคคานิก' },
-      'DEA011': { capacity: 1, color: 'var(--accent-purple)', name: 'เลื่อย' },
-      'DEA032': { capacity: 1, color: 'var(--accent-blue)', name: 'กัดเฟือง - HOB' },
-      'DEA031': { capacity: 1, color: 'var(--accent-cyan)', name: 'พับ' },
-      'SUB036': { capacity: 1, color: 'var(--accent-red)', name: 'หุ้มยาง' },
-      'DEA041': { capacity: 1, color: 'var(--accent-orange)', name: 'เครื่องอัดไฮดรอลิก ไฟฟ่า 100T' },
-      'DEA033': { capacity: 1, color: 'var(--accent-magenta)', name: 'ชุบแข็ง' },
-      'SUB002': { capacity: 1, color: 'var(--accent-green)', name: 'ชุบแข็ง' },
-      'SUB002-2': { capacity: 1, color: 'var(--accent-teal)', name: 'รมดำ' },
-      'SUB038': { capacity: 1, color: 'var(--accent-purple)', name: 'ชุบชิงค์' },
-      'SUB029': { capacity: 1, color: 'var(--accent-blue)', name: 'ชุบชิงค์' },
-      'DEB012': { capacity: 1, color: 'var(--accent-cyan)', name: 'เชื่อม ARGON WD' },
-      'SUB031': { capacity: 1, color: 'var(--accent-red)', name: 'หุ้มยาง' },
-      'DEA015': { capacity: 1, color: 'var(--accent-orange)', name: 'Plasma Cutting' },
-      'SUB020': { capacity: 1, color: 'var(--accent-magenta)', name: 'จ้างผลิตชิ้นงาน(ไม่รวมMAT)' },
-      'SUB020-2': { capacity: 1, color: 'var(--accent-green)', name: 'กัดเฟือง (HOB)' },
-      'DED001': { capacity: 1, color: 'var(--accent-teal)', name: 'ASSY ประกอบไฟฟ้า' },
-      'DEA017': { capacity: 1, color: 'var(--accent-purple)', name: 'เลื่อย 2' },
-      'SUB027': { capacity: 1, color: 'var(--accent-blue)', name: 'WIRE CUT' },
-      'SUB027-2': { capacity: 1, color: 'var(--accent-cyan)', name: 'กัดเฟือง (HOB)' },
-      'SUB027-3': { capacity: 1, color: 'var(--accent-red)', name: 'ชุบแข็ง' },
-      'SUB001': { capacity: 1, color: 'var(--accent-orange)', name: 'ชุบชิงค์' },
-      'SUB007': { capacity: 1, color: 'var(--accent-magenta)', name: 'หุ้มยาง' },
-      'SUB005': { capacity: 1, color: 'var(--accent-green)', name: 'หุ้มยาง' },
-      'SUB026': { capacity: 1, color: 'var(--accent-teal)', name: 'งานกลึง-ภายนอก' },
-      'SUB043': { capacity: 1, color: 'var(--accent-purple)', name: 'Color Powder Coat' },
-      'SUB044': { capacity: 1, color: 'var(--accent-blue)', name: 'ตัด(ภายนอก)' },
-      'DEB014': { capacity: 1, color: 'var(--accent-cyan)', name: 'เชื่อมไฟฟ้า WD' },
-      'SUB004': { capacity: 1, color: 'var(--accent-red)', name: 'เจียรไน' },
-      'SUB004-2': { capacity: 1, color: 'var(--accent-orange)', name: 'WIRE CUT' },
-      'DM0001': { capacity: 1, color: 'var(--accent-magenta)', name: 'Install machine' },
-      'DEA061': { capacity: 1, color: 'var(--accent-green)', name: 'พ่นทราย' },
-      'SUB039': { capacity: 1, color: 'var(--accent-teal)', name: 'ชุบ Hot Dip Galvanized' }
+      'DEA012': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-teal)', name: 'CNC Laser', altMachines: 'DEA016', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA016': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-teal)', name: 'CNC Laser 2', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA021': { capacity: 1, workHoursPerDay: 10, color: 'var(--accent-cyan)', name: 'CNC TL2 2', altMachines: 'DEA022', transferMinutes: 14, leadTimeDays: 0 },
+      'DEA022': { capacity: 1, workHoursPerDay: 10, color: 'var(--accent-red)', name: 'CNC ST30', altMachines: 'DEA021', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA023': { capacity: 1, workHoursPerDay: 10, color: 'var(--accent-orange)', name: 'CNC VF7', altMachines: 'DEA024', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA024': { capacity: 1, workHoursPerDay: 20, color: 'var(--accent-magenta)', name: 'CNC VF4', altMachines: 'DEA023', transferMinutes: 20, leadTimeDays: 0 },
+      'DEA025': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-green)', name: 'CNC HDT1870', altMachines: '', transferMinutes: 20, leadTimeDays: 0 },
+      'DEA026': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-teal)', name: 'CNC TM3', altMachines: '', transferMinutes: 8, leadTimeDays: 0 },
+      'DEA027': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-cyan)', name: 'CNC CK6', altMachines: '', transferMinutes: 6, leadTimeDays: 0 },
+      'DEA013': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-purple)', name: 'CNC ตัดแก๊ส', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA042': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-purple)', name: 'เครื่องอัดไฮดรอลิก RAS306 30T', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA051': { capacity: 2, workHoursPerDay: 8, color: 'var(--accent-blue)', name: 'เจาะ', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA052': { capacity: 2, workHoursPerDay: 8, color: 'var(--accent-cyan)', name: 'TAP', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA062': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-red)', name: 'ปรับแต่ง', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEB013': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-orange)', name: 'เชื่อม CO2 WD', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEB021': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-magenta)', name: 'ทำสี', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEB011': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-green)', name: 'เชื่อม ROBOT WD', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEC001': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-teal)', name: 'ASSY ประกอบแมคคานิก', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA011': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-purple)', name: 'เลื่อย', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA032': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-blue)', name: 'กัดเฟือง - HOB', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA031': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-cyan)', name: 'พับ', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB036': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-red)', name: 'หุ้มยาง', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA041': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-orange)', name: 'เครื่องอัดไฮดรอลิก ไฟฟ่า 100T', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA033': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-magenta)', name: 'ชุบแข็ง', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB002': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-green)', name: 'ชุบแข็ง', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB002-2': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-teal)', name: 'รมดำ', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB038': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-purple)', name: 'ชุบชิงค์', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB029': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-blue)', name: 'ชุบชิงค์', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEB012': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-cyan)', name: 'เชื่อม ARGON WD', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB031': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-red)', name: 'หุ้มยาง', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA015': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-orange)', name: 'Plasma Cutting', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB020': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-magenta)', name: 'จ้างผลิตชิ้นงาน(ไม่รวมMAT)', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB020-2': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-green)', name: 'กัดเฟือง (HOB)', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DED001': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-teal)', name: 'ASSY ประกอบไฟฟ้า', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA017': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-purple)', name: 'เลื่อย 2', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB027': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-blue)', name: 'WIRE CUT', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB027-2': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-cyan)', name: 'กัดเฟือง (HOB)', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB027-3': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-red)', name: 'ชุบแข็ง', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB001': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-orange)', name: 'ชุบชิงค์', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB007': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-magenta)', name: 'หุ้มยาง', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB005': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-green)', name: 'หุ้มยาง', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB026': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-teal)', name: 'งานกลึง-ภายนอก', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB043': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-purple)', name: 'Color Powder Coat', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB044': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-blue)', name: 'ตัด(ภายนอก)', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEB014': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-cyan)', name: 'เชื่อมไฟฟ้า WD', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB004': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-red)', name: 'เจียรไน', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB004-2': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-orange)', name: 'WIRE CUT', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DM0001': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-magenta)', name: 'Install machine', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'DEA061': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-green)', name: 'พ่นทราย', altMachines: '', transferMinutes: 10, leadTimeDays: 0 },
+      'SUB039': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-teal)', name: 'ชุบ Hot Dip Galvanized', altMachines: '', transferMinutes: 10, leadTimeDays: 0 }
     };
 
     this.workCenterOrder = [
-      'DEA012', 'DEA013', 'DEA016', 'DEA021', 'DEA022', 'DEA023', 'DEA024', 'DEA025', 'DEA026', 'DEA027',
+      'DEA012', 'DEA016', 'DEA021', 'DEA022', 'DEA023', 'DEA024', 'DEA025', 'DEA026', 'DEA027', 'DEA013',
       'DEA042', 'DEA051', 'DEA052', 'DEA062', 'DEB013', 'DEB021', 'DEB011', 'DEC001', 'DEA011', 'DEA032',
       'DEA031', 'SUB036', 'DEA041', 'DEA033', 'SUB002', 'SUB002-2', 'SUB038', 'SUB029', 'DEB012', 'SUB031',
       'DEA015', 'SUB020', 'SUB020-2', 'DED001', 'DEA017', 'SUB027', 'SUB027-2', 'SUB027-3', 'SUB001', 'SUB007',
       'SUB005', 'SUB026', 'SUB043', 'SUB044', 'DEB014', 'SUB004', 'SUB004-2', 'DM0001', 'DEA061', 'SUB039'
     ];
+
+    // Restore Work Center Settings from dedicated local cache if present
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const savedWc = localStorage.getItem('pdplan_machine_settings');
+        if (savedWc) {
+          const parsed = JSON.parse(savedWc);
+          if (parsed && parsed.workCenters && parsed.workCenterOrder) {
+            this.workCenters = parsed.workCenters;
+            this.workCenterOrder = parsed.workCenterOrder;
+          }
+        }
+      }
+    } catch (e) {}
 
     // Employees with their skills
     this.employees = [
@@ -384,6 +398,15 @@ class CentralState {
     this.saveStateToHistory();
     this.workCenters = newWorkCenters;
     this.workCenterOrder = newOrder;
+
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('pdplan_machine_settings', JSON.stringify({
+          workCenters: this.workCenters,
+          workCenterOrder: this.workCenterOrder
+        }));
+      }
+    } catch (e) {}
     
     // Recalculate estHours for all scheduled jobs based on the updated machine capacities
     this.scheduledJobs.forEach(job => {
@@ -404,6 +427,9 @@ class CentralState {
     });
 
     this.savePlanToFile();
+    if (this.storageSync) {
+      this.storageSync.pushToCloud(this.buildPlanPayload(), true);
+    }
     this.notify();
   }
 
