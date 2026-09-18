@@ -2884,5 +2884,21 @@ body.dark-theme .pd-header-item {
   border-left: 4px solid #0284c7;
 }
 
+/* Modal Backdrop for Setting Location & Cloud Sync */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(7, 11, 19, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 
 

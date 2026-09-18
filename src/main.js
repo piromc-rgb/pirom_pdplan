@@ -150,6 +150,7 @@ class App {
     this.qcCheck = new QcCheckController(state);
     this.storageSync = new StorageSyncManager(state);
     state.storageSync = this.storageSync;
+    window.storageSyncManager = this.storageSync;
     this.storageSync.pullFromCloud(true);
     
     // Subscribe controllers to state changes
@@ -1350,6 +1351,15 @@ class App {
             menu.classList.add('hidden');
           });
         });
+
+        // Explicitly wire btn-storage-sync to open sync modal
+        const btnStorageSync = document.getElementById('btn-storage-sync');
+        if (btnStorageSync) {
+          btnStorageSync.addEventListener('click', () => {
+            menu.classList.add('hidden');
+            this.storageSync?.openSyncModal();
+          });
+        }
         const checkShowAllWc = document.getElementById('check-show-all-wc');
         if (checkShowAllWc) {
           checkShowAllWc.checked = state.showAllWorkCenters;
