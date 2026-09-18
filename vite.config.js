@@ -29,7 +29,10 @@ export default defineConfig({
       name: 'pd-storage-api',
       configureServer(server) {
         server.middlewares.use(async (req, res, next) => {
-          if (req.url === '/api/pd' || req.url?.startsWith('/api/pd?')) {
+          const rawUrl = req.url || '';
+          const cleanUrl = rawUrl.replace(/^\/pirom_pdplan/, '');
+
+          if (cleanUrl === '/api/pd' || cleanUrl.startsWith('/api/pd?')) {
             const pdFilePath = path.resolve(__dirname, 'pd.md');
             
             if (req.method === 'GET') {
@@ -89,7 +92,7 @@ export default defineConfig({
             }
           }
 
-          if (req.url === '/api/plan' || req.url?.startsWith('/api/plan?')) {
+          if (cleanUrl === '/api/plan' || cleanUrl.startsWith('/api/plan?')) {
             const planFilePath = path.resolve(__dirname, 'Plan.json');
             const machineFilePath = path.resolve(__dirname, 'machine_settings.json');
             const completedFilePath = path.resolve(__dirname, 'completed_pds.json');
@@ -171,7 +174,7 @@ export default defineConfig({
             }
           }
 
-          if (req.url === '/api/qc-log' || req.url?.startsWith('/api/qc-log?')) {
+          if (cleanUrl === '/api/qc-log' || cleanUrl.startsWith('/api/qc-log?')) {
             try {
               const fetchUrl = 'https://docs.google.com/spreadsheets/d/1w8B0DyG7PEy_YLHM5HCI_eVU_nt4HvA8xHWShuLRL_8/export?format=csv&gid=1814251242';
               const fetchRes = await fetch(fetchUrl);
@@ -193,7 +196,7 @@ export default defineConfig({
             }
           }
 
-          if (req.url === '/api/status-overview' || req.url?.startsWith('/api/status-overview?')) {
+          if (cleanUrl === '/api/status-overview' || cleanUrl.startsWith('/api/status-overview?')) {
             const candidateNames = [
               'LN Status Overview.xls',
               'LN Status Overview.xlsx',
