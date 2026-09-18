@@ -15,6 +15,7 @@ import { DailyScheduleController } from './dailySchedule.js';
 import { AssemblyTreeController, matchesAssemblyQuery } from './assemblyTree.js';
 import { ContinuityAnalysisController } from './continuityAnalysis.js';
 import { QcCheckController } from './qcCheck.js';
+import { StorageSyncManager } from './storageSync.js';
 
 function getBaseDate() {
   return new Date(2026, 5, 22, 8, 0, 0); // Fixed epoch: Mon June 22 2026 8:00
@@ -147,6 +148,9 @@ class App {
     this.assemblyTree = new AssemblyTreeController(state, this.gantt);
     this.continuityAnalysis = new ContinuityAnalysisController(state);
     this.qcCheck = new QcCheckController(state);
+    this.storageSync = new StorageSyncManager(state);
+    state.storageSync = this.storageSync;
+    this.storageSync.pullFromCloud(true);
     
     // Subscribe controllers to state changes
     state.subscribe(() => this.renderAll());

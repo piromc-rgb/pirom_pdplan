@@ -2173,45 +2173,7 @@ class CentralState {
     this.notify();
   }
 
-  loadPlanFromFile() {
-    fetch('/api/plan')
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.scheduledJobs && Array.isArray(data.scheduledJobs)) {
-          this.scheduledJobs = data.scheduledJobs;
-          this.nests = data.nests || {};
-          this.assemblyLinks = data.assemblyLinks || [];
-          this.lockedProjects = data.lockedProjects || {};
-          if (data.priorityColors) this.priorityColors = data.priorityColors;
-          if (data.projectColors) this.projectColors = data.projectColors;
-          if (data.customerColors) this.customerColors = data.customerColors;
-          if (data.workCenters) this.workCenters = data.workCenters;
-          if (data.workCenterOrder) this.workCenterOrder = data.workCenterOrder;
-          if (data.timelineOffset !== undefined) this.timelineOffset = data.timelineOffset;
-          if (data.activeScale) this.activeScale = data.activeScale;
-          if (data.completedPdHistory) this.completedPdHistory = data.completedPdHistory;
-          if (data.favoritePDs) this.favoritePDs = data.favoritePDs;
-          if (data.removedStepHistory) this.removedStepHistory = data.removedStepHistory;
-          // A PD marked "ผลิตจริงเสร็จแล้ว" never comes back onto the board on load,
-          // whether it's sitting in this file's scheduledJobs or in the backlog
-          // snapshot loadWorkOrdersFromFile already applied (order between the two
-          // isn't guaranteed, so both re-apply the filter against the latest history).
-          this.scheduledJobs = this.scheduledJobs.filter(j => !this.isPdInCompletedHistory(j.woId) && !this.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name));
-          this.workOrders = this.workOrders.filter(wo => !this.isPdInCompletedHistory(wo.id));
-          this.workOrders.forEach(wo => {
-            wo.steps = wo.steps.filter(step => !this.isStepIdentityRemoved(wo.id, step.machine, step.name));
-          });
-          this.deduplicateAllWorkOrders();
-          if (this.ganttController && this.scheduledJobs.length > 0) {
-            this.ganttController.fitTasks(this.scheduledJobs);
-          }
-          this.notify();
-        }
-      })
-      .catch(err => console.error('Error loading Plan from file:', err));
-  }
-
-  savePlanToFile() {
+  buildPlanPayload() {
     const formattedRows = this.scheduledJobs.map(job => {
       const dStart = this.workingHourToDate(job.startHour);
       const dEnd = this.workingHourToDate(job.startHour + job.estHours);
@@ -2231,7 +2193,7 @@ class CentralState {
       };
     });
     
-    const payload = {
+    return {
       scheduledJobs: this.scheduledJobs,
       nests: this.nests,
       assemblyLinks: this.assemblyLinks || [],
@@ -2248,18 +2210,88 @@ class CentralState {
       removedStepHistory: this.removedStepHistory || {},
       formattedRows
     };
-    
-    fetch('/api/plan', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    })
-    .then(res => {
-      if (!res.ok) console.error('Failed to save Plan to file');
-    })
-    .catch(err => console.error('Error saving Plan to file:', err));
+  }
+
+  applyPlanData(data) {
+    if (!data) return;
+    if (data.scheduledJobs && Array.isArray(data.scheduledJobs)) {
+      this.scheduledJobs = data.scheduledJobs;
+      this.nests = data.nests || {};
+      this.assemblyLinks = data.assemblyLinks || [];
+      this.lockedProjects = data.lockedProjects || {};
+      if (data.priorityColors) this.priorityColors = data.priorityColors;
+      if (data.projectColors) this.projectColors = data.projectColors;
+      if (data.customerColors) this.customerColors = data.customerColors;
+      if (data.workCenters) this.workCenters = data.workCenters;
+      if (data.workCenterOrder) this.workCenterOrder = data.workCenterOrder;
+      if (data.timelineOffset !== undefined) this.timelineOffset = data.timelineOffset;
+      if (data.activeScale) this.activeScale = data.activeScale;
+      if (data.completedPdHistory) this.completedPdHistory = data.completedPdHistory;
+      if (data.favoritePDs) this.favoritePDs = data.favoritePDs;
+      if (data.removedStepHistory) this.removedStepHistory = data.removedStepHistory;
+
+      this.scheduledJobs = this.scheduledJobs.filter(j => !this.isPdInCompletedHistory(j.woId) && !this.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name));
+      this.workOrders = this.workOrders.filter(wo => !this.isPdInCompletedHistory(wo.id));
+      this.workOrders.forEach(wo => {
+        wo.steps = wo.steps.filter(step => !this.isStepIdentityRemoved(wo.id, step.machine, step.name));
+      });
+      this.deduplicateAllWorkOrders();
+      if (this.ganttController && this.scheduledJobs.length > 0) {
+        this.ganttController.fitTasks(this.scheduledJobs);
+      }
+      this.notify();
+    }
+  }
+
+  loadPlanFromFile() {
+    if (this.storageSync) {
+      this.storageSync.pullFromCloud(true);
+      return;
+    }
+
+    fetch('/api/plan')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.scheduledJobs && Array.isArray(data.scheduledJobs)) {
+          this.applyPlanData(data);
+        }
+      })
+      .catch(err => {
+        const cached = localStorage.getItem('pdplan_cached_plan');
+        if (cached) {
+          try {
+            this.applyPlanData(JSON.parse(cached));
+          } catch (e) {}
+        }
+      });
+  }
+
+  savePlanToFile() {
+    const payload = this.buildPlanPayload();
+
+    // 1. Sync to Cloud Manager (handles localStorage cache + Google Drive push)
+    if (this.storageSync) {
+      this.storageSync.pushToCloud(payload);
+    } else {
+      try {
+        localStorage.setItem('pdplan_cached_plan', JSON.stringify(payload));
+      } catch (e) {}
+    }
+
+    // 2. Also save to local dev server /api/plan if running on localhost
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      fetch('/api/plan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      })
+      .then(res => {
+        if (!res.ok) console.warn('Failed to save Plan to local /api/plan');
+      })
+      .catch(err => console.warn('Error saving Plan to local /api/plan:', err));
+    }
   }
 }
 

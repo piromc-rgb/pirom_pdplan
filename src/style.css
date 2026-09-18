@@ -2800,5 +2800,89 @@ body.dark-theme .pd-header-item {
   background: rgba(255, 255, 255, 0.04);
 }
 
+/* Cloud Sync Status Pills & Toast */
+.sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 12px;
+  line-height: 1.3;
+  margin-left: 2px;
+  transition: all 0.2s ease;
+}
+.sync-pill.success {
+  background: rgba(34, 197, 94, 0.15);
+  color: #16a34a;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+.sync-pill.syncing {
+  background: rgba(2, 132, 199, 0.15);
+  color: #0284c7;
+  border: 1px solid rgba(2, 132, 199, 0.35);
+}
+.sync-pill.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+.sync-pill.local {
+  background: rgba(148, 163, 184, 0.2);
+  color: var(--text-primary);
+  border: 1px solid var(--border-glass);
+}
+.sync-pill.offline {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.spin {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+/* Sync Toast Notification */
+.sync-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  transform: translateY(15px);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(8px);
+}
+.sync-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.sync-toast.success {
+  border-left: 4px solid #22c55e;
+}
+.sync-toast.error {
+  border-left: 4px solid #ef4444;
+}
+.sync-toast.info {
+  border-left: 4px solid #0284c7;
+}
+
 
 
