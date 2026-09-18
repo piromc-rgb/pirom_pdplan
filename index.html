@@ -245,9 +245,11 @@
                   <button id="btn-export-plan" class="dropdown-item">Save Plan (.json)</button>
                   <button id="btn-import-plan" class="dropdown-item">Open Plan (.json)</button>
                   <input type="file" id="input-import-plan" accept=".json" style="display: none;" />
-                  <button id="btn-storage-sync" class="dropdown-item" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">☁️ Cloud Sync (Google Drive)</span>
-                    <span id="sync-status-badge" class="sync-pill local">💾 Cache</span>
+                  <button id="btn-storage-sync" class="dropdown-item" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;">
+                    <span style="display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-weight: 600;">
+                      📁 Setting Location Keep Data File
+                    </span>
+                    <span id="sync-status-badge" class="sync-pill local" style="white-space: nowrap;">💾 Cache</span>
                   </button>
                   <button id="btn-export-csv" class="dropdown-item">Export to Excel/Google Sheets (.csv)</button>
                   <button id="btn-workcenter-settings" class="dropdown-item">⚙️ Machine Settings (ตั้งค่าเครื่องจักร)</button>

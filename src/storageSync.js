@@ -50,6 +50,25 @@ export class StorageSyncManager {
     this.updateStatusBadge();
   }
 
+  getDriveFolderUrl() {
+    return localStorage.getItem('PDPLAN_DRIVE_FOLDER_URL') || DEFAULT_DRIVE_FOLDER_URL;
+  }
+
+  setDriveFolderUrl(url) {
+    const trimmed = (url || '').trim();
+    if (trimmed) {
+      localStorage.setItem('PDPLAN_DRIVE_FOLDER_URL', trimmed);
+    } else {
+      localStorage.removeItem('PDPLAN_DRIVE_FOLDER_URL');
+    }
+  }
+
+  getDriveFolderId() {
+    const url = this.getDriveFolderUrl();
+    const match = url.match(/folders\/([a-zA-Z0-9_-]+)/);
+    return match ? match[1] : DEFAULT_DRIVE_FOLDER_ID;
+  }
+
   updateStatusBadge() {
     if (!this.statusBadge) return;
     
@@ -374,17 +393,19 @@ export class StorageSyncManager {
     }
 
     const currentUrl = this.getEndpointUrl();
+    const currentFolderUrl = this.getDriveFolderUrl();
+    const currentFolderId = this.getDriveFolderId();
     const lastSyncDisplay = this.lastSyncTime ? new Date(this.lastSyncTime).toLocaleString('th-TH') : 'ยังไม่มีการซิงค์';
     const completedCount = Object.keys(this.state.completedPdHistory || {}).length;
     const scheduledCount = (this.state.scheduledJobs || []).length;
 
     modal.style.display = 'flex';
     modal.innerHTML = `
-      <div class="modal-content card-glass" style="max-width: 680px; width: 95%; max-height: 90vh; overflow-y: auto; padding: 22px;">
+      <div class="modal-content card-glass" style="max-width: 700px; width: 95%; max-height: 90vh; overflow-y: auto; padding: 22px;">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-glass); padding-bottom: 12px; margin-bottom: 16px;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 20px;">☁️</span>
-            <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--accent-teal);">ตั้งค่าที่เก็บข้อมูล & ซิงค์ Cloud (Google Drive)</h3>
+            <span style="font-size: 20px;">📁</span>
+            <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--accent-teal);">Setting Location Keep Data File (ตั้งค่าที่เก็บไฟล์ข้อมูล)</h3>
           </div>
           <button id="btn-close-sync-modal" style="background: none; border: none; font-size: 18px; color: var(--text-secondary); cursor: pointer; padding: 4px 8px;">✕</button>
         </div>
@@ -393,7 +414,7 @@ export class StorageSyncManager {
         <div style="background: rgba(2, 132, 199, 0.06); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; font-size: 11.5px;">
             <div>
-              <span style="color: var(--text-secondary);">สถานะซิงค์:</span>
+              <span style="color: var(--text-secondary);">สถานะการเชื่อมต่อ:</span>
               <div style="font-weight: bold; margin-top: 2px;">${this.statusBadge ? this.statusBadge.innerText : 'พร้อมใช้งาน'}</div>
             </div>
             <div>
@@ -411,18 +432,36 @@ export class StorageSyncManager {
           </div>
         </div>
 
-        <!-- Target Google Drive Location -->
+        <!-- Data Files Overview -->
+        <div style="background: rgba(0,0,0,0.03); border: 1px solid var(--border-glass); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 11px;">
+          <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">📂 รายการไฟล์ข้อมูลที่เชื่อมต่อกับโฟลเดอร์นี้:</div>
+          <div style="display: flex; flex-direction: column; gap: 4px; color: var(--text-secondary);">
+            <div>• <strong style="color: var(--text-primary);">Plan.json:</strong> เก็บแผนงานบน Gantt, PD ที่ complete (${completedCount} รายการ), และ Machine Settings</div>
+            <div>• <strong style="color: var(--text-primary);">LN Status Overview.xls:</strong> ข้อมูล Status Overview สำหรับนำเข้า Backlog (อ่านจาก Sheet: <strong>data</strong>)</div>
+          </div>
+        </div>
+
+        <!-- Setting Location: Target Google Drive Folder -->
         <div style="margin-bottom: 16px;">
-          <label style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 4px; color: var(--text-primary);">
-            📁 โฟลเดอร์ปลายทางเริ่มต้น (Google Drive):
-          </label>
-          <div style="display: flex; gap: 8px; align-items: center; background: rgba(0,0,0,0.03); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-glass);">
-            <span style="font-size: 11px; flex: 1; word-break: break-all; color: var(--text-secondary); font-family: monospace;">
-              ${DEFAULT_DRIVE_FOLDER_URL}
-            </span>
-            <a href="${DEFAULT_DRIVE_FOLDER_URL}" target="_blank" rel="noopener noreferrer" class="btn btn-action-small" style="text-decoration: none; padding: 4px 10px; font-size: 11px; background: rgba(0, 122, 255, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; white-space: nowrap;">
-              🔗 เปิดใน Drive
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label for="input-drive-folder-url" style="font-size: 12px; font-weight: 700; color: var(--text-primary);">
+              📁 Google Drive Folder Location (โฟลเดอร์จัดเก็บข้อมูล):
+            </label>
+            <a id="link-open-drive-folder" href="${currentFolderUrl}" target="_blank" rel="noopener noreferrer" style="font-size: 11px; color: var(--accent-teal); text-decoration: none; font-weight: 600;">
+              🔗 เปิดโฟลเดอร์ใน Drive ↗
             </a>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <input type="url" id="input-drive-folder-url" value="${currentFolderUrl}" placeholder="https://drive.google.com/drive/folders/..." style="flex: 1; padding: 8px 12px; font-size: 11px; font-family: monospace; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.8); color: var(--text-primary);">
+            <button id="btn-save-drive-folder" class="btn btn-glowing" style="padding: 6px 14px; font-size: 11px; border-radius: 6px; white-space: nowrap;">
+              💾 บันทึก Folder
+            </button>
+            <button id="btn-reset-drive-folder" class="btn" title="รีเซ็ตเป็นโฟลเดอร์เริ่มต้น" style="padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(0,0,0,0.04); color: var(--text-secondary); white-space: nowrap;">
+              ↺ เริ่มต้น
+            </button>
+          </div>
+          <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px;">
+            * สามารถเปลี่ยนโฟลเดอร์ Google Drive สำหรับจัดเก็บและซิงค์ข้อมูลได้ตามต้องการ
           </div>
         </div>
 
@@ -438,7 +477,7 @@ export class StorageSyncManager {
             </button>
           </div>
           <div style="font-size: 10.5px; color: var(--text-secondary); margin-top: 4px;">
-            * นำ Web App URL ที่ได้จากการ Deploy สคริปต์ใน Google Drive มาวางที่นี่เพื่อให้ GitHub Pages อ่าน-เขียน Plan.json อัตโนมัติ
+            * นำ Web App URL ที่ได้จากการ Deploy สคริปต์ในโฟลเดอร์ Google Drive มาวางที่นี่เพื่อให้ GitHub Pages อ่าน-เขียน Plan.json อัตโนมัติ
           </div>
         </div>
 
@@ -473,7 +512,7 @@ export class StorageSyncManager {
           </summary>
           <div style="margin-top: 10px; line-height: 1.6; color: var(--text-secondary);">
             <ol style="padding-left: 18px; margin-bottom: 10px;">
-              <li>เปิดโฟลเดอร์ Google Drive: <a href="${DEFAULT_DRIVE_FOLDER_URL}" target="_blank" style="color: var(--accent-teal);">คลิกที่นี่</a></li>
+              <li>เปิดโฟลเดอร์ Google Drive: <a id="guide-drive-link" href="${currentFolderUrl}" target="_blank" style="color: var(--accent-teal);">คลิกที่นี่</a></li>
               <li>สร้างไฟล์ Google Apps Script ใหม่ (หรือเข้า <a href="https://script.google.com" target="_blank" style="color: var(--accent-teal);">script.google.com</a>)</li>
               <li>นำโค้ดในกรอบด้านล่างไปวางแทนที่โค้ดเดิมทั้งหมด แล้วกดบันทึก</li>
               <li>กด <strong>ทำให้ใช้งานได้ (Deploy)</strong> &gt; <strong>การทำให้ใช้งานได้ใหม่ (New deployment)</strong></li>
@@ -486,7 +525,7 @@ export class StorageSyncManager {
               <li>คัดลอก Web App URL ที่ได้ มาวางในช่องด้านบน แล้วกดบันทึก URL</li>
             </ol>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-weight: bold; color: var(--text-primary);">สคริปต์ Google Apps Script:</span>
+              <span style="font-weight: bold; color: var(--text-primary);">สคริปต์ Google Apps Script (Folder ID: <span id="guide-folder-id-label">${currentFolderId}</span>):</span>
               <button id="btn-copy-gas-code" class="btn btn-action-small" style="font-size: 10px; padding: 2px 8px; border-radius: 4px;">
                 📋 คัดลอกโค้ดทั้งหมด
               </button>
@@ -506,39 +545,40 @@ export class StorageSyncManager {
       if (e.target === modal) modal.style.display = 'none';
     });
 
-    document.getElementById('btn-save-sync-endpoint')?.addEventListener('click', () => {
-      const val = document.getElementById('input-sync-endpoint').value;
-      this.setEndpointUrl(val);
-      this.showToast('💾 บันทึก Cloud Sync URL เรียบร้อย', 'success');
-      this.pullFromCloud(false);
-    });
-
-    document.getElementById('btn-modal-pull-sync')?.addEventListener('click', () => {
-      this.pullFromCloud(false);
-    });
-
-    document.getElementById('btn-modal-push-sync')?.addEventListener('click', () => {
-      const payload = this.state.buildPlanPayload();
-      this.pushToCloud(payload, true);
-      this.showToast('☁️ กำลังส่งข้อมูลขึ้น Cloud...', 'info');
-    });
-
-    document.getElementById('btn-export-backup')?.addEventListener('click', () => {
-      this.exportBackupJson();
-    });
-
-    document.getElementById('input-import-backup')?.addEventListener('change', (e) => {
-      const file = e.target.files?.[0];
-      if (file) this.importBackupJson(file);
-    });
-
-    // Populate Apps Script code preview & copy
-    const gasCode = `const TARGET_FOLDER_ID = '${DEFAULT_DRIVE_FOLDER_ID}';
+    const updateGasCodePreview = () => {
+      const fId = this.getDriveFolderId();
+      const code = `const TARGET_FOLDER_ID = '${fId}';
 const TARGET_FILE_NAME = 'Plan.json';
 
 function doGet(e) {
   try {
     const folder = DriveApp.getFolderById(TARGET_FOLDER_ID);
+    if (e && e.parameter && (e.parameter.action === 'status-overview' || e.parameter.file === 'status-overview')) {
+      const allFiles = folder.getFiles();
+      let overviewFile = null;
+      while (allFiles.hasNext()) {
+        const f = allFiles.next();
+        const fname = f.getName();
+        if (fname.includes('LN Status Overview') || fname.includes('Status Overview')) {
+          overviewFile = f;
+          break;
+        }
+      }
+      if (overviewFile) {
+        const b64 = Utilities.base64Encode(overviewFile.getBlob().getBytes());
+        return ContentService.createTextOutput(JSON.stringify({
+          status: 'success',
+          filename: overviewFile.getName(),
+          lastModified: overviewFile.getLastUpdated().toISOString(),
+          base64: b64
+        })).setMimeType(ContentService.MimeType.JSON);
+      } else {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: 'error',
+          message: 'No Status Overview file found in Google Drive folder'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
     const files = folder.getFilesByName(TARGET_FILE_NAME);
     let content = { scheduledJobs: [], nests: {}, completedPdHistory: {} };
     let lastModified = null;
@@ -573,12 +613,65 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: error.toString() })).setMimeType(ContentService.MimeType.JSON);
   }
 }`;
+      const prevEl = document.getElementById('gas-code-preview');
+      if (prevEl) prevEl.textContent = code;
+      const idLbl = document.getElementById('guide-folder-id-label');
+      if (idLbl) idLbl.textContent = fId;
+      return code;
+    };
 
-    const previewEl = document.getElementById('gas-code-preview');
-    if (previewEl) previewEl.textContent = gasCode;
+    updateGasCodePreview();
+
+    document.getElementById('btn-save-drive-folder')?.addEventListener('click', () => {
+      const val = document.getElementById('input-drive-folder-url').value;
+      this.setDriveFolderUrl(val);
+      const newUrl = this.getDriveFolderUrl();
+      document.getElementById('link-open-drive-folder').href = newUrl;
+      const guideLink = document.getElementById('guide-drive-link');
+      if (guideLink) guideLink.href = newUrl;
+      updateGasCodePreview();
+      this.showToast('💾 บันทึก Google Drive Folder Location เรียบร้อย', 'success');
+    });
+
+    document.getElementById('btn-reset-drive-folder')?.addEventListener('click', () => {
+      this.setDriveFolderUrl(DEFAULT_DRIVE_FOLDER_URL);
+      document.getElementById('input-drive-folder-url').value = DEFAULT_DRIVE_FOLDER_URL;
+      document.getElementById('link-open-drive-folder').href = DEFAULT_DRIVE_FOLDER_URL;
+      const guideLink = document.getElementById('guide-drive-link');
+      if (guideLink) guideLink.href = DEFAULT_DRIVE_FOLDER_URL;
+      updateGasCodePreview();
+      this.showToast('↺ รีเซ็ตโฟลเดอร์ Google Drive เป็นค่าเริ่มต้น', 'info');
+    });
+
+    document.getElementById('btn-save-sync-endpoint')?.addEventListener('click', () => {
+      const val = document.getElementById('input-sync-endpoint').value;
+      this.setEndpointUrl(val);
+      this.showToast('💾 บันทึก Cloud Sync URL เรียบร้อย', 'success');
+      this.pullFromCloud(false);
+    });
+
+    document.getElementById('btn-modal-pull-sync')?.addEventListener('click', () => {
+      this.pullFromCloud(false);
+    });
+
+    document.getElementById('btn-modal-push-sync')?.addEventListener('click', () => {
+      const payload = this.state.buildPlanPayload();
+      this.pushToCloud(payload, true);
+      this.showToast('☁️ กำลังส่งข้อมูลขึ้น Cloud...', 'info');
+    });
+
+    document.getElementById('btn-export-backup')?.addEventListener('click', () => {
+      this.exportBackupJson();
+    });
+
+    document.getElementById('input-import-backup')?.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (file) this.importBackupJson(file);
+    });
 
     document.getElementById('btn-copy-gas-code')?.addEventListener('click', () => {
-      navigator.clipboard.writeText(gasCode).then(() => {
+      const code = updateGasCodePreview();
+      navigator.clipboard.writeText(code).then(() => {
         this.showToast('📋 คัดลอกโค้ด Apps Script เรียบร้อยแล้ว', 'success');
       });
     });
