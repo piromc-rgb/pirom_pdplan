@@ -5,7 +5,7 @@
 // across GitHub Pages, Localhost, and Google Drive (via Google Apps Script).
 // ==============================================================================
 
-export const DEFAULT_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA?usp=drive_link';
+export const DEFAULT_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA?lfhs=2';
 export const DEFAULT_DRIVE_FOLDER_ID = '1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA';
 
 const STORAGE_ENDPOINT_KEY = 'PDPLAN_STORAGE_ENDPOINT';
@@ -263,6 +263,57 @@ export class StorageSyncManager {
       this.state.ganttController.fitTasks(this.state.scheduledJobs);
     }
     this.state.notify();
+  }
+
+  /**
+   * ดึงไฟล์ LN Status Overview.xls จาก Local Dev Server หรือ Google Drive
+   */
+  async fetchStatusOverview() {
+    // 1. ถ้าอยู่ Local Dev Server ดึงผ่าน /api/status-overview
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      try {
+        const res = await fetch('/api/status-overview');
+        if (res.ok) {
+          const buffer = await res.arrayBuffer();
+          let filename = 'LN Status Overview.xls';
+          const xfn = res.headers.get('X-Filename');
+          if (xfn) {
+            try { filename = decodeURIComponent(xfn); } catch(e) {}
+          }
+          return { arrayBuffer: buffer, filename };
+        }
+      } catch (err) {
+        console.warn('Local /api/status-overview not reachable:', err);
+      }
+    }
+
+    // 2. ถ้ามี Google Apps Script Endpoint ดึงผ่าน Cloud Endpoint
+    const endpoint = this.getEndpointUrl();
+    if (endpoint) {
+      try {
+        const fetchUrl = endpoint.includes('?') ? `${endpoint}&action=status-overview&t=${Date.now()}` : `${endpoint}?action=status-overview&t=${Date.now()}`;
+        const res = await fetch(fetchUrl);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.status === 'success' && json.base64) {
+            const binaryStr = atob(json.base64);
+            const len = binaryStr.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+              bytes[i] = binaryStr.charCodeAt(i);
+            }
+            return {
+              arrayBuffer: bytes.buffer,
+              filename: json.filename || 'LN Status Overview.xls'
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('Google Drive status-overview fetch error:', err);
+      }
+    }
+
+    return null;
   }
 
   exportBackupJson() {

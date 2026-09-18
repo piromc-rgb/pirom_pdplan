@@ -969,19 +969,27 @@ export class WorkflowController {
         }
       }
       
-      this.loadExcelFileFromDB().then(data => {
-        if (data && data.filename) {
-          if (customFileName) {
-            customFileName.textContent = data.filename;
+      const checkAvailableFile = async () => {
+        if (this.state.storageSync) {
+          const overview = await this.state.storageSync.fetchStatusOverview();
+          if (overview && overview.filename) {
+            if (customFileName) customFileName.textContent = overview.filename;
+            hintEl.innerHTML = `📄 ตรวจพบไฟล์เริ่มต้น: <strong>${overview.filename}</strong> (Sheet "data") - ระบบจะดึงไฟล์นี้อัตโนมัติ`;
+            return;
           }
-          hintEl.textContent = `ไฟล์ล่าสุดที่เคยใช้: ${data.filename} (ระบบจะดึงไฟล์นี้อัตโนมัติหากไม่เลือกไฟล์ใหม่)`;
-        } else {
-          hintEl.remove();
         }
-      }).catch(err => {
-        console.warn('Failed to load last excel name from DB:', err);
-        hintEl.remove();
-      });
+        this.loadExcelFileFromDB().then(data => {
+          if (data && data.filename) {
+            if (customFileName) customFileName.textContent = data.filename;
+            hintEl.innerHTML = `ไฟล์ล่าสุดที่เคยใช้: <strong>${data.filename}</strong> (ระบบจะดึงไฟล์นี้อัตโนมัติหากไม่เลือกไฟล์ใหม่)`;
+          } else {
+            hintEl.innerHTML = `💡 แนะนำ: วางไฟล์ <strong>LN Status Overview.xls</strong> (Sheet "data")`;
+          }
+        }).catch(() => {
+          hintEl.innerHTML = `💡 แนะนำ: เลือกไฟล์ <strong>LN Status Overview.xls</strong> (Sheet "data")`;
+        });
+      };
+      checkAvailableFile();
     }
   }
 
@@ -1115,10 +1123,10 @@ export class WorkflowController {
         const data = new Uint8Array(arrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         
-        // Find sheet named "Data" or fallback
-        let sheetName = workbook.SheetNames.find(name => name.toLowerCase() === 'data');
+        // Find sheet named "data" (trimmed, case-insensitive)
+        let sheetName = workbook.SheetNames.find(name => (name || '').trim().toLowerCase() === 'data');
         if (!sheetName) {
-          sheetName = workbook.SheetNames.find(name => name.toLowerCase().includes('data'));
+          sheetName = workbook.SheetNames.find(name => (name || '').trim().toLowerCase().includes('data'));
         }
         if (!sheetName) {
           sheetName = workbook.SheetNames[0];
@@ -1523,15 +1531,29 @@ export class WorkflowController {
       };
       reader.readAsArrayBuffer(file);
     } else {
-      this.loadExcelFileFromDB().then(data => {
-        if (data && data.arrayBuffer && data.filename) {
-          parseAndLoad(data.arrayBuffer, data.filename);
-        } else {
-          alert('กรุณาเลือกไฟล์ Excel');
+      const tryFetchOverview = async () => {
+        if (this.state.storageSync) {
+          const overview = await this.state.storageSync.fetchStatusOverview();
+          if (overview && overview.arrayBuffer) {
+            parseAndLoad(overview.arrayBuffer, overview.filename);
+            return true;
+          }
         }
-      }).catch(err => {
-        console.warn('Failed to load excel from IndexedDB:', err);
-        alert('กรุณาเลือกไฟล์ Excel');
+        return false;
+      };
+
+      tryFetchOverview().then(found => {
+        if (found) return;
+        this.loadExcelFileFromDB().then(data => {
+          if (data && data.arrayBuffer && data.filename) {
+            parseAndLoad(data.arrayBuffer, data.filename);
+          } else {
+            alert('กรุณาเลือกไฟล์ LN Status Overview.xls (หรือวางไฟล์ไว้ในระบบ)');
+          }
+        }).catch(err => {
+          console.warn('Failed to load excel from IndexedDB:', err);
+          alert('กรุณาเลือกไฟล์ LN Status Overview.xls (หรือวางไฟล์ไว้ในระบบ)');
+        });
       });
     }
   }

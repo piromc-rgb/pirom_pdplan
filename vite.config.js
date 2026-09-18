@@ -160,6 +160,42 @@ export default defineConfig({
               return;
             }
           }
+
+          if (req.url === '/api/status-overview' || req.url?.startsWith('/api/status-overview?')) {
+            const candidateNames = [
+              'LN Status Overview.xls',
+              'LN Status Overview.xlsx',
+              'Week 38 26-09-15 Status Overview.xlsx',
+              'Week 38 26-09-14 Status Overview.xlsx'
+            ];
+            let foundFile = null;
+            for (const name of candidateNames) {
+              const p = path.resolve(__dirname, name);
+              if (fs.existsSync(p)) {
+                foundFile = p;
+                break;
+              }
+            }
+            if (foundFile) {
+              try {
+                const buf = fs.readFileSync(foundFile);
+                res.setHeader('Content-Type', 'application/octet-stream');
+                res.setHeader('X-Filename', encodeURIComponent(path.basename(foundFile)));
+                res.setHeader('Access-Control-Expose-Headers', 'X-Filename');
+                res.statusCode = 200;
+                res.end(buf);
+                return;
+              } catch (err) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ error: err.message }));
+                return;
+              }
+            } else {
+              res.statusCode = 404;
+              res.end(JSON.stringify({ error: 'No LN Status Overview file found in workspace' }));
+              return;
+            }
+          }
           next();
         });
       }

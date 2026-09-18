@@ -40,6 +40,36 @@ const TARGET_FILE_NAME = 'Plan.json';
 function doGet(e) {
   try {
     const folder = DriveApp.getFolderById(TARGET_FOLDER_ID);
+
+    // 1. ดึงไฟล์ LN Status Overview.xls จาก Google Drive (ถ้ามีการเรียก action=status-overview)
+    if (e && e.parameter && (e.parameter.action === 'status-overview' || e.parameter.file === 'status-overview')) {
+      const allFiles = folder.getFiles();
+      let overviewFile = null;
+      while (allFiles.hasNext()) {
+        const f = allFiles.next();
+        const fname = f.getName();
+        if (fname.includes('LN Status Overview') || fname.includes('Status Overview')) {
+          overviewFile = f;
+          break;
+        }
+      }
+      if (overviewFile) {
+        const b64 = Utilities.base64Encode(overviewFile.getBlob().getBytes());
+        return ContentService.createTextOutput(JSON.stringify({
+          status: 'success',
+          filename: overviewFile.getName(),
+          lastModified: overviewFile.getLastUpdated().toISOString(),
+          base64: b64
+        })).setMimeType(ContentService.MimeType.JSON);
+      } else {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: 'error',
+          message: 'No Status Overview file found in Google Drive folder'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
+    // 2. ดึงไฟล์ Plan.json ตามปกติ
     const files = folder.getFilesByName(TARGET_FILE_NAME);
     
     let content = { scheduledJobs: [], nests: {}, completedPdHistory: {} };

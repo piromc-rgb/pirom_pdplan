@@ -874,10 +874,10 @@
           </div>
           <div class="modal-body" style="display: flex; flex-direction: column; gap: 15px; max-height: 400px; overflow-y: auto; padding-right: 5px;">
             <div class="form-group" style="display: flex; flex-direction: column; gap: 4px;">
-              <label style="font-weight: bold; font-size: 10px; color: var(--text-primary);">Select Excel File (เลือกไฟล์ Excel)</label>
+              <label style="font-weight: bold; font-size: 10px; color: var(--text-primary);">Select Excel File / ไฟล์ Status Overview (ค่าเริ่มต้น: LN Status Overview.xls)</label>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <button type="button" id="btn-custom-choose-file" style="background-color: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 8px 12px; border-radius: 6px; font-size: 11px; outline: none; cursor: pointer; font-weight: bold; transition: all 0.2s;">Choose File</button>
-                <span id="custom-file-name" style="font-size: 11px; color: var(--text-secondary); font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 350px;">No file chosen</span>
+                <span id="custom-file-name" style="font-size: 11px; color: var(--text-secondary); font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 350px;">LN Status Overview.xls</span>
               </div>
               <input type="file" id="new-pd-excel-file" accept=".xlsx, .xls" style="display: none;">
             </div>
@@ -910,7 +910,8 @@
             </div>
             <div style="font-size: 10px; color: var(--text-secondary); line-height: 1.4; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
               <strong>Import Rules / คอลัมน์ที่ใช้อ่าน:</strong><br>
-              - Sheet name: <strong>Data</strong><br>
+              - Target File: <strong>LN Status Overview.xls</strong> (หรือไฟล์ Status Overview อื่นๆ)<br>
+              - Sheet name: <strong>data</strong><br>
               - ID: <strong>Production Order</strong> (ช่วง ID ที่ระบุด้านบน)<br>
               - Dwg No: <strong>Item_5</strong><br>
               - Part Name: <strong>Description</strong><br>
