@@ -123,14 +123,6 @@
             </svg>
             ตรวจ QC Log
           </button>
-
-          <button id="btn-storage-sync" class="btn btn-glowing" title="ตั้งค่าที่เก็บข้อมูล ซิงค์อัตโนมัติกับ Google Drive และสำรองข้อมูล" style="margin-left: 8px; background: linear-gradient(135deg, #0284c7, #0369a1); display: inline-flex; align-items: center; gap: 6px;">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
-            </svg>
-            <span>Cloud Sync</span>
-            <span id="sync-status-badge" class="sync-pill local">💾 Cache</span>
-          </button>
         </div>
 
         <!-- Global Metrics -->
@@ -253,6 +245,10 @@
                   <button id="btn-export-plan" class="dropdown-item">Save Plan (.json)</button>
                   <button id="btn-import-plan" class="dropdown-item">Open Plan (.json)</button>
                   <input type="file" id="input-import-plan" accept=".json" style="display: none;" />
+                  <button id="btn-storage-sync" class="dropdown-item" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">☁️ Cloud Sync (Google Drive)</span>
+                    <span id="sync-status-badge" class="sync-pill local">💾 Cache</span>
+                  </button>
                   <button id="btn-export-csv" class="dropdown-item">Export to Excel/Google Sheets (.csv)</button>
                   <button id="btn-workcenter-settings" class="dropdown-item">⚙️ Machine Settings (ตั้งค่าเครื่องจักร)</button>
                   <button id="btn-clear-board" class="dropdown-item text-orange">Clear Board</button>
