@@ -185,6 +185,8 @@ class CentralState {
       'SUB039': { capacity: 1, workHoursPerDay: 8, color: 'var(--accent-teal)', name: 'ชุบ Hot Dip Galvanized', altMachines: '', transferMinutes: 10, leadTimeDays: 0 }
     };
 
+    this.defaultWorkCenters = JSON.parse(JSON.stringify(this.workCenters));
+
     this.workCenterOrder = [
       'DEA012', 'DEA016', 'DEA021', 'DEA022', 'DEA023', 'DEA024', 'DEA025', 'DEA026', 'DEA027', 'DEA013',
       'DEA042', 'DEA051', 'DEA052', 'DEA062', 'DEB013', 'DEB021', 'DEB011', 'DEC001', 'DEA011', 'DEA032',
@@ -200,7 +202,7 @@ class CentralState {
         if (savedWc) {
           const parsed = JSON.parse(savedWc);
           if (parsed && parsed.workCenters && parsed.workCenterOrder) {
-            this.workCenters = parsed.workCenters;
+            this.workCenters = this.sanitizeWorkCenters(parsed.workCenters);
             this.workCenterOrder = parsed.workCenterOrder;
           }
         }
@@ -398,9 +400,26 @@ class CentralState {
     return machine;
   }
 
+  sanitizeWorkCenters(wcs) {
+    if (!wcs || typeof wcs !== 'object') return wcs;
+    for (const [key, wc] of Object.entries(wcs)) {
+      if (!wc) continue;
+      if (typeof wc.name === 'string' && (wc.name.includes('\uFFFD') || wc.name.includes(''))) {
+        if (this.defaultWorkCenters && this.defaultWorkCenters[key]?.name) {
+          wc.name = this.defaultWorkCenters[key].name;
+        } else if (key === 'DEA017') {
+          wc.name = 'เลื่อย 2';
+        } else if (key === 'SUB007') {
+          wc.name = 'หุ้มยาง';
+        }
+      }
+    }
+    return wcs;
+  }
+
   updateWorkCenters(newWorkCenters, newOrder) {
     this.saveStateToHistory();
-    this.workCenters = newWorkCenters;
+    this.workCenters = this.sanitizeWorkCenters(newWorkCenters);
     this.workCenterOrder = newOrder;
 
     try {
@@ -2254,7 +2273,7 @@ class CentralState {
       if (data.priorityColors) this.priorityColors = data.priorityColors;
       if (data.projectColors) this.projectColors = data.projectColors;
       if (data.customerColors) this.customerColors = data.customerColors;
-      if (data.workCenters) this.workCenters = data.workCenters;
+      if (data.workCenters) this.workCenters = this.sanitizeWorkCenters(data.workCenters);
       if (data.workCenterOrder) this.workCenterOrder = data.workCenterOrder;
       if (data.timelineOffset !== undefined) this.timelineOffset = data.timelineOffset;
       if (data.activeScale) this.activeScale = data.activeScale;

@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-09-18T16:16:25.323Z",
+  "updatedAt": "2026-09-20T23:26:55.552Z",
   "workCenters": {
     "DEA012": {
       "capacity": 1,
@@ -212,7 +212,7 @@
       "capacity": 1,
       "workHoursPerDay": 8,
       "color": "var(--accent-orange)",
-      "name": "เครื่องอัดไฮดรอลิก 100T",
+      "name": "เครื่องอัดไฮดรอลิก ไฟฟ่า 100T",
       "altMachines": "",
       "transferMinutes": 10,
       "leadTimeDays": 0
@@ -248,7 +248,7 @@
       "capacity": 1,
       "workHoursPerDay": 8,
       "color": "var(--accent-teal)",
-      "name": "ชุบซิงค์",
+      "name": "ชุบชิงค์",
       "altMachines": "",
       "transferMinutes": 10,
       "leadTimeDays": 0
@@ -356,7 +356,7 @@
       "capacity": 1,
       "workHoursPerDay": 8,
       "color": "var(--accent-magenta)",
-      "name": "ห�����้มยาง",
+      "name": "หุ้มยาง",
       "altMachines": "",
       "transferMinutes": 10,
       "leadTimeDays": 7

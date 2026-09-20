@@ -344,6 +344,9 @@ export class StorageSyncManager {
     if (data.projectColors) this.state.projectColors = data.projectColors;
     if (data.customerColors) this.state.customerColors = data.customerColors;
     if (data.workCenters) {
+      if (this.state && typeof this.state.sanitizeWorkCenters === 'function') {
+        data.workCenters = this.state.sanitizeWorkCenters(data.workCenters);
+      }
       this.state.workCenters = data.workCenters;
       try {
         localStorage.setItem('pdplan_machine_settings', JSON.stringify({
