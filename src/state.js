@@ -66,6 +66,10 @@ class CentralState {
     // is busy. Off restricts every job to strictly its own machine.
     this.allowMachineOffload = true;
 
+    // Strategy option: group same item (DWG No. / Part Name) together across different PDs
+    // to run consecutively / simultaneously on machines, reducing setup changeovers.
+    this.groupSameItem = true;
+
     // Whether the Assembly Set list (left sidebar) only shows assemblies that still
     // have at least one job passing the current Priority/Project/Customer/Work
     // Center filters. Off lists every assembly regardless of those filters.
@@ -473,7 +477,7 @@ class CentralState {
     if (this.schedulingModel === 'infinite') {
       this.scheduledJobs = Scheduler.applyBackwardsInfinite(this.scheduledJobs, scale);
     } else if (this.schedulingModel === 'finite') {
-      this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, scale, nowWorkingHour, this.workCenters, this.allowMachineOffload);
+      this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, scale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem);
     }
 
     const config = this.getScaleConfig(scale);
@@ -498,7 +502,7 @@ class CentralState {
     if (this.schedulingModel === 'infinite') {
       this.scheduledJobs = Scheduler.applyBackwardsInfinite(this.scheduledJobs, this.activeScale);
     } else if (this.schedulingModel === 'finite') {
-      this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, this.activeScale, nowWorkingHour, this.workCenters, this.allowMachineOffload);
+      this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, this.activeScale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem);
     }
 
     this.savePlanToFile();
@@ -2231,6 +2235,7 @@ class CentralState {
       workCenterOrder: this.workCenterOrder,
       timelineOffset: this.timelineOffset,
       activeScale: this.activeScale,
+      groupSameItem: this.groupSameItem !== false,
       completedPdHistory: this.completedPdHistory || {},
       favoritePDs: this.favoritePDs || {},
       removedStepHistory: this.removedStepHistory || {},
@@ -2245,6 +2250,7 @@ class CentralState {
       this.nests = data.nests || {};
       this.assemblyLinks = data.assemblyLinks || [];
       this.lockedProjects = data.lockedProjects || {};
+      if (data.groupSameItem !== undefined) this.groupSameItem = Boolean(data.groupSameItem);
       if (data.priorityColors) this.priorityColors = data.priorityColors;
       if (data.projectColors) this.projectColors = data.projectColors;
       if (data.customerColors) this.customerColors = data.customerColors;

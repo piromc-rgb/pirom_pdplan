@@ -22,6 +22,14 @@ export function getPriorityWeight(priority) {
   return 999999;
 }
 
+export function getItemKey(jobOrWo) {
+  if (!jobOrWo) return '';
+  const dwg = (jobOrWo.dwgNo || '').trim();
+  if (dwg) return dwg.toUpperCase();
+  const part = (jobOrWo.partName || jobOrWo.name || '').trim();
+  return part ? part.toUpperCase() : '';
+}
+
 export class Scheduler {
   // Apply Backwards Infinite Scheduling model
   // Arranges all jobs backwards from a simulated due hour (dependent on scale)
@@ -124,7 +132,7 @@ export class Scheduler {
   // Schedules jobs dynamically, minimizing machine idle gaps by pulling ready tasks forward
   // when a machine is free, keeping work centers running as continuously as possible.
   // Enforces 10-minute move time buffer between different work stations for the same Production Order.
-  static applyActiveJobShopScheduling(jobs, scale = 'hr', nowWorkingHour = 0.0, existingScheduledJobs = [], workCenters = {}, allowOffload = true) {
+  static applyActiveJobShopScheduling(jobs, scale = 'hr', nowWorkingHour = 0.0, existingScheduledJobs = [], workCenters = {}, allowOffload = true, groupSameItem = true) {
     const startOffset = Math.max((scale === 'hr' ? 8.0 : 0.0), nowWorkingHour);
 
     // Each machine gets `capacity` parallel lanes instead of a single busy-until
@@ -133,6 +141,7 @@ export class Scheduler {
     // station), instead of queuing strictly one-after-another.
     const machineCapacity = {};
     const machineLanes = {};
+    const machineLastItem = {};
     const getMinLaneIdx = (m) => {
       const lanes = machineLanes[m];
       let idx = 0;
@@ -167,10 +176,12 @@ export class Scheduler {
     // Initialize each machine's lanes (capacity-many) based on existing scheduled jobs.
     // Existing jobs are greedily packed onto whichever lane is free earliest, same
     // idea as interval-graph "machine minimization" packing.
+    // Also track the last item on each lane to support same-item grouping continuity.
     allMachines.forEach(m => {
       const cap = Math.max(1, parseInt(workCenters[m]?.capacity, 10) || 1);
       machineCapacity[m] = cap;
       const lanes = new Array(cap).fill(startOffset);
+      const lastItems = new Array(cap).fill('');
       const machineJobs = existingScheduledJobs
         .filter(j => j.machine === m)
         .sort((a, b) => a.startHour - b.startHour);
@@ -178,8 +189,10 @@ export class Scheduler {
         let best = 0;
         for (let i = 1; i < lanes.length; i++) if (lanes[i] < lanes[best]) best = i;
         lanes[best] = Math.max(lanes[best], j.startHour + j.estHours);
+        lastItems[best] = getItemKey(j);
       });
       machineLanes[m] = lanes;
+      machineLastItem[m] = lastItems;
     });
 
     // Initialize woEndTimes & woLastMachine based on existing scheduled jobs
@@ -360,12 +373,26 @@ export class Scheduler {
       }
 
       // Prioritize:
+      // 0. Same-Item Grouping (if enabled): favor jobs matching the last item on this machine lane to keep setup continuous
       // 1. Priority numeric weight (lower number = higher priority, e.g. 1 before 2, 1.1 before 22)
       // 2. Smallest gap (keep machines running continuously)
       // 3. Lower stepNum first
+      const lastItemOnLane = machineLastItem[bestMachine] ? machineLastItem[bestMachine][bestLaneIdx] : '';
       validCandidates.sort((a, b) => {
         const pA = getPriorityWeight(a.job.priority);
         const pB = getPriorityWeight(b.job.priority);
+
+        if (groupSameItem && lastItemOnLane) {
+          const aMatch = (getItemKey(a.job) === lastItemOnLane) ? 1 : 0;
+          const bMatch = (getItemKey(b.job) === lastItemOnLane) ? 1 : 0;
+          if (aMatch !== bMatch) {
+            // Favor matching item if priorities are in the same tier (weight diff <= 1000)
+            if (Math.abs(pA - pB) <= 1000) {
+              return bMatch - aMatch;
+            }
+          }
+        }
+
         if (pA !== pB) return pA - pB;
         if (a.gap !== b.gap) return a.gap - b.gap;
         return a.job.stepNum - b.job.stepNum;
@@ -407,6 +434,9 @@ export class Scheduler {
       job.startHour = parseFloat(adjustedStart.toFixed(4));
 
       machineLanes[bestMachine][bestLaneIdx] = end;
+      if (machineLastItem[bestMachine]) {
+        machineLastItem[bestMachine][bestLaneIdx] = getItemKey(job);
+      }
       if (job.woId) {
         woEndTime[job.woId] = end;
         woLastMachine[job.woId] = bestMachine;
@@ -422,14 +452,14 @@ export class Scheduler {
   }
 
   // Wrapper to support legacy finite scheduling calls in UI
-  static applyForwardsFinite(jobs, scale = 'hr', nowWorkingHour = 0.0, workCenters = {}, allowOffload = true) {
+  static applyForwardsFinite(jobs, scale = 'hr', nowWorkingHour = 0.0, workCenters = {}, allowOffload = true, groupSameItem = true) {
     // Completed jobs are done - keep them fixed (as already-occupied machine time)
     // instead of feeding them back into the dispatch pool, or a finished PD would
     // get a brand-new startHour (and look "reloaded into the plan") every time the
     // scale changes.
     const completedJobs = jobs.filter(j => j.status === 'Completed');
     const pendingJobs = jobs.filter(j => j.status !== 'Completed');
-    return this.applyActiveJobShopScheduling(pendingJobs, scale, nowWorkingHour, completedJobs, workCenters, allowOffload);
+    return this.applyActiveJobShopScheduling(pendingJobs, scale, nowWorkingHour, completedJobs, workCenters, allowOffload, groupSameItem);
   }
 
   // Backward Active Job Shop Scheduling Pass
@@ -751,7 +781,7 @@ export class Scheduler {
   // 2. Sort by Priority (High / 1.1 first)
   // 3. Find earliest free slot on machine (or best alternate machine) sequentially for each step (10 -> 20 -> 30)
   // 4. Starts strictly from current time (nowWorkingHour)
-  static applyMultiPDSimulationPlacement(backlogWOs = [], scheduledJobs = [], scale = 'day', nowWorkingHour = 0.0, workCenters = {}, lockedProjects = {}, allowOffload = true) {
+  static applyMultiPDSimulationPlacement(backlogWOs = [], scheduledJobs = [], scale = 'day', nowWorkingHour = 0.0, workCenters = {}, lockedProjects = {}, allowOffload = true, groupSameItem = true) {
     const startOffset = Math.max(0.0, typeof nowWorkingHour === 'number' && !isNaN(nowWorkingHour) ? nowWorkingHour : 0.0);
 
     const isJobFixed = (j) => j.status === 'Completed' || Boolean(lockedProjects && lockedProjects[j.project || 'General']);
@@ -806,7 +836,8 @@ export class Scheduler {
     // Sort Work Orders:
     // 1. Priority tier weight (Hot / 1.1 first)
     // 2. Child component WOs before Parent assembly WOs
-    // 3. Natural ID sorting
+    // 3. Same-Item Grouping: group identical items together to run consecutively
+    // 4. Natural ID sorting
     const sortedWOs = [...allWOs].sort((a, b) => {
       const pA = getPriorityWeight(a.priority);
       const pB = getPriorityWeight(b.priority);
@@ -816,6 +847,20 @@ export class Scheduler {
       const isBChild = b.id.includes('-');
       if (isAChild && !isBChild && a.id.startsWith(b.id + '-')) return -1;
       if (isBChild && !isAChild && b.id.startsWith(a.id + '-')) return 1;
+
+      // Group WOs of the same item together
+      if (groupSameItem) {
+        const itemA = getItemKey(a);
+        const itemB = getItemKey(b);
+        if (itemA && itemB && itemA !== itemB) {
+          const cmp = itemA.localeCompare(itemB);
+          if (cmp !== 0) return cmp;
+        } else if (itemA && !itemB) {
+          return -1;
+        } else if (!itemA && itemB) {
+          return 1;
+        }
+      }
 
       return a.id.localeCompare(b.id);
     });
@@ -931,7 +976,7 @@ export class Scheduler {
 
   // AI Simulation / APS Optimizer
   // Schedules backlog and scheduled steps sequentially using Multi-PD Simulation Placement principles.
-  static runAISimulation(backlog, scheduledJobs, scale = 'hr', nowWorkingHour = 0.0, workCenters = {}, lockedProjects = {}, allowOffload = true) {
-    return this.applyMultiPDSimulationPlacement(backlog, scheduledJobs, scale, nowWorkingHour, workCenters, lockedProjects, allowOffload);
+  static runAISimulation(backlog, scheduledJobs, scale = 'hr', nowWorkingHour = 0.0, workCenters = {}, lockedProjects = {}, allowOffload = true, groupSameItem = true) {
+    return this.applyMultiPDSimulationPlacement(backlog, scheduledJobs, scale, nowWorkingHour, workCenters, lockedProjects, allowOffload, groupSameItem);
   }
 }

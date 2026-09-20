@@ -559,7 +559,7 @@ class App {
         state.notify();
       } else if (selectedModel === 'finite') {
         const nowWorkingHour = state.dateToWorkingHour(new Date());
-        state.scheduledJobs = Scheduler.applyForwardsFinite(state.scheduledJobs, state.activeScale, nowWorkingHour, state.workCenters, state.allowMachineOffload);
+        state.scheduledJobs = Scheduler.applyForwardsFinite(state.scheduledJobs, state.activeScale, nowWorkingHour, state.workCenters, state.allowMachineOffload, state.groupSameItem);
         state.notify();
       }
     });
@@ -1714,6 +1714,60 @@ class App {
       });
     }
 
+    // Groups identical items (same DWG No. / Part Name) together across different PDs
+    // to run consecutively / concurrently on machines to reduce setup changeovers.
+    const toggleGroupSameItem = document.getElementById('toggle-group-same-item');
+    if (toggleGroupSameItem) {
+      toggleGroupSameItem.checked = state.groupSameItem !== false;
+      toggleGroupSameItem.addEventListener('change', () => {
+        state.groupSameItem = toggleGroupSameItem.checked;
+        state.savePlanToFile();
+        if (toggleGroupSameItem.checked) {
+          const panel = document.getElementById('display-options-panel');
+          if (panel) panel.classList.add('hidden');
+          this.showSameItemGroupingModal();
+        }
+      });
+    }
+
+    const btnViewGroupedItems = document.getElementById('btn-view-grouped-items');
+    if (btnViewGroupedItems) {
+      btnViewGroupedItems.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const panel = document.getElementById('display-options-panel');
+        if (panel) panel.classList.add('hidden');
+        this.showSameItemGroupingModal();
+      });
+    }
+
+    // Quick access from Option dropdown to Data Storage Location & Machine Settings
+    const btnHeaderStorageSync = document.getElementById('btn-header-storage-sync');
+    if (btnHeaderStorageSync) {
+      btnHeaderStorageSync.addEventListener('click', (e) => {
+        e.stopPropagation();
+        displayOptionsPanel?.classList.add('hidden');
+        if (this.storageSync) {
+          this.storageSync.openSyncModal();
+        } else if (window.storageSyncManager) {
+          window.storageSyncManager.openSyncModal();
+        } else {
+          document.getElementById('storage-sync-modal')?.classList.remove('hidden');
+        }
+      });
+    }
+
+    const btnHeaderMachineSettings = document.getElementById('btn-header-machine-settings');
+    if (btnHeaderMachineSettings) {
+      btnHeaderMachineSettings.addEventListener('click', (e) => {
+        e.stopPropagation();
+        displayOptionsPanel?.classList.add('hidden');
+        const btnWcSettings = document.getElementById('btn-workcenter-settings');
+        if (btnWcSettings) {
+          btnWcSettings.click();
+        }
+      });
+    }
+
     // 12d. Work Mode: "วางแผน" (planning, normal drag/edit) vs "Work Center Terminal"
     // (clicking a task bar opens the MIE Shop Floor Kiosk Simulator - see kiosk.js)
     const btnToggleWorkMode = document.getElementById('btn-toggle-work-mode');
@@ -1770,6 +1824,7 @@ class App {
       if (togglePriorityBadge) togglePriorityBadge.checked = state.showPriorityBadge !== false;
       if (toggleMergeBars) toggleMergeBars.checked = state.mergeBarsEnabled !== false;
       if (toggleMachineOffload) toggleMachineOffload.checked = state.allowMachineOffload !== false;
+      if (toggleGroupSameItem) toggleGroupSameItem.checked = state.groupSameItem !== false;
     };
 
     state.subscribe(() => {
@@ -1886,7 +1941,7 @@ class App {
         <div class="modal-body" style="max-height: 420px; overflow-y: auto; padding: 15px 5px 15px 0;">
           
           <!-- Mode Banner -->
-          <div style="background: rgba(0, 242, 254, 0.04); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="background: rgba(0, 242, 254, 0.04); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
             <div>
               <div style="font-weight: bold; font-size: 11.5px; color: var(--accent-teal); margin-bottom: 2px;">
                 ⚡ วางแผนผลิตอัตโนมัติ (Multi-PD Simulation Placement)
@@ -1898,6 +1953,22 @@ class App {
             <div style="font-size: 9.5px; color: var(--accent-green); background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); padding: 3px 8px; border-radius: 4px; font-weight: bold; white-space: nowrap;">
               ⏱️ ต่อเนื่องจากปัจจุบัน
             </div>
+          </div>
+
+          <!-- Strategy Option: Group Same Item -->
+          <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-weight: 600; font-size: 11px; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                <span>📦</span> Group Item เดียวกัน (Same-Item Continuity)
+              </div>
+              <div style="font-size: 9px; color: var(--text-secondary); margin-top: 1px;">
+                จัดคิวผลิตชิ้นงานรหัสแบบ (DWG) เดียวกันให้ผลิตต่อเนื่องกัน ลดเวลา Setup/เปลี่ยนแม่พิมพ์
+              </div>
+            </div>
+            <span class="ios-toggle">
+              <input type="checkbox" id="modal-toggle-group-same-item" ${state.groupSameItem !== false ? 'checked' : ''}>
+              <span class="ios-toggle-slider"></span>
+            </span>
           </div>
 
           ${backlogContentHTML}
@@ -1942,6 +2013,12 @@ class App {
         .filter(cb => cb.checked)
         .map(cb => cb.value);
 
+      const modalGroupSameItem = modal.querySelector('#modal-toggle-group-same-item');
+      if (modalGroupSameItem) {
+        state.groupSameItem = modalGroupSameItem.checked;
+        state.savePlanToFile();
+      }
+
       modal.remove();
       this.runAIOptimizationWithSelection(button, selectedIds);
     });
@@ -1967,7 +2044,7 @@ class App {
     const workCenterCount = Object.keys(state.workCenters || {}).length;
 
     // Run AI scheduler engine in background starting strictly from nowWorkingHour
-    console.log('[AI Auto] now:', now, 'nowWorkingHour:', nowWorkingHour);
+    console.log('[AI Auto] now:', now, 'nowWorkingHour:', nowWorkingHour, 'groupSameItem:', state.groupSameItem);
     const optimized = Scheduler.runAISimulation(
       backlogToOptimize,
       state.scheduledJobs,
@@ -1975,7 +2052,8 @@ class App {
       nowWorkingHour,
       state.workCenters,
       state.lockedProjects,
-      state.allowMachineOffload
+      state.allowMachineOffload,
+      state.groupSameItem
     );
 
     // Check late jobs
@@ -3317,6 +3395,420 @@ class App {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+    });
+  }
+
+  showSameItemGroupingModal() {
+    const jobs = state.scheduledJobs || [];
+    if (!jobs || jobs.length === 0) {
+      alert('ยังไม่มีข้อมูลแผนงานบนบอร์ดขณะนี้');
+      return;
+    }
+
+    const getItemKeyLocal = (j) => {
+      if (!j) return '';
+      const dwg = (j.dwgNo || '').trim();
+      if (dwg) return dwg.toUpperCase();
+      const part = (j.partName || j.name || '').trim();
+      return part ? part.toUpperCase() : '';
+    };
+
+    // 1. Group jobs by machine, sorted by startHour
+    const byMachine = {};
+    jobs.forEach(j => {
+      const m = j.machine || 'UNKNOWN';
+      if (!byMachine[m]) byMachine[m] = [];
+      byMachine[m].push(j);
+    });
+
+    Object.keys(byMachine).forEach(m => {
+      byMachine[m].sort((a, b) => (a.startHour || 0) - (b.startHour || 0));
+    });
+
+    // 2. Identify consecutive runs of identical item across different PDs on each machine
+    const rawGroups = [];
+    Object.entries(byMachine).forEach(([machine, mJobs]) => {
+      let current = null;
+      for (let i = 0; i < mJobs.length; i++) {
+        const job = mJobs[i];
+        const key = getItemKeyLocal(job);
+        if (!key) {
+          if (current && current.pds.length > 1) rawGroups.push(current);
+          current = null;
+          continue;
+        }
+
+        if (current && current.itemKey === key) {
+          const lastWo = current.jobs[current.jobs.length - 1].woId;
+          if (lastWo !== job.woId) {
+            if (!current.pds.includes(job.woId)) current.pds.push(job.woId);
+            current.totalQty += (job.qty || 0);
+          }
+          current.jobs.push(job);
+          current.endHour = Math.max(current.endHour, job.startHour + (job.estHours || 0));
+        } else {
+          if (current && current.pds.length > 1) rawGroups.push(current);
+          current = {
+            machine,
+            machineName: state.workCenters[machine]?.name || machine,
+            itemKey: key,
+            dwgNo: (job.dwgNo || '').trim() || '-',
+            partName: (job.partName || job.name || '').trim() || '-',
+            stepName: (job.stepName || '').trim() || '-',
+            stepNum: job.stepNum || 0,
+            pds: [job.woId],
+            jobs: [job],
+            totalQty: job.qty || 0,
+            startHour: job.startHour,
+            endHour: job.startHour + (job.estHours || 0)
+          };
+        }
+      }
+      if (current && current.pds.length > 1) rawGroups.push(current);
+    });
+
+    if (rawGroups.length === 0) {
+      alert('ไม่พบรายการที่จัดกลุ่ม Item เดียวกันในแผนงานขณะนี้');
+      return;
+    }
+
+    // Format dates & calculate duration
+    rawGroups.forEach((g, idx) => {
+      g.id = idx + 1;
+      const dStart = state.workingHourToDate(g.startHour);
+      const dEnd = state.workingHourToDate(g.endHour);
+      g.dStart = dStart;
+      g.dEnd = dEnd;
+      g.startDateStr = dStart.toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + dStart.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+      g.endDateStr = dEnd.toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + dEnd.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+      g.durationHours = Math.max(0.1, g.endHour - g.startHour).toFixed(1);
+
+      const pdQtyMap = {};
+      g.jobs.forEach(j => {
+        if (!pdQtyMap[j.woId]) pdQtyMap[j.woId] = 0;
+        if (pdQtyMap[j.woId] === 0) {
+          pdQtyMap[j.woId] = j.qty || 0;
+        }
+      });
+      g.pdDetails = g.pds.map(woId => ({ woId, qty: pdQtyMap[woId] || 0 }));
+    });
+
+    // Default sort by startHour ascending (earliest first)
+    rawGroups.sort((a, b) => a.startHour - b.startHour);
+
+    const totalGroups = rawGroups.length;
+    const allPds = new Set();
+    rawGroups.forEach(g => g.pds.forEach(p => allPds.add(p)));
+    const totalUniquePds = allPds.size;
+    const totalPieces = rawGroups.reduce((sum, g) => sum + g.totalQty, 0);
+
+    const machineCounts = {};
+    rawGroups.forEach(g => {
+      machineCounts[g.machine] = (machineCounts[g.machine] || 0) + 1;
+    });
+    const distinctMachines = Object.keys(machineCounts).sort((a, b) => machineCounts[b] - machineCounts[a]);
+
+    const existingModal = document.getElementById('same-item-grouping-modal');
+    if (existingModal) existingModal.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'same-item-grouping-modal';
+    modal.className = 'modal-overlay';
+    modal.style.zIndex = '360';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+
+    let currentSort = 'start-asc';
+    let searchQuery = '';
+    let selectedMachine = 'all';
+
+    modal.innerHTML = `
+      <div class="modal-content card-glass" style="max-width: 1250px; width: 96%; max-height: 92vh; display: flex; flex-direction: column; padding: 22px; box-shadow: 0 15px 45px rgba(0,0,0,0.65); border: 1px solid var(--border-glass); border-radius: 12px;">
+        
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border-glass); padding-bottom: 14px; margin-bottom: 14px; gap: 12px; flex-wrap: wrap;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <span style="font-size: 20px;">🧩</span>
+              <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: var(--text-primary); letter-spacing: 0.5px;">
+                รายการที่จัดกลุ่ม Item เดียวกันในแผนปัจจุบัน (Same Item Grouping)
+              </h3>
+              <span id="group-modal-count-badge" style="font-size: 11px; background: rgba(0, 0, 0, 0.06); border: 1px solid var(--border-glass); color: var(--text-primary); padding: 2px 10px; border-radius: 12px; font-weight: 700;">
+                ${totalGroups} กลุ่ม
+              </span>
+            </div>
+            <p style="margin: 4px 0 0 30px; font-size: 11px; color: var(--text-secondary);">
+              แสดงรายการชิ้นงานประเภทเดียวกันที่จัดตารางให้ผลิตต่อเนื่องกันบนเครื่องจักร เพื่อประหยัดเวลา Setup / เปลี่ยนแม่พิมพ์
+            </p>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button id="btn-export-group-csv" class="btn btn-action-small" title="ส่งออกข้อมูลรายการที่จัดกลุ่มเป็น CSV / Excel" style="background: rgba(22, 163, 74, 0.15); border: 1px solid var(--accent-green, #16a34a); color: var(--accent-green, #16a34a); padding: 5px 12px; font-size: 11px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 5px; font-weight: 600; transition: all 0.2s;">
+              📥 Export CSV
+            </button>
+            <button id="btn-print-group-list" class="btn btn-action-small" title="พิมพ์รายงานสรุป" style="background: rgba(0, 0, 0, 0.05); border: 1px solid var(--border-glass); color: var(--text-primary); padding: 5px 12px; font-size: 11px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 5px; font-weight: 600; transition: all 0.2s;">
+              🖨️ พิมพ์
+            </button>
+            <button id="btn-close-group-modal" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 18px; line-height: 1; padding: 4px 8px; border-radius: 4px; transition: all 0.2s;" title="ปิด (Close)">
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <!-- KPI Stat Summary Banner -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 14px;">
+          <div style="background: rgba(0, 0, 0, 0.03); border: 1px solid var(--border-glass); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 22px;">🏷️</span>
+            <div>
+              <div style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase;">กลุ่มผลิตต่อเนื่องทั้งหมด</div>
+              <div style="font-size: 17px; font-weight: 800; color: var(--text-primary);">${totalGroups} กลุ่ม</div>
+            </div>
+          </div>
+          <div style="background: rgba(0, 0, 0, 0.03); border: 1px solid var(--border-glass); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 22px;">📦</span>
+            <div>
+              <div style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase;">จำนวนใบสั่งผลิตที่รวมกลุ่ม</div>
+              <div style="font-size: 17px; font-weight: 800; color: var(--text-primary);">${totalUniquePds} ใบสั่งผลิต (PDs)</div>
+            </div>
+          </div>
+          <div style="background: rgba(0, 0, 0, 0.03); border: 1px solid var(--border-glass); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 22px;">⚙️</span>
+            <div>
+              <div style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase;">จำนวนชิ้นงานผลิตรวม</div>
+              <div style="font-size: 17px; font-weight: 800; color: var(--text-primary);">${totalPieces.toLocaleString()} ชิ้น</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Controls: Filter & Search Bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 300px; flex-wrap: wrap;">
+            <input type="text" id="group-modal-search" placeholder="🔍 ค้นหา Drawing No, Part Name, PD, เครื่องจักร..." style="flex: 1; min-width: 220px; max-width: 380px; background: rgba(0, 0, 0, 0.04); border: 1px solid var(--border-glass); border-radius: 6px; padding: 6px 12px; font-size: 11px; color: var(--text-primary); outline: none;">
+            
+            <select id="group-modal-machine-filter" style="background: var(--bg-darker, #ffffff); border: 1px solid var(--border-glass); border-radius: 6px; padding: 6px 10px; font-size: 11px; color: var(--text-primary); cursor: pointer; outline: none;">
+              <option value="all">ทุกเครื่องจักร (${totalGroups} กลุ่ม)</option>
+              ${distinctMachines.map(m => {
+                const name = state.workCenters[m]?.name || m;
+                return `<option value="${m}">${m} - ${name} (${machineCounts[m]} กลุ่ม)</option>`;
+              }).join('')}
+            </select>
+
+            <select id="group-modal-sort" style="background: var(--bg-darker, #ffffff); border: 1px solid var(--border-glass); border-radius: 6px; padding: 6px 10px; font-size: 11px; color: var(--text-primary); cursor: pointer; outline: none;">
+              <option value="start-asc">📅 วันที่เริ่มผลิต (เก่า ➔ ใหม่)</option>
+              <option value="start-desc">📅 วันที่เริ่มผลิต (ใหม่ ➔ เก่า)</option>
+              <option value="pds-desc">🔢 จำนวน PD ต่อกัน (มาก ➔ น้อย)</option>
+              <option value="qty-desc">📦 จำนวนชิ้นงานรวม (มาก ➔ น้อย)</option>
+              <option value="dwg-asc">🏷️ Drawing No. (A-Z)</option>
+            </select>
+          </div>
+
+          <div style="font-size: 10.5px; color: var(--text-secondary);">
+            💡 คลิกเลขที่ PD เพื่อเปิดดูรายละเอียดของ PD นั้น
+          </div>
+        </div>
+
+        <!-- Table Container -->
+        <div style="flex: 1; overflow-x: auto; overflow-y: auto; border: 1px solid var(--border-glass); border-radius: 8px; background: var(--bg-card); min-height: 250px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+            <thead>
+              <tr style="background: rgba(0, 0, 0, 0.05); border-bottom: 2px solid var(--border-glass); color: var(--text-primary); position: sticky; top: 0; z-index: 10;">
+                <th style="padding: 10px 8px; width: 45px; text-align: center; color: var(--text-primary); font-weight: 700;">#</th>
+                <th style="padding: 10px 10px; min-width: 130px; color: var(--text-primary); font-weight: 700;">Drawing No.</th>
+                <th style="padding: 10px 10px; min-width: 180px; color: var(--text-primary); font-weight: 700;">รายละเอียดชิ้นงาน (Part Name)</th>
+                <th style="padding: 10px 10px; min-width: 130px; color: var(--text-primary); font-weight: 700;">เครื่องจักร / ขั้นตอน</th>
+                <th style="padding: 10px 10px; min-width: 240px; color: var(--text-primary); font-weight: 700;">รายการ PD ที่ผลิตต่อกัน (จำนวนชิ้น)</th>
+                <th style="padding: 10px 10px; width: 85px; text-align: right; color: var(--text-primary); font-weight: 700;">จำนวนรวม</th>
+                <th style="padding: 10px 10px; min-width: 140px; color: var(--text-primary); font-weight: 700;">📅 วันที่เริ่มผลิต</th>
+                <th style="padding: 10px 10px; min-width: 140px; color: var(--text-primary); font-weight: 700;">🏁 วันที่ผลิตเสร็จ</th>
+                <th style="padding: 10px 8px; width: 75px; text-align: right; color: var(--text-primary); font-weight: 700;">ชม.ผลิต</th>
+              </tr>
+            </thead>
+            <tbody id="group-modal-tbody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Footer -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 11px; color: var(--text-secondary);">
+          <div id="group-modal-footer-info">กำลังแสดงผล...</div>
+          <button id="btn-close-group-modal-footer" class="btn" style="padding: 6px 16px; font-size: 11px; border-radius: 6px; background: rgba(0, 0, 0, 0.05); border: 1px solid var(--border-glass); color: var(--text-primary); cursor: pointer;">
+            ปิด (Close)
+          </button>
+        </div>
+
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const tbody = modal.querySelector('#group-modal-tbody');
+    const footerInfo = modal.querySelector('#group-modal-footer-info');
+
+    const renderTable = () => {
+      let filtered = [...rawGroups];
+
+      if (selectedMachine !== 'all') {
+        filtered = filtered.filter(g => g.machine === selectedMachine);
+      }
+
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        filtered = filtered.filter(g => 
+          g.dwgNo.toLowerCase().includes(q) ||
+          g.partName.toLowerCase().includes(q) ||
+          g.machine.toLowerCase().includes(q) ||
+          g.machineName.toLowerCase().includes(q) ||
+          g.stepName.toLowerCase().includes(q) ||
+          g.pds.some(p => p.toLowerCase().includes(q))
+        );
+      }
+
+      if (currentSort === 'start-asc') {
+        filtered.sort((a, b) => a.startHour - b.startHour);
+      } else if (currentSort === 'start-desc') {
+        filtered.sort((a, b) => b.startHour - a.startHour);
+      } else if (currentSort === 'pds-desc') {
+        filtered.sort((a, b) => b.pds.length - a.pds.length);
+      } else if (currentSort === 'qty-desc') {
+        filtered.sort((a, b) => b.totalQty - a.totalQty);
+      } else if (currentSort === 'dwg-asc') {
+        filtered.sort((a, b) => a.dwgNo.localeCompare(b.dwgNo));
+      }
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="9" style="padding: 30px; text-align: center; color: var(--text-secondary);">
+              ไม่พบรายการที่ตรงกับเงื่อนไขการค้นหา
+            </td>
+          </tr>
+        `;
+        footerInfo.textContent = `แสดง 0 จากทั้งหมด ${totalGroups} กลุ่ม`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map((g, idx) => `
+        <tr style="border-bottom: 1px solid var(--border-glass); transition: background 0.15s;" onmouseover="this.style.background='rgba(0,0,0,0.03)'" onmouseout="this.style.background='transparent'">
+          <td style="padding: 9px 8px; text-align: center; color: var(--text-secondary); font-weight: 600;">${idx + 1}</td>
+          <td style="padding: 9px 10px; font-family: monospace; font-weight: 700; color: var(--text-primary);">${g.dwgNo}</td>
+          <td style="padding: 9px 10px; color: var(--text-primary); font-weight: 600;">${g.partName}</td>
+          <td style="padding: 9px 10px;">
+            <div style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); border: 1px solid var(--border-glass); font-size: 11px; color: var(--text-primary);">
+              <strong style="color: var(--text-primary);">${g.machine}</strong> <span style="color: var(--text-secondary);">(${g.stepName})</span>
+            </div>
+          </td>
+          <td style="padding: 9px 10px;">
+            <div style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
+              ${g.pdDetails.map((pd, pIdx) => `
+                ${pIdx > 0 ? '<span style="color: var(--text-secondary); font-weight: bold; opacity: 0.7;">➔</span>' : ''}
+                <span class="group-pd-badge" data-wo-id="${pd.woId}" title="คลิกเพื่อเปิดดูรายละเอียด PD" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(0, 0, 0, 0.04); border: 1px solid var(--border-glass); padding: 2px 7px; border-radius: 4px; font-family: monospace; font-size: 10.5px; cursor: pointer; transition: all 0.15s;">
+                  <strong style="color: var(--text-primary);">${pd.woId}</strong>
+                  <span style="color: var(--text-secondary); font-size: 10px; font-weight: 600;">(${pd.qty})</span>
+                </span>
+              `).join('')}
+            </div>
+          </td>
+          <td style="padding: 9px 10px; text-align: right; font-weight: 700; color: var(--text-primary);">
+            ${g.totalQty.toLocaleString()}
+          </td>
+          <td style="padding: 9px 10px; font-weight: 700; color: var(--text-primary); white-space: nowrap;">
+            ${g.startDateStr}
+          </td>
+          <td style="padding: 9px 10px; color: var(--text-secondary); font-weight: 500; white-space: nowrap;">
+            ${g.endDateStr}
+          </td>
+          <td style="padding: 9px 8px; text-align: right; color: var(--text-secondary); font-weight: 600;">
+            ${g.durationHours}
+          </td>
+        </tr>
+      `).join('');
+
+      footerInfo.textContent = `แสดง ${filtered.length} จากทั้งหมด ${totalGroups} กลุ่ม (รวม ${filtered.reduce((sum, g) => sum + g.totalQty, 0).toLocaleString()} ชิ้น)`;
+
+      tbody.querySelectorAll('.group-pd-badge').forEach(badge => {
+        badge.addEventListener('click', (e) => {
+          const woId = e.currentTarget.getAttribute('data-wo-id');
+          if (woId && this.gantt && this.gantt.showPDPlanModal) {
+            this.gantt.showPDPlanModal(woId);
+          }
+        });
+      });
+    };
+
+    renderTable();
+
+    const searchInput = modal.querySelector('#group-modal-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        searchQuery = (e.target.value || '').trim();
+        renderTable();
+      });
+    }
+
+    const machineFilter = modal.querySelector('#group-modal-machine-filter');
+    if (machineFilter) {
+      machineFilter.addEventListener('change', (e) => {
+        selectedMachine = e.target.value;
+        renderTable();
+      });
+    }
+
+    const sortSelect = modal.querySelector('#group-modal-sort');
+    if (sortSelect) {
+      sortSelect.addEventListener('change', (e) => {
+        currentSort = e.target.value;
+        renderTable();
+      });
+    }
+
+    modal.querySelector('#btn-export-group-csv')?.addEventListener('click', () => {
+      const escapeCsv = (str) => `"${String(str ?? '').replace(/"/g, '""')}"`;
+      const csvHeader = ['ลำดับ', 'Drawing No', 'รายละเอียดชิ้นงาน', 'รหัสเครื่องจักร', 'ชื่อเครื่องจักร', 'ขั้นตอน', 'รายการ PD ที่ผลิตต่อกัน', 'จำนวน PD', 'จำนวนรวม (ชิ้น)', 'วันที่เริ่มผลิต', 'วันที่ผลิตเสร็จ', 'ระยะเวลา (ชม.)'];
+      const csvRows = rawGroups.map((g, idx) => [
+        idx + 1,
+        escapeCsv(g.dwgNo),
+        escapeCsv(g.partName),
+        escapeCsv(g.machine),
+        escapeCsv(g.machineName),
+        escapeCsv(g.stepName),
+        escapeCsv(g.pds.join(' -> ')),
+        g.pds.length,
+        g.totalQty,
+        escapeCsv(g.startDateStr),
+        escapeCsv(g.endDateStr),
+        g.durationHours
+      ].join(','));
+
+      const csvContent = '\uFEFF' + [
+        escapeCsv(`รายการชิ้นงานที่จัดกลุ่ม Item เดียวกันในแผนปัจจุบัน (${totalGroups} กลุ่ม, รวม ${totalPieces} ชิ้น)`),
+        csvHeader.map(escapeCsv).join(','),
+        ...csvRows
+      ].join('\r\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Grouped_Items_Plan_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    modal.querySelector('#btn-print-group-list')?.addEventListener('click', () => {
+      window.print();
+    });
+
+    const closeModal = () => {
+      modal.remove();
+    };
+    modal.querySelector('#btn-close-group-modal')?.addEventListener('click', closeModal);
+    modal.querySelector('#btn-close-group-modal-footer')?.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
     });
   }
 }

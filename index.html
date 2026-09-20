@@ -46,7 +46,7 @@
                   <circle cx="12" cy="12" r="3"></circle>
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                 </svg>
-                <span>Display Options</span>
+                <span>Option</span>
               </button>
               <div id="display-options-panel" class="hidden" style="position: absolute; top: 100%; left: 0; margin-top: 6px; background: var(--bg-darker); border: 1px solid var(--border-glass); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.45); padding: 6px; z-index: 500; min-width: 220px;">
                 <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
@@ -69,8 +69,28 @@
                   <span title="ใช้เครื่องจักรช่วยงาน (Offload ไปเครื่องสำรอง เมื่อเครื่องหลักไม่ว่าง)">เครื่องช่วยงาน</span>
                   <span class="ios-toggle"><input type="checkbox" id="toggle-machine-offload" checked><span class="ios-toggle-slider"></span></span>
                 </label>
+                <div class="display-option-row" style="padding: 6px 10px; border-radius: 6px; font-size: 11px; color: var(--text-primary);">
+                  <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; margin: 0;">
+                    <span title="จัดกลุ่ม Item/รหัสแบบเดียวกันให้ผลิตต่อเนื่องหรือพร้อมกัน เพื่อลดเวลา Setup และเพิ่มประสิทธิภาพเครื่องจักร">Group Item เดียวกัน</span>
+                    <span class="ios-toggle"><input type="checkbox" id="toggle-group-same-item" checked><span class="ios-toggle-slider"></span></span>
+                  </label>
+                  <button id="btn-view-grouped-items" type="button" title="เปิดดูรายการชิ้นงานที่มีการจัดกลุ่มผลิตต่อเนื่องในแผนปัจจุบันทั้งหมด พร้อมวันที่เริ่มผลิต" style="display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; margin-top: 6px; padding: 5px 8px; font-size: 10.5px; font-weight: 600; border-radius: 5px; background: rgba(0, 0, 0, 0.04); border: 1px solid var(--border-glass); color: var(--text-primary); cursor: pointer; transition: all 0.2s;">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                    </svg>
+                    <span>📋 ดูรายการที่ Group ในแผนปัจจุบัน</span>
+                  </button>
+                </div>
               </div>
             </div>
+            <button id="btn-header-storage-sync" class="btn-action-small" title="Setting Location Keep Data File (ตั้งค่าที่เก็บไฟล์ข้อมูล & Cloud Sync)" style="display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; margin-left: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <span>Setting Location</span>
+              <span id="header-sync-status-badge" class="sync-pill local" style="white-space: nowrap; font-size: 9px; padding: 1px 5px; line-height: 1.2;">💾 Cache</span>
+            </button>
             <button id="btn-toggle-work-mode" class="btn-action-small" title="สลับโหมดการทำงาน: วางแผน (ลาก/แก้ไขแผนงานปกติ) หรือ Work Center Terminal (คลิก Task Bar เพื่อเปิด MIE Shop Floor Kiosk Simulator ทันที)" style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; margin-left: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="4" width="18" height="12" rx="1.5"></rect>
@@ -245,15 +265,6 @@
                   <button id="btn-export-plan" class="dropdown-item">Save Plan (.json)</button>
                   <button id="btn-import-plan" class="dropdown-item">Open Plan (.json)</button>
                   <input type="file" id="input-import-plan" accept=".json" style="display: none;" />
-                  <button id="btn-storage-sync" class="dropdown-item" onclick="if(window.storageSyncManager){window.storageSyncManager.openSyncModal();}else{const m=document.getElementById('storage-sync-modal');if(m)m.classList.remove('hidden');}" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;">
-                    <span style="display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-weight: 600;">
-                      📁 Setting Location Keep Data File
-                    </span>
-                    <span id="sync-status-badge" class="sync-pill local" style="white-space: nowrap;">💾 Cache</span>
-                  </button>
-                  <a id="menu-direct-drive-link" href="https://drive.google.com/drive/folders/1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA?lfhs=2" target="_blank" rel="noopener noreferrer" class="dropdown-item" style="font-size: 11px; display: flex; align-items: center; gap: 6px; color: var(--accent-teal); text-decoration: none; padding-left: 24px; opacity: 0.9;">
-                    <span>↳ 🔗 Open Data Folder (Google Drive) ↗</span>
-                  </a>
                   <button id="btn-export-csv" class="dropdown-item">Export to Excel/Google Sheets (.csv)</button>
                   <button id="btn-workcenter-settings" class="dropdown-item">⚙️ Machine Settings (ตั้งค่าเครื่องจักร)</button>
                   <button id="btn-clear-board" class="dropdown-item text-orange">Clear Board</button>
@@ -1306,6 +1317,8 @@
             <button class="btn btn-secondary" id="btn-close-wc-daily-footer" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary);">Close</button>
           </div>
         </div>
+      </div>
+
       <!-- STORAGE LOCATION & CLOUD SYNC MODAL -->
       <div id="storage-sync-modal" class="modal-overlay hidden">
         <div class="modal-content card-glass" style="max-width: 700px; width: 95%; max-height: 90vh; overflow-y: auto; padding: 22px;">

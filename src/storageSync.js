@@ -31,10 +31,20 @@ export class StorageSyncManager {
 
   initUI() {
     this.btnSync = document.getElementById('btn-storage-sync');
+    this.btnHeaderSync = document.getElementById('btn-header-storage-sync');
     this.statusBadge = document.getElementById('sync-status-badge');
+    this.headerStatusBadge = document.getElementById('header-sync-status-badge');
     
     if (this.btnSync) {
       this.btnSync.addEventListener('click', (e) => {
+        this.openSyncModal();
+      });
+    }
+
+    if (this.btnHeaderSync) {
+      this.btnHeaderSync.addEventListener('click', (e) => {
+        const panel = document.getElementById('display-options-panel');
+        if (panel) panel.classList.add('hidden');
         this.openSyncModal();
       });
     }
@@ -109,33 +119,39 @@ export class StorageSyncManager {
   }
 
   updateStatusBadge() {
-    if (!this.statusBadge) return;
+    const badges = [
+      this.statusBadge || document.getElementById('sync-status-badge'),
+      this.headerStatusBadge || document.getElementById('header-sync-status-badge')
+    ].filter(Boolean);
+    if (badges.length === 0) return;
     
     const hasEndpoint = Boolean(this.getEndpointUrl());
     const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-    if (this.syncStatus === 'syncing') {
-      this.statusBadge.className = 'sync-pill syncing';
-      this.statusBadge.innerHTML = `<span class="spin">⏳</span> กำลังซิงค์...`;
-      this.statusBadge.title = 'กำลังเชื่อมต่อและซิงค์ข้อมูลกับ Cloud Storage';
-    } else if (this.syncStatus === 'error') {
-      this.statusBadge.className = 'sync-pill error';
-      this.statusBadge.innerHTML = `⚠️ ซิงค์ล้มเหลว`;
-      this.statusBadge.title = 'ไม่สามารถเชื่อมต่อ Cloud ได้ ระบบกำลังใช้ข้อมูลใน Local Cache';
-    } else if (hasEndpoint) {
-      this.statusBadge.className = 'sync-pill success';
-      const timeStr = this.lastSyncTime ? new Date(this.lastSyncTime).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '';
-      this.statusBadge.innerHTML = `☁️ Google Drive ${timeStr ? '(' + timeStr + ')' : ''}`;
-      this.statusBadge.title = `เชื่อมต่อ Google Drive เรียบร้อย (ซิงค์ล่าสุด: ${this.lastSyncTime || 'ยังไม่มี'})`;
-    } else if (isLocalhost) {
-      this.statusBadge.className = 'sync-pill local';
-      this.statusBadge.innerHTML = `💻 Local Plan.json`;
-      this.statusBadge.title = 'เชื่อมต่อไฟล์ Plan.json ในเครื่อง (Local Dev Server)';
-    } else {
-      this.statusBadge.className = 'sync-pill offline';
-      this.statusBadge.innerHTML = `💾 Local Cache`;
-      this.statusBadge.title = 'บันทึกในแคชของเบราว์เซอร์ (คลิกเพื่อตั้งค่าเชื่อมต่อ Google Drive)';
-    }
+    badges.forEach(badge => {
+      if (this.syncStatus === 'syncing') {
+        badge.className = 'sync-pill syncing';
+        badge.innerHTML = `<span class="spin">⏳</span> กำลังซิงค์...`;
+        badge.title = 'กำลังเชื่อมต่อและซิงค์ข้อมูลกับ Cloud Storage';
+      } else if (this.syncStatus === 'error') {
+        badge.className = 'sync-pill error';
+        badge.innerHTML = `⚠️ ซิงค์ล้มเหลว`;
+        badge.title = 'ไม่สามารถเชื่อมต่อ Cloud ได้ ระบบกำลังใช้ข้อมูลใน Local Cache';
+      } else if (hasEndpoint) {
+        badge.className = 'sync-pill success';
+        const timeStr = this.lastSyncTime ? new Date(this.lastSyncTime).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '';
+        badge.innerHTML = `☁️ Google Drive ${timeStr ? '(' + timeStr + ')' : ''}`;
+        badge.title = `เชื่อมต่อ Google Drive เรียบร้อย (ซิงค์ล่าสุด: ${this.lastSyncTime || 'ยังไม่มี'})`;
+      } else if (isLocalhost) {
+        badge.className = 'sync-pill local';
+        badge.innerHTML = `💻 Local Plan.json`;
+        badge.title = 'เชื่อมต่อไฟล์ Plan.json ในเครื่อง (Local Dev Server)';
+      } else {
+        badge.className = 'sync-pill offline';
+        badge.innerHTML = `💾 Local Cache`;
+        badge.title = 'บันทึกในแคชของเบราว์เซอร์ (คลิกเพื่อตั้งค่าเชื่อมต่อ Google Drive)';
+      }
+    });
   }
 
   /**
@@ -665,6 +681,11 @@ export class StorageSyncManager {
     const menuDirectLink = document.getElementById('menu-direct-drive-link');
     if (menuDirectLink) {
       menuDirectLink.href = currentFolderUrl;
+    }
+
+    const headerDirectLink = document.getElementById('header-direct-drive-link');
+    if (headerDirectLink) {
+      headerDirectLink.href = currentFolderUrl;
     }
 
     const statusTextEl = document.getElementById('sync-modal-status-text');
