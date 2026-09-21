@@ -70,10 +70,15 @@ export class StorageSyncManager {
             workCenterOrder: payload.workCenterOrder || []
           }));
         }
+        if (payload.completedPdHistory) {
+          localStorage.setItem('pdplan_completed_pds', JSON.stringify(payload.completedPdHistory));
+        }
       } catch (e) {}
 
-      // ส่งข้อมูลขึ้น Cloud & Server ทันทีด้วย keepalive: true (แม้ปิดแท็บ/เบราว์เซอร์)
-      this.executePush(payload, true);
+      // ส่งข้อมูลขึ้น Cloud & Server ทันทีด้วย keepalive: true (เฉพาะเมื่อเปิด Auto-Sync)
+      if (this.autoSync) {
+        this.executePush(payload, true);
+      }
     };
 
     window.addEventListener('beforeunload', () => handleAutoSave());
@@ -83,6 +88,25 @@ export class StorageSyncManager {
         handleAutoSave();
       }
     });
+  }
+
+  isAutoSyncEnabled() {
+    return this.autoSync !== false;
+  }
+
+  setAutoSyncEnabled(enabled) {
+    this.autoSync = Boolean(enabled);
+    localStorage.setItem(STORAGE_AUTO_SYNC_KEY, this.autoSync ? 'true' : 'false');
+    const toggle = document.getElementById('toggle-cloud-sync');
+    if (toggle && toggle.checked !== this.autoSync) {
+      toggle.checked = this.autoSync;
+    }
+    this.updateStatusBadge();
+    if (this.autoSync) {
+      this.showToast('⚡ เปิดการ Sync ข้อมูล Cloud (Load เปิด app / Save ปิด App)', 'success');
+    } else {
+      this.showToast('⏸️ ปิดการ Sync ข้อมูล Cloud (ไม่โหลด/ไม่บันทึกอัตโนมัติ)', 'info');
+    }
   }
 
   getEndpointUrl() {
@@ -140,8 +164,11 @@ export class StorageSyncManager {
       } else if (hasEndpoint) {
         badge.className = 'sync-pill success';
         const timeStr = this.lastSyncTime ? new Date(this.lastSyncTime).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '';
-        badge.innerHTML = `☁️ Google Drive ${timeStr ? '(' + timeStr + ')' : ''}`;
-        badge.title = `เชื่อมต่อ Google Drive เรียบร้อย (ซิงค์ล่าสุด: ${this.lastSyncTime || 'ยังไม่มี'})`;
+        const modeStr = this.autoSync ? '' : ' (Manual)';
+        badge.innerHTML = `☁️ Google Drive${modeStr} ${timeStr ? '(' + timeStr + ')' : ''}`;
+        badge.title = this.autoSync
+          ? `เชื่อมต่อ Google Drive เรียบร้อย (Auto-Sync เปิดอยู่: ซิงค์ล่าสุด: ${this.lastSyncTime || 'ยังไม่มี'})`
+          : `เชื่อมต่อ Google Drive (Auto-Sync ปิดอยู่: โหลด/บันทึกด้วยตนเอง)`;
       } else if (isLocalhost) {
         badge.className = 'sync-pill local';
         badge.innerHTML = `💻 Local Plan.json`;
@@ -158,24 +185,68 @@ export class StorageSyncManager {
    * ดึงข้อมูล Plan จาก Cloud (Google Drive / Endpoint) หรือ Local Cache
    */
   async pullFromCloud(silent = false) {
+    // ซิงค์ค่า URL จากช่องกรอกหากผู้ใช้วาง URL ไว้แต่ยังไม่ได้กดปุ่มบันทึก URL
+    const inputEndpoint = document.getElementById('input-sync-endpoint');
+    if (inputEndpoint && inputEndpoint.value.trim() && inputEndpoint.value.trim() !== this.getEndpointUrl()) {
+      this.setEndpointUrl(inputEndpoint.value.trim());
+    }
+
     const endpoint = this.getEndpointUrl();
     this.syncStatus = 'syncing';
     this.updateStatusBadge();
 
-    // 1. หากมี Cloud Endpoint ให้ดึงจาก Cloud
-    if (endpoint) {
+    // 1. ตรวจสอบกรณีผู้ใช้นำลิงก์ Google Drive Folder ธรรมดามาวางแทน Web App URL
+    if (endpoint && endpoint.includes('drive.google.com')) {
+      this.syncStatus = 'error';
+      this.updateStatusBadge();
+      this.updateModalValues();
+      if (!silent) {
+        this.showToast('⚠️ URL ที่ระบุเป็น Google Drive Link ไม่ใช่ Web App Sync API URL (ดูวิธีสร้าง Web App จาก Google Apps Script ด้านล่าง)', 'error');
+        document.getElementById('input-sync-endpoint')?.focus();
+      }
+      return false;
+    }
+
+    // 2. หากมี Cloud Endpoint ให้ดึงจาก Cloud (Google Apps Script Web App)
+    // ถ้า silent = true (เปิดแอปอัตโนมัติ) และปิด autoSync ไว้ จะข้ามการดึงจาก Cloud ไปยัง Local Server / Local Cache แทน
+    if (endpoint && (!silent || this.autoSync)) {
       try {
+        if (!silent) {
+          this.showToast('☁️ กำลังเชื่อมต่อและดึงข้อมูลจาก Cloud...', 'info');
+        }
+
         const fetchUrl = endpoint.includes('?') ? `${endpoint}&t=${Date.now()}` : `${endpoint}?t=${Date.now()}`;
         const response = await fetch(fetchUrl, {
           method: 'GET',
-          headers: { 'Accept': 'application/json' }
+          redirect: 'follow',
+          cache: 'no-cache'
         });
 
         if (!response.ok) {
           throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
         }
 
-        const resJson = await response.json();
+        const rawText = await response.text();
+        if (!rawText || !rawText.trim()) {
+          throw new Error('ไม่ได้รับข้อมูลตอบกลับจาก Cloud Endpoint');
+        }
+
+        // ตรวจสอบกรณี Google redirect ไปหน้า Sign-in (เนื่องจาก deploy ไม่ได้เลือก Anyone)
+        if (rawText.includes('<!DOCTYPE') || rawText.includes('<html')) {
+          throw new Error('Google Apps Script ส่งคืนหน้า Login (กรุณาตั้งค่า Deploy -> "ผู้ที่มีสิทธิ์เข้าถึง" ให้เป็น "ทุกคน (Anyone)")');
+        }
+
+        let resJson;
+        try {
+          resJson = JSON.parse(rawText);
+        } catch (parseErr) {
+          throw new Error('ข้อมูลจาก Cloud ไม่ใช่รูปแบบ JSON: ' + parseErr.message);
+        }
+
+        if (resJson && resJson.status === 'error') {
+          throw new Error(resJson.message || 'Google Apps Script ส่งคืนสถานะ error');
+        }
+
         const payloadData = resJson.data || resJson;
 
         const hasContent = payloadData && (
@@ -188,43 +259,64 @@ export class StorageSyncManager {
         if (hasContent) {
           this.applyPayloadToState(payloadData);
           this.recordSyncSuccess(payloadData);
+          this.updateModalValues();
           const wcCount = Object.keys(this.state.workCenters || {}).length;
+          const jobCount = (this.state.scheduledJobs || []).length;
+          const completedCount = Object.keys(this.state.completedPdHistory || {}).length;
           if (!silent) {
-            this.showToast('✅ ดึงข้อมูลล่าสุดจาก Google Drive สำเร็จ', 'success');
+            this.showToast(`✅ ดึงข้อมูลล่าสุดจาก Cloud สำเร็จ: Plan (${jobCount} Tasks), machine_settings (${wcCount} เครื่อง), completed_pds (${completedCount} รายการ)`, 'success');
           } else {
-            this.showToast(`☁️ โหลด Plan & Machine Settings (${wcCount} เครื่อง) จาก Cloud เรียบร้อย`, 'info');
+            this.showToast(`☁️ โหลด Plan, Machine Settings (${wcCount} เครื่อง) และ Completed PDs (${completedCount} รายการ) จาก Cloud เรียบร้อย`, 'info');
           }
           return true;
         } else {
-          throw new Error('ไม่พบข้อมูลที่ต้องการใน Cloud');
+          throw new Error('ไม่พบข้อมูลแผนงานใน Google Drive โฟลเดอร์เป้าหมาย');
         }
       } catch (err) {
         console.warn('Could not pull from Cloud Endpoint:', err);
         this.syncStatus = 'error';
         this.updateStatusBadge();
+        this.updateModalValues();
         if (!silent) this.showToast(`⚠️ ดึงข้อมูล Cloud ไม่สำเร็จ: ${err.message}`, 'error');
       }
     }
 
-    // 2. หากไม่มี Endpoint หรือดึงไม่ผ่านใน Localhost ให้ลอง /api/plan
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-      try {
-        const res = await fetch('/api/plan');
-        if (res.ok) {
-          const data = await res.json();
-          if (data && (data.scheduledJobs || data.completedPdHistory || data.workCenters)) {
-            this.applyPayloadToState(data);
-            this.syncStatus = 'success';
-            this.updateStatusBadge();
-            return true;
+    // 3. หากไม่มี Endpoint หรือดึงไม่ผ่านใน Localhost ให้ลองดึงจาก Server ไฟล์ Plan.json ในเครื่อง
+    const isLocalDev = typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.startsWith('192.168.') ||
+      window.location.port === '5173'
+    );
+
+    if (isLocalDev) {
+      const candidateUrls = ['/pirom_pdplan/api/plan', '/api/plan'];
+      for (const url of candidateUrls) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && (data.scheduledJobs || data.completedPdHistory || data.workCenters)) {
+              this.applyPayloadToState(data);
+              this.syncStatus = 'success';
+              this.updateStatusBadge();
+              this.updateModalValues();
+              if (!silent) {
+                const jobCount = (this.state.scheduledJobs || []).length;
+                const wcCount = Object.keys(this.state.workCenters || {}).length;
+                const completedCount = Object.keys(this.state.completedPdHistory || {}).length;
+                this.showToast(`✅ โหลดข้อมูลจากไฟล์ Plan.json, machine_settings.json (${wcCount} เครื่อง) และ completed_pds.json (${completedCount} รายการ) ในเครื่องสำเร็จ`, 'success');
+              }
+              return true;
+            }
           }
+        } catch (e) {
+          console.warn(`Local ${url} not reachable:`, e);
         }
-      } catch (e) {
-        console.warn('Local /api/plan not reachable:', e);
       }
     }
 
-    // 3. Fallback: โหลดจาก LocalStorage Cache
+    // 4. Fallback: โหลดจาก LocalStorage Cache
     const cached = localStorage.getItem(STORAGE_CACHE_KEY);
     if (cached) {
       try {
@@ -232,14 +324,31 @@ export class StorageSyncManager {
         this.applyPayloadToState(data);
         this.syncStatus = endpoint ? 'error' : 'local_only';
         this.updateStatusBadge();
+        this.updateModalValues();
+        if (!silent) {
+          const jobCount = (this.state.scheduledJobs || []).length;
+          const wcCount = Object.keys(this.state.workCenters || {}).length;
+          const completedCount = Object.keys(this.state.completedPdHistory || {}).length;
+          this.showToast(`💾 โหลดข้อมูลจาก Local Cache: Plan (${jobCount} Tasks), machine_settings (${wcCount} เครื่อง), completed_pds (${completedCount} รายการ)`, 'info');
+        }
         return true;
       } catch (e) {
         console.error('Error reading cached plan:', e);
       }
     }
 
+    // 5. หากไม่มีทั้ง Cloud Endpoint, Local /api/plan, และ Local Cache
     this.syncStatus = endpoint ? 'error' : 'local_only';
     this.updateStatusBadge();
+    this.updateModalValues();
+    if (!silent) {
+      if (!endpoint) {
+        this.showToast('⚠️ ยังไม่ได้ระบุ Web App Sync API URL (กรุณานำ URL จาก Google Apps Script มาวางในช่องด้านบน)', 'error');
+        document.getElementById('input-sync-endpoint')?.focus();
+      } else {
+        this.showToast('❌ ไม่พบข้อมูลสำหรับโหลด', 'error');
+      }
+    }
     return false;
   }
 
@@ -255,6 +364,9 @@ export class StorageSyncManager {
           workCenters: payload.workCenters,
           workCenterOrder: payload.workCenterOrder || []
         }));
+      }
+      if (payload && payload.completedPdHistory) {
+        localStorage.setItem('pdplan_completed_pds', JSON.stringify(payload.completedPdHistory));
       }
     } catch (e) {
       console.warn('Failed to save to localStorage cache:', e);
@@ -279,22 +391,34 @@ export class StorageSyncManager {
   async executePush(payload, isClosing = false) {
     const endpoint = this.getEndpointUrl();
 
-    // 1. ถ้าอยู่ Localhost ส่งไปที่ /api/plan ด้วย
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-      try {
-        fetch('/api/plan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          keepalive: isClosing
-        }).catch(err => console.warn('Local /api/plan push failed:', err));
-      } catch (e) {}
+    // 1. ถ้าอยู่ Localhost หรือ Dev Server ให้ส่งไปที่ local API ด้วย
+    const isLocalDev = typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.startsWith('192.168.') ||
+      window.location.port === '5173'
+    );
+
+    if (isLocalDev) {
+      const candidateUrls = ['/pirom_pdplan/api/plan', '/api/plan'];
+      for (const localApiUrl of candidateUrls) {
+        try {
+          fetch(localApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            keepalive: isClosing
+          }).catch(err => console.warn(`Local ${localApiUrl} push failed:`, err));
+          break;
+        } catch (e) {}
+      }
     }
 
     // 2. ถ้ามี Cloud Endpoint ส่งไปยัง Google Drive
     if (!endpoint) {
       this.syncStatus = 'local_only';
       this.updateStatusBadge();
+      this.updateModalValues();
       return;
     }
 
@@ -314,6 +438,7 @@ export class StorageSyncManager {
 
       if (res.ok) {
         this.recordSyncSuccess(payload);
+        this.updateModalValues();
       } else {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -322,6 +447,7 @@ export class StorageSyncManager {
       if (!isClosing) {
         this.syncStatus = 'error';
         this.updateStatusBadge();
+        this.updateModalValues();
       }
     }
   }
@@ -369,6 +495,9 @@ export class StorageSyncManager {
       } else if (typeof data.completedPdHistory === 'object') {
         this.state.completedPdHistory = data.completedPdHistory;
       }
+      try {
+        localStorage.setItem('pdplan_completed_pds', JSON.stringify(this.state.completedPdHistory));
+      } catch (e) {}
     }
     if (data.favoritePDs) this.state.favoritePDs = data.favoritePDs;
     if (data.removedStepHistory) this.state.removedStepHistory = data.removedStepHistory;
@@ -561,21 +690,67 @@ export class StorageSyncManager {
       }
     });
 
-    document.getElementById('btn-modal-cloud-save')?.addEventListener('click', () => {
+    document.getElementById('btn-modal-cloud-save')?.addEventListener('click', async () => {
+      const inputEndpoint = document.getElementById('input-sync-endpoint');
+      if (inputEndpoint && inputEndpoint.value.trim() && inputEndpoint.value.trim() !== this.getEndpointUrl()) {
+        this.setEndpointUrl(inputEndpoint.value.trim());
+      }
+      const endpoint = this.getEndpointUrl();
       const payload = this.state.buildPlanPayload();
-      this.pushToCloud(payload, true);
       const wcCount = Object.keys(this.state?.workCenters || {}).length;
-      this.showToast(`☁️ Cloud Save: บันทึกแผนงาน และค่า Setting Work Center (${wcCount} เครื่อง) ขึ้น Cloud สำเร็จ`, 'success');
+      const completedCount = Object.keys(this.state?.completedPdHistory || {}).length;
+
+      const btn = document.getElementById('btn-modal-cloud-save');
+      if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+      }
+
+      try {
+        await this.pushToCloud(payload, true);
+        if (endpoint) {
+          this.showToast(`☁️ Cloud Save: บันทึก Plan.json, machine_settings.json (${wcCount} เครื่อง) และ completed_pds.json (${completedCount} รายการ) ขึ้น Cloud สำเร็จ`, 'success');
+        } else {
+          this.showToast(`💾 บันทึก Plan.json, machine_settings.json (${wcCount} เครื่อง) และ completed_pds.json (${completedCount} รายการ) ลง Local Cache และเครื่องเรียบร้อย`, 'info');
+        }
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.style.opacity = '1';
+        }
+      }
     });
 
     document.getElementById('btn-modal-local-save')?.addEventListener('click', () => {
+      const payload = this.state.buildPlanPayload();
+      this.pushToCloud(payload, true);
       this.exportBackupJson();
       const wcCount = Object.keys(this.state?.workCenters || {}).length;
-      this.showToast(`💾 Local Save: บันทึกไฟล์ Plan.json (รวม Work Center Settings ${wcCount} เครื่อง) ลงเครื่องสำเร็จ`, 'success');
+      const completedCount = Object.keys(this.state?.completedPdHistory || {}).length;
+      this.showToast(`💾 Local Save: บันทึก Plan.json, machine_settings.json (${wcCount} เครื่อง) และ completed_pds.json (${completedCount} รายการ) สำเร็จ`, 'success');
     });
 
-    document.getElementById('btn-modal-cloud-pull')?.addEventListener('click', () => {
-      this.pullFromCloud(false);
+    const btnCloudPull = document.getElementById('btn-modal-cloud-pull');
+    btnCloudPull?.addEventListener('click', async () => {
+      const inputEndpoint = document.getElementById('input-sync-endpoint');
+      if (inputEndpoint && inputEndpoint.value.trim() && inputEndpoint.value.trim() !== this.getEndpointUrl()) {
+        this.setEndpointUrl(inputEndpoint.value.trim());
+      }
+
+      const originalHtml = btnCloudPull.innerHTML;
+      btnCloudPull.disabled = true;
+      btnCloudPull.style.opacity = '0.7';
+      btnCloudPull.innerHTML = `<span>⏳ กำลังดึงข้อมูล...</span>`;
+
+      try {
+        await this.pullFromCloud(false);
+      } catch (err) {
+        console.error('Error on Cloud Load:', err);
+      } finally {
+        btnCloudPull.disabled = false;
+        btnCloudPull.style.opacity = '1';
+        btnCloudPull.innerHTML = originalHtml;
+      }
     });
 
     // Backwards compatibility bindings

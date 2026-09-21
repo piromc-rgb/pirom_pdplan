@@ -82,6 +82,13 @@
                     <span>📋 ดูรายการที่ Group ในแผนปัจจุบัน</span>
                   </button>
                 </div>
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary); border-top: 1px solid var(--border-glass); margin-top: 4px; padding-top: 8px;" title="เปิด/ปิดการ Sync ข้อมูล Cloud อัตโนมัติ: โหลดข้อมูลเมื่อเปิดแอป และบันทึกข้อมูลเมื่อปิดแอป">
+                  <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <span style="font-weight: 600;">Sync ข้อมูล Cloud</span>
+                    <span style="font-size: 9.5px; color: var(--text-secondary);">Load เปิด app / Save ปิด App</span>
+                  </div>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-cloud-sync" checked><span class="ios-toggle-slider"></span></span>
+                </label>
               </div>
             </div>
             <button id="btn-header-storage-sync" class="btn-action-small" title="Setting Location Keep Data File (ตั้งค่าที่เก็บไฟล์ข้อมูล & Cloud Sync)" style="display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; margin-left: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">
@@ -1456,19 +1463,9 @@
             </label>
           </div>
 
-          <!-- Quick Individual Export Buttons -->
-          <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 16px; flex-wrap: wrap;">
-            <button id="btn-export-machine-json" class="btn" style="padding: 5px 10px; font-size: 10.5px; border-radius: 6px; border: 1px solid #38bdf8; background: rgba(56, 189, 248, 0.08); color: #38bdf8; cursor: pointer;">
-              ⚙️ ดาวน์โหลด machine_settings.json
-            </button>
-            <button id="btn-export-completed-json" class="btn" style="padding: 5px 10px; font-size: 10.5px; border-radius: 6px; border: 1px solid #22c55e; background: rgba(34, 197, 94, 0.08); color: #22c55e; cursor: pointer;">
-              ✅ ดาวน์โหลด completed_pds.json
-            </button>
-          </div>
-
           <!-- Auto-Sync on Close/Open Callout -->
           <div style="background: rgba(56, 189, 248, 0.08); border-left: 3px solid #38bdf8; border-radius: 4px; padding: 8px 12px; margin-bottom: 16px; font-size: 11px; color: var(--text-secondary);">
-            ⚡ <strong>Auto-Save & Load อัตโนมัติ:</strong> เมื่อปิดแอป ระบบจะบันทึก Plan & Machine Settings ขึ้น Cloud และ Local Cache ทันที และเมื่อเปิดแอปใหม่ จะโหลดข้อมูลล่าสุดมาใช้งานให้อัตโนมัติ
+            ⚡ <strong>Cloud Save & Load อัตโนมัติ:</strong> ซิงค์และบันทึกข้อมูล <strong>Plan.json</strong>, <strong>machine_settings.json</strong> (การตั้งค่าเครื่องจักร) และ <strong>completed_pds.json</strong> (รายการ PD ที่เสร็จแล้ว) ทั้งหมดพร้อมกันอัตโนมัติ
           </div>
 
           <!-- Guide & Code Snippet Accordion -->

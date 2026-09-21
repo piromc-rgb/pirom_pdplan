@@ -385,7 +385,12 @@ class App {
           row.remove();
         });
 
-        this.wcSettingsList.appendChild(row);
+        this.wcSettingsList.prepend(row);
+        const modalBody = this.wcSettingsModal?.querySelector('.modal-body');
+        if (modalBody) {
+          modalBody.scrollTop = 0;
+        }
+        row.querySelector('.wc-id-input')?.focus();
       });
     }
 
@@ -1737,6 +1742,19 @@ class App {
         const panel = document.getElementById('display-options-panel');
         if (panel) panel.classList.add('hidden');
         this.showSameItemGroupingModal();
+      });
+    }
+
+    const toggleCloudSync = document.getElementById('toggle-cloud-sync');
+    if (toggleCloudSync) {
+      const isSyncEnabled = this.storageSync ? this.storageSync.isAutoSyncEnabled() : (localStorage.getItem('PDPLAN_AUTO_SYNC') !== 'false');
+      toggleCloudSync.checked = isSyncEnabled;
+      toggleCloudSync.addEventListener('change', () => {
+        if (this.storageSync) {
+          this.storageSync.setAutoSyncEnabled(toggleCloudSync.checked);
+        } else {
+          localStorage.setItem('PDPLAN_AUTO_SYNC', toggleCloudSync.checked ? 'true' : 'false');
+        }
       });
     }
 
