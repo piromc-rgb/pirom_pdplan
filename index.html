@@ -23,7 +23,7 @@
           <div style="display: flex; align-items: center; gap: 8px;">
             <span class="brand-mie">CHAKEN</span>
             <span class="brand-trak">Planing Pro</span>
-            <div class="user-mode-wrapper" style="position: relative; display: inline-flex; align-items: center;">
+            <div id="user-mode-wrapper" class="user-mode-wrapper" style="position: relative; display: inline-flex; align-items: center;">
               <button id="btn-user-mode" class="badge btn-user-mode mode-view" type="button" title="โหมดผู้ใช้งาน: คลิกเพื่อเลือกโหมดดูแผน หรือ วางแผน">
                 <span id="user-mode-icon" class="user-mode-icon">👁️</span>
                 <span id="user-mode-text" class="user-mode-text">ดูแผน</span>
@@ -31,7 +31,7 @@
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
               </button>
-              <div id="user-mode-menu" class="user-mode-dropdown hidden">
+              <div id="user-mode-menu" class="user-mode-dropdown hidden" style="position: absolute; top: calc(100% + 6px); left: 0; min-width: 275px; z-index: 99999;">
                 <div class="user-mode-dropdown-header">
                   <span>⚙️ โหมดผู้ใช้งาน (User Mode)</span>
                 </div>
@@ -45,7 +45,7 @@
                     <div class="mode-item-desc">Load ข้อมูลตอนเปิด App แต่ไม่ Save ตอนปิด App</div>
                   </div>
                 </div>
-                <div id="user-mode-option-plan" class="user-mode-item" data-mode="plan">
+                <div id="user-mode-option-plan" class="user-mode-item item-plan" data-mode="plan">
                   <span class="mode-item-icon">✏️</span>
                   <div class="mode-item-body">
                     <div class="mode-item-title-row">
@@ -122,6 +122,16 @@
                   </div>
                   <span class="ios-toggle"><input type="checkbox" id="toggle-cloud-sync" checked><span class="ios-toggle-slider"></span></span>
                 </label>
+                <div class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; font-size: 11px; color: var(--text-primary); border-top: 1px solid var(--border-glass); margin-top: 4px; padding-top: 8px;" title="สลับโหมดผู้ใช้งาน: โหมดดูแผน หรือ โหมดวางแผน">
+                  <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <span style="font-weight: 600;">โหมดผู้ใช้งาน (User Mode)</span>
+                    <span style="font-size: 9.5px; color: var(--text-secondary);">1. ดูแผน / 2. วางแผน</span>
+                  </div>
+                  <select id="option-select-user-mode" style="font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border-glass); background: var(--bg-darker); color: var(--text-primary); cursor: pointer;">
+                    <option value="view">👁️ 1. ดูแผน (Default)</option>
+                    <option value="plan">✏️ 2. วางแผน</option>
+                  </select>
+                </div>
               </div>
             </div>
             <button id="btn-header-storage-sync" class="btn-action-small" title="Setting Location Keep Data File (ตั้งค่าที่เก็บไฟล์ข้อมูล & Cloud Sync)" style="display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; margin-left: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">

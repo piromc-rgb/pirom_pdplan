@@ -81,30 +81,45 @@ export class StorageSyncManager {
   }
 
   initUserModeUI() {
+    this.userModeWrapper = document.getElementById('user-mode-wrapper');
     this.btnUserMode = document.getElementById('btn-user-mode');
     this.userModeMenu = document.getElementById('user-mode-menu');
     this.userModeOptionView = document.getElementById('user-mode-option-view');
     this.userModeOptionPlan = document.getElementById('user-mode-option-plan');
+    this.optionSelectUserMode = document.getElementById('option-select-user-mode');
 
     if (this.btnUserMode && this.userModeMenu) {
       this.btnUserMode.addEventListener('click', (e) => {
+        e.preventDefault();
         e.stopPropagation();
-        this.userModeMenu.classList.toggle('hidden');
-        this.btnUserMode.classList.toggle('menu-open', !this.userModeMenu.classList.contains('hidden'));
+
+        // ปิดเมนู Option อื่นๆ ก่อนเปิด
+        const displayOptionsPanel = document.getElementById('display-options-panel');
+        if (displayOptionsPanel) displayOptionsPanel.classList.add('hidden');
+
+        const willOpen = this.userModeMenu.classList.contains('hidden');
+        if (willOpen) {
+          this.userModeMenu.classList.remove('hidden');
+          this.btnUserMode.classList.add('menu-open');
+        } else {
+          this.userModeMenu.classList.add('hidden');
+          this.btnUserMode.classList.remove('menu-open');
+        }
       });
 
       document.addEventListener('click', (e) => {
-        if (this.userModeMenu && !this.userModeMenu.classList.contains('hidden') &&
-            !this.userModeMenu.contains(e.target) &&
-            e.target !== this.btnUserMode) {
-          this.userModeMenu.classList.add('hidden');
-          this.btnUserMode.classList.remove('menu-open');
+        if (this.userModeMenu && !this.userModeMenu.classList.contains('hidden')) {
+          if (this.userModeWrapper && !this.userModeWrapper.contains(e.target)) {
+            this.userModeMenu.classList.add('hidden');
+            this.btnUserMode?.classList.remove('menu-open');
+          }
         }
       });
     }
 
     if (this.userModeOptionView) {
-      this.userModeOptionView.addEventListener('click', () => {
+      this.userModeOptionView.addEventListener('click', (e) => {
+        e.stopPropagation();
         this.setUserMode('view');
         if (this.userModeMenu) this.userModeMenu.classList.add('hidden');
         if (this.btnUserMode) this.btnUserMode.classList.remove('menu-open');
@@ -112,10 +127,17 @@ export class StorageSyncManager {
     }
 
     if (this.userModeOptionPlan) {
-      this.userModeOptionPlan.addEventListener('click', () => {
+      this.userModeOptionPlan.addEventListener('click', (e) => {
+        e.stopPropagation();
         this.setUserMode('plan');
         if (this.userModeMenu) this.userModeMenu.classList.add('hidden');
         if (this.btnUserMode) this.btnUserMode.classList.remove('menu-open');
+      });
+    }
+
+    if (this.optionSelectUserMode) {
+      this.optionSelectUserMode.addEventListener('change', (e) => {
+        this.setUserMode(e.target.value);
       });
     }
 
@@ -131,6 +153,7 @@ export class StorageSyncManager {
     const optPlan = this.userModeOptionPlan || document.getElementById('user-mode-option-plan');
     const checkView = document.getElementById('check-user-mode-view');
     const checkPlan = document.getElementById('check-user-mode-plan');
+    const optionSelect = this.optionSelectUserMode || document.getElementById('option-select-user-mode');
 
     if (btnUserMode) {
       if (isPlan) {
@@ -158,6 +181,9 @@ export class StorageSyncManager {
     if (checkView && checkPlan) {
       checkView.classList.toggle('hidden', isPlan);
       checkPlan.classList.toggle('hidden', !isPlan);
+    }
+    if (optionSelect && optionSelect.value !== this.getUserMode()) {
+      optionSelect.value = this.getUserMode();
     }
   }
 

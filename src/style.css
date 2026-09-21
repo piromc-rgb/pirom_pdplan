@@ -144,6 +144,8 @@ body {
 
 /* 1. HEADER PANEL */
 .app-header {
+  position: relative;
+  z-index: 1000;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -246,25 +248,35 @@ body {
   top: calc(100% + 6px);
   left: 0;
   width: 275px;
-  background: var(--bg-darker, #0d131f);
-  border: 1px solid var(--border-glass, rgba(255, 255, 255, 0.1));
+  background: var(--bg-darker, #ffffff);
+  border: 1px solid var(--border-glass, rgba(0, 0, 0, 0.12));
   border-radius: 10px;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
   padding: 6px;
-  z-index: 1000;
+  z-index: 99999;
   backdrop-filter: blur(16px);
-  animation: fadeInDown 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+body.dark-theme .user-mode-dropdown {
+  background: #0d1321;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 .user-mode-dropdown-header {
   font-size: 9.5px;
   font-weight: 700;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--text-secondary, #64748b);
   padding: 5px 8px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  border-bottom: 1px solid var(--border-glass, rgba(255, 255, 255, 0.08));
+  border-bottom: 1px solid var(--border-glass, rgba(0, 0, 0, 0.08));
   margin-bottom: 4px;
+}
+
+body.dark-theme .user-mode-dropdown-header {
+  color: #94a3b8;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
 }
 
 .user-mode-item {
@@ -277,6 +289,7 @@ body {
   transition: all 0.15s ease;
   border: 1px solid transparent;
   margin-bottom: 2px;
+  color: var(--text-primary, #0f172a);
 }
 
 .user-mode-item:last-child {
@@ -284,12 +297,31 @@ body {
 }
 
 .user-mode-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+body.dark-theme .user-mode-item:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .user-mode-item.active {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(2, 132, 199, 0.09);
+  border-color: rgba(2, 132, 199, 0.3);
+}
+
+body.dark-theme .user-mode-item.active {
+  background: rgba(0, 242, 254, 0.12);
+  border-color: rgba(0, 242, 254, 0.35);
+}
+
+.user-mode-item.item-plan.active {
+  background: rgba(22, 163, 74, 0.09);
+  border-color: rgba(22, 163, 74, 0.3);
+}
+
+body.dark-theme .user-mode-item.item-plan.active {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.4);
 }
 
 .mode-item-icon {
