@@ -12,6 +12,7 @@ const STORAGE_ENDPOINT_KEY = 'PDPLAN_STORAGE_ENDPOINT';
 const STORAGE_CACHE_KEY = 'pdplan_cached_plan';
 const STORAGE_LAST_SYNC_KEY = 'PDPLAN_LAST_SYNC_TIME';
 const STORAGE_AUTO_SYNC_KEY = 'PDPLAN_AUTO_SYNC';
+const STORAGE_USER_MODE_KEY = 'PDPLAN_USER_MODE';
 
 export class StorageSyncManager {
   constructor(state) {
@@ -25,6 +26,9 @@ export class StorageSyncManager {
     this.lastSyncTime = localStorage.getItem(STORAGE_LAST_SYNC_KEY) || null;
     this.syncStatus = 'idle'; // 'idle' | 'syncing' | 'success' | 'error' | 'local_only'
     this.debounceTimer = null;
+    // โหมดผู้ใช้งาน: 'view' (ดูแผน - default) หรือ 'plan' (วางแผน)
+    // ทุกครั้งที่เปิดใช้งานใหม่จะเริ่มต้นเป็น 'view' (ดูแผน) เป็นค่าเริ่มต้น
+    this.userMode = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(STORAGE_USER_MODE_KEY) : null) || 'view';
     
     this.initUI();
   }
@@ -50,8 +54,111 @@ export class StorageSyncManager {
     }
     
     this.initModalEventListeners();
+    this.initUserModeUI();
     this.initAppLifecycle();
     this.updateStatusBadge();
+  }
+
+  getUserMode() {
+    return this.userMode || 'view';
+  }
+
+  setUserMode(mode) {
+    if (mode !== 'view' && mode !== 'plan') mode = 'view';
+    this.userMode = mode;
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem(STORAGE_USER_MODE_KEY, mode);
+      }
+      localStorage.setItem(STORAGE_USER_MODE_KEY, mode);
+    } catch (e) {}
+    this.updateUserModeUI();
+    if (mode === 'plan') {
+      this.showToast('✏️ สลับเป็น "โหมดวางแผน" (Load เมื่อเปิด App และ Auto Save เมื่อปิด App)', 'success');
+    } else {
+      this.showToast('👁️ สลับเป็น "โหมดดูแผน" (Load เมื่อเปิด App แต่ไม่ Save เมื่อปิด App)', 'info');
+    }
+  }
+
+  initUserModeUI() {
+    this.btnUserMode = document.getElementById('btn-user-mode');
+    this.userModeMenu = document.getElementById('user-mode-menu');
+    this.userModeOptionView = document.getElementById('user-mode-option-view');
+    this.userModeOptionPlan = document.getElementById('user-mode-option-plan');
+
+    if (this.btnUserMode && this.userModeMenu) {
+      this.btnUserMode.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.userModeMenu.classList.toggle('hidden');
+        this.btnUserMode.classList.toggle('menu-open', !this.userModeMenu.classList.contains('hidden'));
+      });
+
+      document.addEventListener('click', (e) => {
+        if (this.userModeMenu && !this.userModeMenu.classList.contains('hidden') &&
+            !this.userModeMenu.contains(e.target) &&
+            e.target !== this.btnUserMode) {
+          this.userModeMenu.classList.add('hidden');
+          this.btnUserMode.classList.remove('menu-open');
+        }
+      });
+    }
+
+    if (this.userModeOptionView) {
+      this.userModeOptionView.addEventListener('click', () => {
+        this.setUserMode('view');
+        if (this.userModeMenu) this.userModeMenu.classList.add('hidden');
+        if (this.btnUserMode) this.btnUserMode.classList.remove('menu-open');
+      });
+    }
+
+    if (this.userModeOptionPlan) {
+      this.userModeOptionPlan.addEventListener('click', () => {
+        this.setUserMode('plan');
+        if (this.userModeMenu) this.userModeMenu.classList.add('hidden');
+        if (this.btnUserMode) this.btnUserMode.classList.remove('menu-open');
+      });
+    }
+
+    this.updateUserModeUI();
+  }
+
+  updateUserModeUI() {
+    const isPlan = this.getUserMode() === 'plan';
+    const btnUserMode = this.btnUserMode || document.getElementById('btn-user-mode');
+    const userModeIcon = document.getElementById('user-mode-icon');
+    const userModeText = document.getElementById('user-mode-text');
+    const optView = this.userModeOptionView || document.getElementById('user-mode-option-view');
+    const optPlan = this.userModeOptionPlan || document.getElementById('user-mode-option-plan');
+    const checkView = document.getElementById('check-user-mode-view');
+    const checkPlan = document.getElementById('check-user-mode-plan');
+
+    if (btnUserMode) {
+      if (isPlan) {
+        btnUserMode.classList.remove('mode-view');
+        btnUserMode.classList.add('mode-plan');
+        btnUserMode.title = 'โหมดผู้ใช้งาน: วางแผน (Load เปิด App / Save ปิด App) - คลิกเพื่อสลับโหมด';
+      } else {
+        btnUserMode.classList.remove('mode-plan');
+        btnUserMode.classList.add('mode-view');
+        btnUserMode.title = 'โหมดผู้ใช้งาน: ดูแผน (Load เปิด App / ไม่ Save ปิด App) - คลิกเพื่อสลับโหมด';
+      }
+    }
+
+    if (userModeIcon) {
+      userModeIcon.textContent = isPlan ? '✏️' : '👁️';
+    }
+    if (userModeText) {
+      userModeText.textContent = isPlan ? 'วางแผน' : 'ดูแผน';
+    }
+
+    if (optView && optPlan) {
+      optView.classList.toggle('active', !isPlan);
+      optPlan.classList.toggle('active', isPlan);
+    }
+    if (checkView && checkPlan) {
+      checkView.classList.toggle('hidden', isPlan);
+      checkPlan.classList.toggle('hidden', !isPlan);
+    }
   }
 
   initAppLifecycle() {
@@ -75,8 +182,8 @@ export class StorageSyncManager {
         }
       } catch (e) {}
 
-      // ส่งข้อมูลขึ้น Cloud & Server ทันทีด้วย keepalive: true (เฉพาะเมื่อเปิด Auto-Sync)
-      if (this.autoSync) {
+      // ส่งข้อมูลขึ้น Cloud & Server ทันทีด้วย keepalive: true (เฉพาะเมื่อเปิด Auto-Sync และอยู่ในโหมดวางแผน)
+      if (this.autoSync && this.getUserMode() === 'plan') {
         this.executePush(payload, true);
       }
     };
@@ -373,6 +480,9 @@ export class StorageSyncManager {
     }
 
     if (!this.autoSync && !immediate && !isClosing) return;
+
+    // ถ้าอยู่ในโหมดดูแผน (view) และไม่ใช่การกดปุ่มบันทึกโดยตรง (immediate) ให้งด Auto-push ขึ้น Cloud / Server
+    if (this.getUserMode() !== 'plan' && !immediate) return;
 
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);

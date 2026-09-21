@@ -23,7 +23,40 @@
           <div style="display: flex; align-items: center; gap: 8px;">
             <span class="brand-mie">CHAKEN</span>
             <span class="brand-trak">Planing Pro</span>
-            <span class="badge">APS Scheduling</span>
+            <div class="user-mode-wrapper" style="position: relative; display: inline-flex; align-items: center;">
+              <button id="btn-user-mode" class="badge btn-user-mode mode-view" type="button" title="โหมดผู้ใช้งาน: คลิกเพื่อเลือกโหมดดูแผน หรือ วางแผน">
+                <span id="user-mode-icon" class="user-mode-icon">👁️</span>
+                <span id="user-mode-text" class="user-mode-text">ดูแผน</span>
+                <svg class="user-mode-arrow" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px; transition: transform 0.2s;">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+              <div id="user-mode-menu" class="user-mode-dropdown hidden">
+                <div class="user-mode-dropdown-header">
+                  <span>⚙️ โหมดผู้ใช้งาน (User Mode)</span>
+                </div>
+                <div id="user-mode-option-view" class="user-mode-item active" data-mode="view">
+                  <span class="mode-item-icon">👁️</span>
+                  <div class="mode-item-body">
+                    <div class="mode-item-title-row">
+                      <span class="mode-item-title title-view">1. ดูแผน <span class="mode-default-tag">(Default)</span></span>
+                      <span id="check-user-mode-view" class="mode-item-check check-view">✓</span>
+                    </div>
+                    <div class="mode-item-desc">Load ข้อมูลตอนเปิด App แต่ไม่ Save ตอนปิด App</div>
+                  </div>
+                </div>
+                <div id="user-mode-option-plan" class="user-mode-item" data-mode="plan">
+                  <span class="mode-item-icon">✏️</span>
+                  <div class="mode-item-body">
+                    <div class="mode-item-title-row">
+                      <span class="mode-item-title title-plan">2. วางแผน</span>
+                      <span id="check-user-mode-plan" class="mode-item-check check-plan hidden">✓</span>
+                    </div>
+                    <div class="mode-item-desc">Load ข้อมูลตอนเปิด App และ Save ตอนปิด App</div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <button id="btn-theme-toggle" class="btn-theme-toggle" title="Toggle Light/Dark Theme" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; border-radius: 50%; margin-left: 5px; transition: all 0.2s;">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="theme-icon-sun">
                 <circle cx="12" cy="12" r="5"/>

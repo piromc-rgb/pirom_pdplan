@@ -2340,8 +2340,11 @@ class CentralState {
       } catch (e) {}
     }
 
-    // 2. Also save to local dev server /api/plan if running on localhost
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    // 2. Also save to local dev server /api/plan if running on localhost (เฉพาะโหมดวางแผน plan เท่านั้น)
+    const isPlanMode = this.storageSync
+      ? this.storageSync.getUserMode() === 'plan'
+      : (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('PDPLAN_USER_MODE') === 'plan' : false);
+    if (isPlanMode && typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
       fetch('/api/plan', {
         method: 'POST',
         headers: {
