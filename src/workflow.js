@@ -1145,6 +1145,21 @@ export class WorkflowController {
           alert(`ไม่พบข้อมูลใน Sheet "${sheetName}"`);
           return;
         }
+
+        // Parse Plan + Mat sheet if present
+        let matSheetName = workbook.SheetNames.find(name => {
+          const n = (name || '').trim().toLowerCase();
+          return n === 'plan + mat' || n === 'plan+mat' || (n.includes('plan') && n.includes('mat'));
+        });
+        if (matSheetName) {
+          try {
+            const matWorksheet = workbook.Sheets[matSheetName];
+            const matRaw2D = XLSX.utils.sheet_to_json(matWorksheet, { header: 1, defval: '' });
+            this.parseAndStoreMaterials(matRaw2D);
+          } catch (e) {
+            console.warn('Error parsing Plan + Mat sheet:', e);
+          }
+        }
         
         // Helper to extract number from PD code for comparison
         const parsePDNumber = (pdStr) => {
@@ -1234,6 +1249,43 @@ export class WorkflowController {
         // Priority and Project filters
         const priorityFilterList = priorityFilter ? priorityFilter.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
         const projectFilterList = projectFilter ? projectFilter.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
+
+        // Build Dwg to PD mapping for 14-char sub-assembly tracking
+        const dwgToPdMap = this.state.dwgToPdMap || {};
+        for (let i = 1; i < raw2D.length; i++) {
+          const rawRow = raw2D[i];
+          if (!rawRow || rawRow.length === 0) continue;
+          const dwg = String(rawRow[col.dwg] || '').trim();
+          const pdId = String(rawRow[col.pd] || '').trim();
+          if (!dwg || !pdId) continue;
+          const opNum = parseInt(rawRow[col.step]) || 10;
+          const opStatus = String(rawRow[col.opStatus] || '').trim();
+          const orderStatus = String(rawRow[col.orderStatus] || '').trim();
+          const wcDesc = String(rawRow[col.wcDesc] || '').trim();
+          const wcCode = String(rawRow[col.wcCode] || '').trim();
+
+          if (!dwgToPdMap[dwg]) {
+            dwgToPdMap[dwg] = {
+              pdId,
+              orderStatus,
+              operations: []
+            };
+          } else if (orderStatus !== 'Closed' && dwgToPdMap[dwg].orderStatus === 'Closed') {
+            dwgToPdMap[dwg].pdId = pdId;
+            dwgToPdMap[dwg].orderStatus = orderStatus;
+            dwgToPdMap[dwg].operations = [];
+          }
+
+          if (pdId === dwgToPdMap[dwg].pdId) {
+            dwgToPdMap[dwg].operations.push({
+              stepNum: opNum,
+              name: wcDesc || wcCode,
+              machine: wcCode,
+              status: opStatus
+            });
+          }
+        }
+        this.state.dwgToPdMap = dwgToPdMap;
 
         // Group rows by Production Order ID
         const groups = {};
@@ -1556,5 +1608,82 @@ export class WorkflowController {
         });
       });
     }
+  }
+
+  parseAndStoreMaterials(matRaw2D) {
+    if (!matRaw2D || matRaw2D.length <= 1) return;
+    const headerRow = (matRaw2D[0] || []).map(h => String(h || '').trim().toLowerCase());
+    const findColIdx = (possibleNames, fallbackIdx) => {
+      for (let p of possibleNames) {
+        for (let i = 0; i < headerRow.length; i++) {
+          if (headerRow[i] === p) return i;
+        }
+      }
+      for (let p of possibleNames) {
+        for (let i = 0; i < headerRow.length; i++) {
+          if (headerRow[i].startsWith(p)) return i;
+        }
+      }
+      for (let p of possibleNames) {
+        for (let i = 0; i < headerRow.length; i++) {
+          if (p.length >= 3 && headerRow[i].includes(p)) return i;
+        }
+      }
+      return fallbackIdx;
+    };
+
+    const col = {
+      pd: findColIdx(['production order', 'productionorder', 'pd id', 'pd_id', 'pd no', 'order'], 5),
+      step: findColIdx(['operation', 'step', 'oper', 'op'], 9),
+      wc: findColIdx(['work center', 'wc'], 10),
+      operDesc: findColIdx(['r.ref.oper.desc', 'machine description', 'operation description'], 11),
+      mat: findColIdx(['mat.', 'mat', 'item', 'material'], 14),
+      matDesc: findColIdx(['mat._1', 'mat_1', 'mat desc', 'description'], 15),
+      estimatedQty: findColIdx(['mat.estimated quantity', 'estimated quantity', 'est qty'], 18),
+      actualQty: findColIdx(['mat.actual quantity', 'actual quantity'], 19),
+      toIssue: findColIdx(['mat.to issue', 'to issue'], 21),
+      operStatus: findColIdx(['operation status', 'oper status', 'op status'], 22),
+      orderStatus: findColIdx(['order status'], 23)
+    };
+
+    const planMaterials = this.state.planMaterials || {};
+    for (let i = 1; i < matRaw2D.length; i++) {
+      const row = matRaw2D[i];
+      if (!row || row.length === 0) continue;
+      const pdId = String(row[col.pd] || '').trim();
+      const mat = String(row[col.mat] || '').trim();
+      if (!pdId || !mat) continue;
+
+      if (!planMaterials[pdId]) {
+        planMaterials[pdId] = [];
+      }
+
+      const stepNum = parseInt(row[col.step]) || 10;
+      const wc = String(row[col.wc] || '').trim();
+      const operDesc = String(row[col.operDesc] || '').trim();
+      const matDesc = String(row[col.matDesc] || '').trim();
+      const estQty = parseFloat(row[col.estimatedQty]) || 0;
+      const actualQty = parseFloat(row[col.actualQty]) || 0;
+      const toIssue = parseFloat(row[col.toIssue]) || 0;
+      const operStatus = String(row[col.operStatus] || '').trim();
+      const orderStatus = String(row[col.orderStatus] || '').trim();
+
+      const exists = planMaterials[pdId].some(m => m.mat === mat && m.stepNum === stepNum);
+      if (!exists) {
+        planMaterials[pdId].push({
+          stepNum,
+          wc,
+          operDesc,
+          mat,
+          matDesc,
+          estimatedQty: estQty,
+          actualQty,
+          toIssue,
+          operStatus,
+          orderStatus
+        });
+      }
+    }
+    this.state.planMaterials = planMaterials;
   }
 }

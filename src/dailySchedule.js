@@ -64,12 +64,16 @@ export class DailyScheduleController {
     this.render();
   }
 
-  open(machineName, initialDate = null) {
+  open(machineName, initialDate = null, viewMode = null) {
     this.selectedMachine = machineName;
     
-    // Set default value to 'daily' on open
+    // Set view mode if specified, otherwise keep current or fallback to 'daily'
     if (this.viewModeSelect) {
-      this.viewModeSelect.value = 'daily';
+      if (viewMode) {
+        this.viewModeSelect.value = viewMode;
+      } else if (!this.viewModeSelect.value) {
+        this.viewModeSelect.value = 'daily';
+      }
     }
 
     if (initialDate) {
@@ -341,9 +345,21 @@ export class DailyScheduleController {
         </div>
       `;
 
-      card.addEventListener('dblclick', () => {
+      card.addEventListener('dblclick', (e) => {
+        if (e.target.closest('.btn-mark-pd-completed')) return;
+        const currentMachine = this.selectedMachine;
+        const currentDate = new Date(this.selectedDate);
+        const currentViewMode = this.viewModeSelect ? this.viewModeSelect.value : 'daily';
+
         this.close();
-        window.dispatchEvent(new CustomEvent('open-pd-modal', { detail: { woId: job.woId } }));
+        window.dispatchEvent(new CustomEvent('open-pd-modal', {
+          detail: {
+            woId: job.woId,
+            returnCallback: () => {
+              this.open(currentMachine, currentDate, currentViewMode);
+            }
+          }
+        }));
       });
 
       const btnMarkCompleted = card.querySelector('.btn-mark-pd-completed');

@@ -1132,6 +1132,39 @@
               </div>
             </div>
 
+            <!-- Welding Materials Section (Plan + Mat) -->
+            <div id="pd-plan-mat-section" class="hidden" style="display: none; flex-direction: column; gap: 6px; margin-top: 4px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 11px; font-weight: 800; color: #d97706; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 14px;">⚡</span> รายการวัสดุ / ชิ้นส่วนประกอบงานเชื่อม (Plan + Mat)
+                  </span>
+                  <span id="pd-plan-mat-count" style="font-size: 10.5px; color: #475569; font-weight: 600;"></span>
+                </div>
+                <div style="font-size: 10px; color: #0284c7; font-weight: 700; background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 4px; padding: 2px 8px;">
+                  🔗 ข้อกำหนด: วางแผนเชื่อมต่อจากแผนผลิตของ PD Mat. ทุกตัว
+                </div>
+              </div>
+
+              <div style="overflow-x: auto; border: 1.5px solid var(--border-glass); border-radius: 8px; background: rgba(255,255,255,0.02);">
+                <table class="pd-mat-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 11px;">
+                  <thead>
+                    <tr style="background: rgba(0,0,0,0.06); border-bottom: 2px solid var(--border-glass); color: #0f172a; font-weight: 800;">
+                      <th style="padding: 6px 8px; width: 130px; white-space: nowrap; color: #0f172a;">Mat. (รหัสแบบ/วัสดุ)</th>
+                      <th style="padding: 6px 8px; color: #0f172a;">Mat._1 (ชื่อรายการ / รายละเอียด)</th>
+                      <th style="padding: 6px 6px; width: 55px; text-align: center; white-space: nowrap; color: #0f172a;">Qty</th>
+                      <th style="padding: 6px 6px; width: 115px; text-align: center; white-space: nowrap; color: #0f172a;">Production Order</th>
+                      <th style="padding: 6px 6px; width: 95px; text-align: center; white-space: nowrap; color: #0f172a;">สถานะ</th>
+                      <th style="padding: 6px 8px; width: 115px; text-align: left; white-space: nowrap; color: #0f172a;">Op status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pd-plan-mat-table-body" style="color: #0f172a;">
+                    <!-- Dynamically populated mat rows -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <!-- Memo -->
             <div class="form-group" style="display: flex; flex-direction: column; gap: 4px;">
               <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary);">Memo (หมายเหตุ)</label>

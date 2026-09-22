@@ -9,3 +9,4 @@ dist/
 *.xls
 Plan.json
 pd.md
+plan_materials_cache.json

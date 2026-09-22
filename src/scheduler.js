@@ -125,14 +125,94 @@ export class Scheduler {
     return startHour;
   }
 
-  // Active Job Shop Scheduling Pass
-  // Schedules jobs dynamically, minimizing machine idle gaps by pulling ready tasks forward
-  // when a machine is free, keeping work centers running as continuously as possible.
+  static isWeldingJob(job) {
+    if (!job) return false;
+    const m = String(job.machine || '').toUpperCase();
+    const n = String(job.stepName || job.name || '').toLowerCase();
+    return m.startsWith('DEB01') || m === 'DEB011' || m === 'DEB012' || m === 'DEB013' || m === 'DEB014' || n.includes('เชื่อม') || n.includes('weld');
+  }
+
+  static getChildWoIds(parentWoId, options = {}) {
+    if (!parentWoId) return [];
+    const children = new Set();
+    const planMaterials = options.planMaterials || (typeof window !== 'undefined' && window.state?.planMaterials) || {};
+    const dwgToPdMap = options.dwgToPdMap || (typeof window !== 'undefined' && window.state?.dwgToPdMap) || {};
+    const assemblyLinks = options.assemblyLinks || (typeof window !== 'undefined' && window.state?.assemblyLinks) || [];
+    const allWoIds = options.distinctWoIds || [];
+
+    // 1. Dash-suffix hierarchy (child.woId startsWith parent.woId + '-')
+    allWoIds.forEach(id => {
+      if (id !== parentWoId && id.startsWith(parentWoId + '-')) {
+        children.add(id);
+      }
+    });
+
+    // 2. Assembly links (link.from belongs to child PD, link.to belongs to parent PD)
+    assemblyLinks.forEach(link => {
+      const fromWo = (link.from || '').split('-')[0];
+      const toWo = (link.to || '').split('-')[0];
+      if (toWo === parentWoId && fromWo && fromWo !== parentWoId) {
+        children.add(fromWo);
+      }
+    });
+
+    // 3. Materials / Child component PDs from sheet Plan + Mat (planMaterials)
+    const mats = planMaterials[parentWoId] || [];
+    mats.forEach(item => {
+      const matCode = String(item.mat || '').trim();
+      if (!matCode) return;
+      if (dwgToPdMap[matCode]?.pdId) {
+        const cId = dwgToPdMap[matCode].pdId;
+        if (cId !== parentWoId) children.add(cId);
+      }
+      if (options.jobs) {
+        const match = options.jobs.find(j => (j.dwgNo && j.dwgNo.trim() === matCode) || j.woId === matCode);
+        if (match && match.woId && match.woId !== parentWoId) {
+          children.add(match.woId);
+        }
+      }
+      if (options.allWOs) {
+        const match = options.allWOs.find(w => (w.dwgNo && w.dwgNo.trim() === matCode) || w.id === matCode);
+        if (match && match.id && match.id !== parentWoId) {
+          children.add(match.id);
+        }
+      }
+    });
+
+    return Array.from(children);
+  }
+
+  static isChildWoOf(childWoId, parentWoId, options = {}) {
+    if (!childWoId || !parentWoId || childWoId === parentWoId) return false;
+    if (childWoId.startsWith(parentWoId + '-')) return true;
+
+    const planMaterials = options.planMaterials || (typeof window !== 'undefined' && window.state?.planMaterials) || {};
+    const dwgToPdMap = options.dwgToPdMap || (typeof window !== 'undefined' && window.state?.dwgToPdMap) || {};
+    const assemblyLinks = options.assemblyLinks || (typeof window !== 'undefined' && window.state?.assemblyLinks) || [];
+
+    const hasLink = assemblyLinks.some(l => {
+      const f = (l.from || '').split('-')[0];
+      const t = (l.to || '').split('-')[0];
+      return f === childWoId && t === parentWoId;
+    });
+    if (hasLink) return true;
+
+    const mats = planMaterials[parentWoId] || [];
+    for (const item of mats) {
+      const matCode = String(item.mat || '').trim();
+      if (!matCode) continue;
+      if (dwgToPdMap[matCode]?.pdId === childWoId) return true;
+      if (matCode === childWoId) return true;
+    }
+
+    return false;
+  }
+
   // Active Job Shop Scheduling Pass
   // Schedules jobs dynamically, minimizing machine idle gaps by pulling ready tasks forward
   // when a machine is free, keeping work centers running as continuously as possible.
   // Enforces 10-minute move time buffer between different work stations for the same Production Order.
-  static applyActiveJobShopScheduling(jobs, scale = 'hr', nowWorkingHour = 0.0, existingScheduledJobs = [], workCenters = {}, allowOffload = true, groupSameItem = true) {
+  static applyActiveJobShopScheduling(jobs, scale = 'hr', nowWorkingHour = 0.0, existingScheduledJobs = [], workCenters = {}, allowOffload = true, groupSameItem = true, options = {}) {
     const startOffset = Math.max((scale === 'hr' ? 8.0 : 0.0), nowWorkingHour);
 
     // Each machine gets `capacity` parallel lanes instead of a single busy-until
@@ -210,15 +290,21 @@ export class Scheduler {
     // --- Indexes so lookups inside the dispatch loop are O(1) / O(small constant)
     // instead of O(n) scans over the whole unscheduled pool (was O(n^3) overall). ---
 
-    // Parent WO id -> direct/indirect child WO ids (child.woId startsWith parent.woId + '-')
-    const distinctWoIds = [...new Set(jobs.map(j => j.woId).filter(Boolean))];
-    const childrenOf = new Map(distinctWoIds.map(id => [id, []]));
-    distinctWoIds.forEach(childId => {
-      distinctWoIds.forEach(parentId => {
-        if (parentId !== childId && childId.startsWith(parentId + '-')) {
-          childrenOf.get(parentId).push(childId);
-        }
+    // Parent WO id -> direct/indirect child WO ids (child.woId startsWith parent.woId + '-', assemblyLinks, or Plan + Mat)
+    const allDistinctWoIds = [...new Set([
+      ...jobs.map(j => j.woId).filter(Boolean),
+      ...existingScheduledJobs.map(j => j.woId).filter(Boolean)
+    ])];
+    const childrenOf = new Map(allDistinctWoIds.map(id => [id, []]));
+    allDistinctWoIds.forEach(parentId => {
+      const kids = Scheduler.getChildWoIds(parentId, {
+        planMaterials: options.planMaterials,
+        dwgToPdMap: options.dwgToPdMap,
+        assemblyLinks: options.assemblyLinks,
+        distinctWoIds: allDistinctWoIds,
+        jobs: [...existingScheduledJobs, ...jobs]
       });
+      childrenOf.set(parentId, kids);
     });
 
     // Remaining (not-yet-scheduled) steps per WO - small arrays (routing steps per WO)
@@ -452,14 +538,14 @@ export class Scheduler {
   }
 
   // Wrapper to support legacy finite scheduling calls in UI
-  static applyForwardsFinite(jobs, scale = 'hr', nowWorkingHour = 0.0, workCenters = {}, allowOffload = true, groupSameItem = true) {
+  static applyForwardsFinite(jobs, scale = 'hr', nowWorkingHour = 0.0, workCenters = {}, allowOffload = true, groupSameItem = true, options = {}) {
     // Completed jobs are done - keep them fixed (as already-occupied machine time)
     // instead of feeding them back into the dispatch pool, or a finished PD would
     // get a brand-new startHour (and look "reloaded into the plan") every time the
     // scale changes.
     const completedJobs = jobs.filter(j => j.status === 'Completed');
     const pendingJobs = jobs.filter(j => j.status !== 'Completed');
-    return this.applyActiveJobShopScheduling(pendingJobs, scale, nowWorkingHour, completedJobs, workCenters, allowOffload, groupSameItem);
+    return this.applyActiveJobShopScheduling(pendingJobs, scale, nowWorkingHour, completedJobs, workCenters, allowOffload, groupSameItem, options);
   }
 
   // Backward Active Job Shop Scheduling Pass
@@ -843,10 +929,11 @@ export class Scheduler {
       const pB = getPriorityWeight(b.priority);
       if (pA !== pB) return pA - pB;
 
-      const isAChild = a.id.includes('-');
-      const isBChild = b.id.includes('-');
-      if (isAChild && !isBChild && a.id.startsWith(b.id + '-')) return -1;
-      if (isBChild && !isAChild && b.id.startsWith(a.id + '-')) return 1;
+      // Child component WOs before Parent assembly WOs (including welding child PDs)
+      const aIsChildOfB = Scheduler.isChildWoOf(a.id, b.id, { allWOs });
+      const bIsChildOfA = Scheduler.isChildWoOf(b.id, a.id, { allWOs });
+      if (aIsChildOfB && !bIsChildOfA) return -1;
+      if (bIsChildOfA && !aIsChildOfB) return 1;
 
       // Group WOs of the same item together
       if (groupSameItem) {
@@ -880,10 +967,19 @@ export class Scheduler {
 
     // Sequential multi-PD placement
     sortedWOs.forEach(wo => {
-      // Check child component completion times
+      // Check child component completion times (dash-suffix, assembly links, and welding materials)
       const childEnds = [];
+      const childIds = Scheduler.getChildWoIds(wo.id, {
+        distinctWoIds: Object.keys(woEndTimes),
+        allWOs
+      });
+      childIds.forEach(cId => {
+        if (woEndTimes[cId] !== undefined) {
+          childEnds.push(woEndTimes[cId]);
+        }
+      });
       Object.keys(woEndTimes).forEach(cId => {
-        if (cId.startsWith(wo.id + '-')) {
+        if (cId.startsWith(wo.id + '-') && !childIds.includes(cId)) {
           childEnds.push(woEndTimes[cId]);
         }
       });

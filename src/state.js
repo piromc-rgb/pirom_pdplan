@@ -227,6 +227,8 @@ class CentralState {
     this.timelineOffset = 0.0;
     this.assemblyLinks = [];
     this.showDependencyLines = false;
+    this.planMaterials = {};
+    this.dwgToPdMap = {};
 
     // Load backlog and plan on startup
     this.loadWorkOrdersFromFile();
@@ -496,7 +498,11 @@ class CentralState {
     if (this.schedulingModel === 'infinite') {
       this.scheduledJobs = Scheduler.applyBackwardsInfinite(this.scheduledJobs, scale);
     } else if (this.schedulingModel === 'finite') {
-      this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, scale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem);
+      this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, scale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem, {
+        planMaterials: this.planMaterials,
+        dwgToPdMap: this.dwgToPdMap,
+        assemblyLinks: this.assemblyLinks
+      });
     }
 
     const config = this.getScaleConfig(scale);
@@ -521,7 +527,11 @@ class CentralState {
     if (this.schedulingModel === 'infinite') {
       this.scheduledJobs = Scheduler.applyBackwardsInfinite(this.scheduledJobs, this.activeScale);
     } else if (this.schedulingModel === 'finite') {
-      this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, this.activeScale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem);
+      this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, this.activeScale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem, {
+        planMaterials: this.planMaterials,
+        dwgToPdMap: this.dwgToPdMap,
+        assemblyLinks: this.assemblyLinks
+      });
     }
 
     this.savePlanToFile();
@@ -2065,6 +2075,46 @@ class CentralState {
       }
     });
 
+    // 3. Link by planMaterials & dwgToPdMap (Welding assembly PDs -> Child component PDs)
+    if (this.planMaterials) {
+      allWoIds.forEach(parentWoId => {
+        const mats = this.planMaterials[parentWoId] || [];
+        if (mats.length === 0) return;
+
+        const parentJobs = woJobsMap.get(parentWoId) || [];
+        if (parentJobs.length === 0) return;
+
+        const parentSteps = [...parentJobs].sort((a, b) => (a.stepNum || 0) - (b.stepNum || 0));
+        const parentWeldStep = parentSteps.find(s => {
+          const m = String(s.machine || '').toUpperCase();
+          const n = String(s.stepName || s.name || '').toLowerCase();
+          return m.startsWith('DEB01') || n.includes('เชื่อม') || n.includes('weld');
+        }) || parentSteps.find(isAssyStep) || parentSteps[0];
+
+        mats.forEach(item => {
+          const matCode = String(item.mat || '').trim();
+          if (!matCode) return;
+
+          let childWoId = this.dwgToPdMap?.[matCode]?.pdId;
+          if (!childWoId && keyToWoIdMap.has(matCode)) childWoId = keyToWoIdMap.get(matCode);
+          if (!childWoId && woJobsMap.has(matCode)) childWoId = matCode;
+
+          if (childWoId && childWoId !== parentWoId && woJobsMap.has(childWoId)) {
+            const childSteps = [...woJobsMap.get(childWoId)].sort((a, b) => (b.stepNum || 0) - (a.stepNum || 0));
+            const childFinalStep = childSteps[0];
+
+            if (childFinalStep && parentWeldStep) {
+              const k = `${childFinalStep.id}->${parentWeldStep.id}`;
+              if (!linkSet.has(k)) {
+                linkSet.add(k);
+                links.push({ from: childFinalStep.id, to: parentWeldStep.id });
+              }
+            }
+          }
+        });
+      });
+    }
+
     // Preserve existing custom links
     const existing = this.assemblyLinks || [];
     existing.forEach(l => {
@@ -2258,6 +2308,8 @@ class CentralState {
       completedPdHistory: this.completedPdHistory || {},
       favoritePDs: this.favoritePDs || {},
       removedStepHistory: this.removedStepHistory || {},
+      planMaterials: this.planMaterials || {},
+      dwgToPdMap: this.dwgToPdMap || {},
       formattedRows
     };
   }
@@ -2291,6 +2343,8 @@ class CentralState {
       }
       if (data.favoritePDs) this.favoritePDs = data.favoritePDs;
       if (data.removedStepHistory) this.removedStepHistory = data.removedStepHistory;
+      if (data.planMaterials) this.planMaterials = data.planMaterials;
+      if (data.dwgToPdMap) this.dwgToPdMap = data.dwgToPdMap;
 
       this.scheduledJobs = this.scheduledJobs.filter(j => !this.isPdInCompletedHistory(j.woId) && !this.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name));
       this.workOrders = this.workOrders.filter(wo => !this.isPdInCompletedHistory(wo.id));
@@ -2298,11 +2352,136 @@ class CentralState {
         wo.steps = wo.steps.filter(step => !this.isStepIdentityRemoved(wo.id, step.machine, step.name));
       });
       this.deduplicateAllWorkOrders();
-      if (this.ganttController && this.scheduledJobs.length > 0) {
-        this.ganttController.fitTasks(this.scheduledJobs);
-      }
       this.notify();
     }
+  }
+
+  getChildPdInfo(matCode) {
+    if (!matCode) return null;
+    const trimmedMat = String(matCode).trim();
+    if (trimmedMat.length === 10) {
+      return {
+        found: true,
+        isRawMat: true,
+        mat: trimmedMat,
+        pdId: '📦 วัตถุดิบคลัง',
+        status: 'วัตถุดิบคลัง',
+        statusLabel: '📦 วัตถุดิบคลัง (Stock)',
+        statusColor: '#0284c7',
+        isClosed: false,
+        pendingOp: 'พร้อมเบิกจ่ายจากคลัง'
+      };
+    }
+    if (trimmedMat.length !== 14) return null;
+
+    // 1. Check in dwgToPdMap (built from Excel Data sheet)
+    const info = this.dwgToPdMap ? this.dwgToPdMap[trimmedMat] : null;
+
+    // 2. Also check scheduledJobs and workOrders for real-time schedule / status
+    const liveJobs = (this.scheduledJobs || []).filter(j => 
+      (j.dwgNo && j.dwgNo.trim() === trimmedMat) || j.woId === trimmedMat
+    );
+    const liveWO = (this.workOrders || []).find(w => 
+      (w.dwgNo && w.dwgNo.trim() === trimmedMat) || w.id === trimmedMat
+    );
+
+    const childPdId = info ? info.pdId : (liveJobs[0]?.woId || liveWO?.id || null);
+
+    if (!childPdId) {
+      return {
+        found: false,
+        mat: trimmedMat,
+        pdId: '-',
+        status: 'ไม่พบใบสั่งผลิต',
+        statusLabel: 'ไม่พบ PD',
+        statusColor: '#94a3b8',
+        isClosed: false,
+        pendingOp: '-'
+      };
+    }
+
+    const isCompletedHistory = typeof this.isPdInCompletedHistory === 'function' ? this.isPdInCompletedHistory(childPdId) : false;
+
+    // Operations and status
+    const allJobsForPd = (this.scheduledJobs || []).filter(j => j.woId === childPdId);
+    const woForPd = (this.workOrders || []).find(w => w.id === childPdId);
+
+    let orderStatus = info?.orderStatus || '';
+    if (isCompletedHistory) orderStatus = 'Closed';
+    else if (!orderStatus) {
+      if (allJobsForPd.length > 0) orderStatus = 'Scheduled';
+      else if (woForPd) orderStatus = 'Backlog';
+      else orderStatus = 'Active';
+    }
+
+    let pendingOps = [];
+    let isAllDone = false;
+
+    if (allJobsForPd.length > 0 || woForPd) {
+      const allSteps = [
+        ...allJobsForPd.map(j => ({ stepNum: j.stepNum, name: j.stepName || j.name || j.machine, status: j.status, machine: j.machine })),
+        ...(woForPd?.steps || []).map(s => ({ stepNum: s.stepNum, name: s.name || s.machine, status: 'Unscheduled', machine: s.machine }))
+      ].sort((a, b) => (a.stepNum || 0) - (b.stepNum || 0));
+
+      const unfinished = allSteps.filter(s => s.status !== 'Completed');
+      if (unfinished.length === 0 && allSteps.length > 0) {
+        isAllDone = true;
+      } else {
+        pendingOps = unfinished;
+      }
+    } else if (info && Array.isArray(info.operations)) {
+      const unfinished = info.operations.filter(op => {
+        const st = String(op.status || '').toLowerCase();
+        return st !== 'completed' && st !== 'closed';
+      });
+      if (unfinished.length === 0 || String(info.orderStatus).toLowerCase() === 'closed') {
+        isAllDone = true;
+      } else {
+        pendingOps = unfinished;
+      }
+    }
+
+    if (isAllDone || String(orderStatus).toLowerCase() === 'closed') {
+      return {
+        found: true,
+        mat: trimmedMat,
+        pdId: childPdId,
+        status: 'Closed',
+        statusLabel: '✓ Closed',
+        statusColor: '#15803d',
+        isClosed: true,
+        pendingOp: '✓ เสร็จสิ้น'
+      };
+    }
+
+    // Determine pending operation string: show ONLY the latest incomplete operation name (e.g. "CNC Laser")
+    let pendingOpText = '-';
+    if (pendingOps.length > 0) {
+      const first = pendingOps[0];
+      let opName = first.name || this.workCenters?.[first.machine]?.name || first.machine || 'Operation';
+      // Remove any trailing machine code or parenthesis, e.g. " (DEA016)" or "(DEA012)"
+      opName = opName.replace(/\s*\([A-Za-z0-9_-]+\)\s*/g, ' ').trim();
+      // If opName is just machine code, replace with work center name if available
+      if (/^[A-Z]{3}\d{3}/i.test(opName) && this.workCenters?.[opName]?.name) {
+        opName = this.workCenters[opName].name;
+      }
+      pendingOpText = opName;
+    }
+
+    let statusColor = '#b45309';
+    if (orderStatus === 'Running') statusColor = '#16a34a';
+    else if (orderStatus === 'Scheduled') statusColor = '#0284c7';
+
+    return {
+      found: true,
+      mat: trimmedMat,
+      pdId: childPdId,
+      status: orderStatus,
+      statusLabel: orderStatus,
+      statusColor: statusColor,
+      isClosed: false,
+      pendingOp: pendingOpText
+    };
   }
 
   loadPlanFromFile() {

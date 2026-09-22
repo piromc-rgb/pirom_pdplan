@@ -180,8 +180,28 @@ export class GanttController {
     // Keys of merged-bar groups the user double-clicked open - rendered as
     // individual job cards (in place, no zoom) instead of a summary "×N" bar.
     this.expandedMergeGroups = new Set();
+    this.pdModalReturnCallback = null;
+    this.pdModalHistory = [];
     this.initElements();
     this.initEvents();
+  }
+
+  closePDPlanModal() {
+    const pdModal = document.getElementById('pd-plan-modal');
+    // If we navigated into a child PD, return to parent PD on close
+    if (this.pdModalHistory && this.pdModalHistory.length > 0) {
+      const parentWoId = this.pdModalHistory.pop();
+      if (parentWoId) {
+        this.showPDPlanModal(parentWoId);
+        return;
+      }
+    }
+    if (pdModal) pdModal.classList.add('hidden');
+    if (typeof this.pdModalReturnCallback === 'function') {
+      const cb = this.pdModalReturnCallback;
+      this.pdModalReturnCallback = null;
+      cb();
+    }
   }
 
   initElements() {
@@ -372,15 +392,22 @@ export class GanttController {
     const pdModal = document.getElementById('pd-plan-modal');
     const btnClosePd = document.getElementById('btn-close-pd-plan');
     const btnCancelPd = document.getElementById('btn-cancel-pd-plan');
-    const closePdModal = () => {
-      if (pdModal) pdModal.classList.add('hidden');
-    };
-    if (btnClosePd) btnClosePd.addEventListener('click', closePdModal);
-    if (btnCancelPd) btnCancelPd.addEventListener('click', closePdModal);
+    if (btnClosePd) btnClosePd.addEventListener('click', () => this.closePDPlanModal());
+    if (btnCancelPd) btnCancelPd.addEventListener('click', () => this.closePDPlanModal());
+    if (pdModal) {
+      pdModal.addEventListener('click', (e) => {
+        if (e.target === pdModal) {
+          this.closePDPlanModal();
+        }
+      });
+    }
 
     // Global open PD edit modal event listener
     window.addEventListener('open-pd-modal', (e) => {
       if (e.detail && e.detail.woId) {
+        if (e.detail.returnCallback !== undefined) {
+          this.pdModalReturnCallback = typeof e.detail.returnCallback === 'function' ? e.detail.returnCallback : null;
+        }
         this.showPDPlanModal(e.detail.woId);
       }
     });
@@ -664,6 +691,29 @@ export class GanttController {
           }
         });
       });
+      // Include cross-PD assembly links
+      (this.state.assemblyLinks || []).forEach(l => {
+        const fromWo = (l.from || '').split('-')[0];
+        const toWo = (l.to || '').split('-')[0];
+        if (fromWo && toWo && fromWo !== toWo && map.has(toWo)) {
+          const list = map.get(toWo);
+          if (!list.includes(fromWo)) list.push(fromWo);
+        }
+      });
+      // Include child component PDs from planMaterials (welding assemblies)
+      if (this.state.planMaterials) {
+        idsArr.forEach(parentId => {
+          const mats = this.state.planMaterials[parentId] || [];
+          mats.forEach(item => {
+            const matCode = String(item.mat || '').trim();
+            const childWoId = this.state.dwgToPdMap?.[matCode]?.pdId;
+            if (childWoId && childWoId !== parentId && map.has(parentId)) {
+              const list = map.get(parentId);
+              if (!list.includes(childWoId)) list.push(childWoId);
+            }
+          });
+        });
+      }
       return map;
     };
     const distinctWoIdsArr = Array.from(allWoIdsSet);
@@ -3349,6 +3399,10 @@ export class GanttController {
     document.body.removeChild(link);
   }
 
+  openPdPlanModal(woId) {
+    return this.showPDPlanModal(woId);
+  }
+
   showPDPlanModal(woId) {
     const modal = document.getElementById('pd-plan-modal');
     if (!modal) return;
@@ -3374,10 +3428,71 @@ export class GanttController {
     const inputCompletedHistory = document.getElementById('chk-pd-completed-history');
 
     // 1. Gather all info & steps for this PD
-    const scheduledJobs = this.state.scheduledJobs
+    const scheduledJobs = (this.state.scheduledJobs || [])
       .filter(j => j.woId === woId || j.id === woId);
     
-    const backlogWO = this.state.workOrders.find(w => w.id === woId);
+    let backlogWO = (this.state.workOrders || []).find(w => w.id === woId);
+
+    // If not found in scheduledJobs or backlogWO, check dwgToPdMap or planMaterials fallback
+    if (scheduledJobs.length === 0 && !backlogWO) {
+      let matchedDwg = null;
+      let matchedInfo = null;
+      if (this.state.dwgToPdMap) {
+        for (const [dwg, info] of Object.entries(this.state.dwgToPdMap)) {
+          if (info.pdId === woId) {
+            matchedDwg = dwg;
+            matchedInfo = info;
+            break;
+          }
+        }
+      }
+
+      if (matchedInfo) {
+        backlogWO = {
+          id: woId,
+          customer: 'General',
+          project: matchedInfo.project || 'General',
+          dwgNo: matchedDwg || '',
+          partName: matchedDwg || '',
+          qty: 1,
+          priority: 'Normal',
+          steps: (matchedInfo.operations || []).map(op => ({
+            id: `${woId}-${op.stepNum}`,
+            stepNum: op.stepNum,
+            name: op.name || op.machine,
+            machine: op.machine,
+            estHours: 0.5,
+            cycleMinutes: 1,
+            setupMinutes: 0,
+            status: op.status || 'Unscheduled'
+          }))
+        };
+      } else {
+        const matItems = this.state.planMaterials?.[woId] || [];
+        if (matItems.length > 0) {
+          const firstMat = matItems[0];
+          backlogWO = {
+            id: woId,
+            customer: 'General',
+            project: 'General',
+            dwgNo: firstMat.mat || '',
+            partName: firstMat.matDesc || '',
+            qty: firstMat.estimatedQty || 1,
+            priority: 'Normal',
+            steps: matItems.map(m => ({
+              id: `${woId}-${m.stepNum}`,
+              stepNum: m.stepNum,
+              name: m.operDesc || m.wc,
+              machine: m.wc,
+              estHours: 0.5,
+              cycleMinutes: 1,
+              setupMinutes: 0,
+              status: m.operStatus || 'Unscheduled'
+            }))
+          };
+        }
+      }
+    }
 
     if (scheduledJobs.length === 0 && !backlogWO) {
       this.showToast(`ไม่พบข้อมูล Production Order: ${woId}`);
@@ -3608,6 +3723,257 @@ export class GanttController {
 
     stepsList.forEach(stepData => renderStepRow(stepData));
 
+    // 5. Render Materials Section for Welding Operations (Plan + Mat)
+    const matSection = document.getElementById('pd-plan-mat-section');
+    const matTbody = document.getElementById('pd-plan-mat-table-body');
+    const matCountEl = document.getElementById('pd-plan-mat-count');
+
+    if (matSection && matTbody) {
+      const allMatItems = (this.state.planMaterials && this.state.planMaterials[woId]) || [];
+
+      const isWeldingOp = (s) => {
+        const m = String(s.machine || '').toUpperCase();
+        const n = String(s.name || s.stepName || '').toLowerCase();
+        return m.startsWith('DEB01') || m === 'DEB011' || m === 'DEB012' || m === 'DEB013' || m === 'DEB014' || n.includes('เชื่อม') || n.includes('weld');
+      };
+      const hasWelding = stepsList.some(isWeldingOp) || allMatItems.some(m => {
+        const desc = String(m.operDesc || '').toLowerCase();
+        const wc = String(m.wc || '').toUpperCase();
+        return wc.startsWith('DEB01') || desc.includes('เชื่อม') || desc.includes('weld');
+      });
+      const hasMaterials = allMatItems.length > 0;
+
+      if (hasWelding || hasMaterials) {
+        matSection.classList.remove('hidden');
+        matSection.style.display = 'flex';
+        matTbody.innerHTML = '';
+
+        // Deduplicate materials by `mat` and aggregate operations & quantities
+        const uniqueMats = new Map();
+        allMatItems.forEach(item => {
+          const matCode = String(item.mat || '').trim();
+          if (!matCode) return;
+          if (!uniqueMats.has(matCode)) {
+            uniqueMats.set(matCode, {
+              ...item,
+              operations: [{
+                stepNum: item.stepNum,
+                operDesc: item.operDesc,
+                wc: item.wc,
+                operStatus: item.operStatus
+              }]
+            });
+          } else {
+            const existing = uniqueMats.get(matCode);
+            if (item.estimatedQty > existing.estimatedQty) {
+              existing.estimatedQty = item.estimatedQty;
+            }
+            if ((item.actualQty || 0) > (existing.actualQty || 0)) {
+              existing.actualQty = item.actualQty;
+            }
+            if ((item.toIssue || 0) > (existing.toIssue || 0)) {
+              existing.toIssue = item.toIssue;
+            }
+            if (item.operStatus && !existing.operStatus) {
+              existing.operStatus = item.operStatus;
+            }
+            const opExists = existing.operations.some(o => o.stepNum === item.stepNum);
+            if (!opExists) {
+              existing.operations.push({
+                stepNum: item.stepNum,
+                operDesc: item.operDesc,
+                wc: item.wc,
+                operStatus: item.operStatus
+              });
+            }
+          }
+        });
+
+        const matList = Array.from(uniqueMats.values());
+        if (matCountEl) {
+          matCountEl.textContent = `(พบ ${matList.length} รายการ)`;
+        }
+
+        if (matList.length === 0) {
+          matTbody.innerHTML = `
+            <tr>
+              <td colspan="6" style="padding: 16px; text-align: center; color: var(--text-secondary); font-style: italic;">
+                💡 ไม่พบรายการวัสดุ (Mat.) สำหรับ ${woId} ใน Sheet "Plan + Mat" หรือกำลังโหลดข้อมูลจาก LN Status Overview.xlsx
+              </td>
+            </tr>
+          `;
+          if ((!this.state.planMaterials || Object.keys(this.state.planMaterials).length === 0) && this.state.storageSync?.fetchPlanMaterials) {
+            this.state.storageSync.fetchPlanMaterials().then(res => {
+              if (res && this.state.planMaterials && this.state.planMaterials[woId]) {
+                const currentModalId = document.getElementById('edit-pd-id')?.value;
+                if (currentModalId === woId) {
+                  this.openPdPlanModal(woId);
+                }
+              }
+            });
+          }
+        } else {
+          matList.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid var(--border-glass)';
+            tr.style.background = 'rgba(255,255,255,0.01)';
+
+            const matCode = String(item.mat || '').trim();
+            const is14Char = matCode.length === 14;
+            const is10Char = matCode.length === 10;
+
+            let childPdCell = `<span style="color: var(--text-secondary);">-</span>`;
+            let statusCell = `<span style="color: var(--text-secondary);">-</span>`;
+            let pendingOpCell = `<span style="color: var(--text-secondary);">-</span>`;
+
+            if (is14Char) {
+              const childInfo = typeof this.state.getChildPdInfo === 'function' ? this.state.getChildPdInfo(matCode) : null;
+              if (childInfo && childInfo.found && !childInfo.isRawMat) {
+                childPdCell = `
+                  <button type="button" class="btn-open-child-pd" data-pd-id="${childInfo.pdId}" title="คลิกเพื่อเปิดดูรายละเอียดและขั้นตอนของ ${childInfo.pdId}" style="background: rgba(2, 132, 199, 0.15); border: 1.5px solid #0284c7; color: #0284c7; padding: 2px 7px; border-radius: 4px; font-family: monospace; font-size: 11px; font-weight: 800; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 3px;">
+                    🔍 ${childInfo.pdId}
+                  </button>
+                `;
+                const statusBorder = childInfo.isClosed ? '#16a34a' : '#d97706';
+                const statusColor = childInfo.isClosed ? '#15803d' : '#b45309';
+                const statusBg = childInfo.isClosed ? 'rgba(22, 163, 74, 0.15)' : 'rgba(245, 158, 11, 0.15)';
+                statusCell = `
+                  <span style="font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 4px; border: 1.5px solid ${statusBorder}; color: ${statusColor}; background: ${statusBg}; white-space: nowrap;">
+                    ${childInfo.statusLabel}
+                  </span>
+                `;
+                const opColor = childInfo.isClosed ? '#15803d' : '#c2410c';
+                pendingOpCell = `
+                  <span style="font-size: 11px; color: ${opColor}; font-weight: 700;">
+                    ${childInfo.pendingOp}
+                  </span>
+                `;
+              } else {
+                childPdCell = `<span style="font-size: 10.5px; color: #64748b; font-style: italic; font-weight: 600;">ไม่พบ PD</span>`;
+                statusCell = `<span style="color: #64748b;">-</span>`;
+                pendingOpCell = `<span style="color: #64748b;">-</span>`;
+              }
+            } else if (is10Char) {
+              // 10-digit Raw Material from warehouse stock
+              childPdCell = `
+                <span style="font-size: 10.5px; font-weight: 700; color: #334155; background: rgba(226, 232, 240, 0.85); border: 1px solid #cbd5e1; padding: 2px 7px; border-radius: 4px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px;">
+                  📦 วัตถุดิบคลัง
+                </span>
+              `;
+
+              // Status based on toIssue and actualQty
+              if (item.toIssue === 0 && (item.actualQty > 0 || item.estimatedQty > 0)) {
+                statusCell = `
+                  <span style="font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 4px; border: 1.5px solid #16a34a; color: #15803d; background: rgba(22, 163, 74, 0.15); white-space: nowrap;" title="จ่ายครบตามจำนวนแล้ว">
+                    ✓ จ่ายครบแล้ว
+                  </span>
+                `;
+              } else if (item.toIssue > 0) {
+                statusCell = `
+                  <span style="font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 4px; border: 1.5px solid #d97706; color: #b45309; background: rgba(245, 158, 11, 0.15); white-space: nowrap;" title="คงเหลือรอเบิกจ่าย ${item.toIssue}">
+                    ⏳ รอเบิกจ่าย (${item.toIssue})
+                  </span>
+                `;
+              } else if (item.operStatus) {
+                statusCell = `
+                  <span style="font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 4px; border: 1.5px solid #0284c7; color: #0369a1; background: rgba(2, 132, 199, 0.15); white-space: nowrap;">
+                    ${item.operStatus}
+                  </span>
+                `;
+              } else {
+                statusCell = `
+                  <span style="font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 4px; border: 1.5px solid #16a34a; color: #15803d; background: rgba(22, 163, 74, 0.15); white-space: nowrap;">
+                    ✓ พร้อมใช้งาน
+                  </span>
+                `;
+              }
+
+              // Operations: show only the latest incomplete operation (clean name only)
+              const sortedOps = (item.operations || []).sort((a, b) => (a.stepNum || 0) - (b.stepNum || 0));
+              const unfinishedOps = sortedOps.filter(o => {
+                const st = String(o.operStatus || '').toLowerCase();
+                return st !== 'completed' && st !== 'closed';
+              });
+              const targetOp = unfinishedOps.length > 0 ? unfinishedOps[0] : sortedOps[sortedOps.length - 1];
+              let cleanOpName = '-';
+              if (targetOp) {
+                cleanOpName = targetOp.operDesc || this.state.workCenters?.[targetOp.wc]?.name || targetOp.wc || '-';
+                cleanOpName = cleanOpName.replace(/\s*\([A-Za-z0-9_-]+\)\s*/g, ' ').trim();
+                if (/^[A-Z]{3}\d{3}/i.test(cleanOpName) && this.state.workCenters?.[cleanOpName]?.name) {
+                  cleanOpName = this.state.workCenters[cleanOpName].name;
+                }
+              }
+              const isAllOpsDone = unfinishedOps.length === 0 && sortedOps.length > 0;
+              if (isAllOpsDone) {
+                cleanOpName = '✓ เสร็จสิ้น';
+              }
+              const isWeld = cleanOpName.includes('เชื่อม') || cleanOpName.toLowerCase().includes('weld');
+              const opColor = isAllOpsDone ? '#15803d' : (isWeld ? '#c2410c' : '#0f172a');
+              pendingOpCell = `
+                <span style="font-size: 11px; color: ${opColor}; font-weight: 700;">
+                  ${cleanOpName}
+                </span>
+              `;
+            } else {
+              childPdCell = `<span style="font-size: 10.5px; color: #475569; font-style: italic; font-weight: 600;">วัตถุดิบ</span>`;
+              statusCell = `<span style="color: #475569;">-</span>`;
+              pendingOpCell = `<span style="color: #475569;">-</span>`;
+            }
+
+            const matCodeBadge = is10Char
+              ? `<span style="font-size: 9px; font-weight: 800; color: #047857; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 3px; padding: 1px 4px; white-space: nowrap; margin-left: 4px;">10 หลัก</span>`
+              : '';
+
+            tr.innerHTML = `
+              <td style="padding: 4px 8px; font-family: monospace; font-weight: 800; color: #0284c7; white-space: nowrap; font-size: 11px; width: 130px;">
+                <div style="display: inline-flex; align-items: center;">
+                  <span>${matCode}</span>
+                  ${matCodeBadge}
+                </div>
+              </td>
+              <td style="padding: 4px 8px; color: #0f172a; font-size: 11px; font-weight: 700;">
+                ${item.matDesc || '-'}
+              </td>
+              <td style="padding: 4px 6px; text-align: center; font-weight: 800; color: #c2410c; font-family: monospace; font-size: 11px; width: 55px; white-space: nowrap;">
+                ${item.estimatedQty !== undefined ? item.estimatedQty : '-'}
+              </td>
+              <td style="padding: 4px 6px; text-align: center; width: 115px; white-space: nowrap;">
+                ${childPdCell}
+              </td>
+              <td style="padding: 4px 6px; text-align: center; width: 95px; white-space: nowrap;">
+                ${statusCell}
+              </td>
+              <td style="padding: 4px 8px; width: 115px; white-space: nowrap;">
+                ${pendingOpCell}
+              </td>
+            `;
+
+            matTbody.appendChild(tr);
+          });
+
+          // Add click handlers to open child PD modal
+          matTbody.querySelectorAll('.btn-open-child-pd').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const targetPd = btn.getAttribute('data-pd-id');
+              if (targetPd) {
+                const currentModalId = document.getElementById('edit-pd-id')?.value;
+                if (currentModalId && currentModalId !== targetPd) {
+                  if (!this.pdModalHistory) this.pdModalHistory = [];
+                  this.pdModalHistory.push(currentModalId);
+                }
+                this.showPDPlanModal(targetPd);
+              }
+            });
+          });
+        }
+      } else {
+        matSection.classList.add('hidden');
+        matSection.style.display = 'none';
+      }
+    }
+
     // Listen on Qty changes to update all step hours
     const handleQtyChange = () => {
       const rows = tbody.querySelectorAll('.modal-step-row');
@@ -3711,7 +4077,7 @@ export class GanttController {
           steps: collectedSteps
         });
 
-        modal.classList.add('hidden');
+        this.closePDPlanModal();
         this.showToast(`✓ บันทึกข้อมูล Production Order ${woId} สำเร็จ`);
       });
     }
@@ -3723,7 +4089,7 @@ export class GanttController {
       cleanBtnDelete.addEventListener('click', () => {
         if (confirm(`คุณต้องการลบ Production Order: ${woId} นี้ใช่หรือไม่?\n(การลบจะนำขั้นตอนและข้อมูลทั้งหมดของ PD นี้ออกจากระบบ)`)) {
           this.state.deleteProductionOrder(woId);
-          modal.classList.add('hidden');
+          this.closePDPlanModal();
           this.showToast(`🗑️ ลบ Production Order ${woId} เรียบร้อยแล้ว`);
         }
       });

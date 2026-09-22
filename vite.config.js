@@ -196,8 +196,52 @@ export default defineConfig({
             }
           }
 
+          if (cleanUrl === '/api/plan-materials' || cleanUrl.startsWith('/api/plan-materials?')) {
+            const cachePath = path.resolve(__dirname, 'plan_materials_cache.json');
+            const gdrivePath = '/Users/pirom/Library/CloudStorage/GoogleDrive-pirom.c@gmail.com/My Drive/staus overview/LN Status Overview.xlsx';
+            
+            try {
+              if (fs.existsSync(gdrivePath)) {
+                const localXlsx = path.resolve(__dirname, 'LN Status Overview.xlsx');
+                let needRefresh = false;
+                if (!fs.existsSync(localXlsx) || fs.statSync(gdrivePath).mtimeMs > fs.statSync(localXlsx).mtimeMs) {
+                  fs.copyFileSync(gdrivePath, localXlsx);
+                  needRefresh = true;
+                }
+                if (needRefresh || !fs.existsSync(cachePath)) {
+                  const { execSync } = await import('child_process');
+                  const scriptPath = path.resolve(__dirname, 'scripts', 'sync_plan_materials.py');
+                  if (fs.existsSync(scriptPath)) {
+                    execSync(`python3 "${scriptPath}"`, { timeout: 30000 });
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('Auto-sync from Google Drive error:', e.message);
+            }
+
+            if (fs.existsSync(cachePath)) {
+              try {
+                const data = fs.readFileSync(cachePath, 'utf-8');
+                res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                res.statusCode = 200;
+                res.end(data);
+                return;
+              } catch (err) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ error: err.message }));
+                return;
+              }
+            } else {
+              res.statusCode = 200;
+              res.end(JSON.stringify({ planMaterials: {}, dwgToPdMap: {} }));
+              return;
+            }
+          }
+
           if (cleanUrl === '/api/status-overview' || cleanUrl.startsWith('/api/status-overview?')) {
             const candidateNames = [
+              '/Users/pirom/Library/CloudStorage/GoogleDrive-pirom.c@gmail.com/My Drive/staus overview/LN Status Overview.xlsx',
               'LN Status Overview.xls',
               'LN Status Overview.xlsx',
               'Week 38 26-09-15 Status Overview.xlsx',
@@ -205,7 +249,7 @@ export default defineConfig({
             ];
             let foundFile = null;
             for (const name of candidateNames) {
-              const p = path.resolve(__dirname, name);
+              const p = path.isAbsolute(name) ? name : path.resolve(__dirname, name);
               if (fs.existsSync(p)) {
                 foundFile = p;
                 break;

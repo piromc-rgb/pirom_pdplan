@@ -327,6 +327,7 @@ export class StorageSyncManager {
     const endpoint = this.getEndpointUrl();
     this.syncStatus = 'syncing';
     this.updateStatusBadge();
+    this.fetchPlanMaterials();
 
     // 1. ตรวจสอบกรณีผู้ใช้นำลิงก์ Google Drive Folder ธรรมดามาวางแทน Web App URL
     if (endpoint && endpoint.includes('drive.google.com')) {
@@ -440,6 +441,7 @@ export class StorageSyncManager {
                 const completedCount = Object.keys(this.state.completedPdHistory || {}).length;
                 this.showToast(`✅ โหลดข้อมูลจากไฟล์ Plan.json, machine_settings.json (${wcCount} เครื่อง) และ completed_pds.json (${completedCount} รายการ) ในเครื่องสำเร็จ`, 'success');
               }
+              this.fetchPlanMaterials();
               return true;
             }
           }
@@ -637,6 +639,8 @@ export class StorageSyncManager {
     }
     if (data.favoritePDs) this.state.favoritePDs = data.favoritePDs;
     if (data.removedStepHistory) this.state.removedStepHistory = data.removedStepHistory;
+    if (data.planMaterials) this.state.planMaterials = data.planMaterials;
+    if (data.dwgToPdMap) this.state.dwgToPdMap = data.dwgToPdMap;
 
     // กรอง PD ที่ผลิตจริงเสร็จแล้ว และขั้นตอนที่ถูกลบออก
     this.state.scheduledJobs = this.state.scheduledJobs.filter(
@@ -702,6 +706,41 @@ export class StorageSyncManager {
       }
     }
 
+    return null;
+  }
+
+  /**
+   * ดึงข้อมูล Plan + Mat และ Drawing Map จาก /api/plan-materials
+   */
+  async fetchPlanMaterials() {
+    if (this.state.planMaterials && Object.keys(this.state.planMaterials).length > 0) {
+      return this.state.planMaterials;
+    }
+    if (typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.startsWith('192.168.') ||
+      window.location.port === '5173'
+    )) {
+      try {
+        const candidateUrls = ['/pirom_pdplan/api/plan-materials', '/api/plan-materials'];
+        for (const url of candidateUrls) {
+          try {
+            const res = await fetch(url);
+            if (res.ok) {
+              const json = await res.json();
+              if (json && json.planMaterials) {
+                this.state.planMaterials = json.planMaterials;
+                if (json.dwgToPdMap) this.state.dwgToPdMap = json.dwgToPdMap;
+                return this.state.planMaterials;
+              }
+            }
+          } catch (e) {}
+        }
+      } catch (err) {
+        console.warn('Error fetching plan materials from local dev server:', err);
+      }
+    }
     return null;
   }
 
