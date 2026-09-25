@@ -86,9 +86,17 @@ export class StorageSyncManager {
     } catch (e) {}
     this.updateUserModeUI();
     if (mode === 'plan') {
-      this.showToast('✏️ สลับเป็น "โหมดวางแผน" (Load เมื่อเปิด App และ Auto Save เมื่อปิด App)', 'success');
+      this.showToast('✏️ สลับเป็น "โหมดวางแผน" (วางแผนลง Board หรือปิด App จะ Auto Save ลง Google Drive ที่เดียวกับ LN Overview)', 'success');
+      if (this.state && typeof this.state.buildPlanPayload === 'function') {
+        if (typeof this.state.saveWorkOrdersToFile === 'function') this.state.saveWorkOrdersToFile();
+        this.pushToCloud(this.state.buildPlanPayload(false), true);
+      }
     } else {
-      this.showToast('👁️ สลับเป็น "โหมดดูแผน" (Load เมื่อเปิด App แต่ไม่ Save เมื่อปิด App)', 'info');
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = null;
+      }
+      this.showToast('👁️ สลับเป็น "โหมดดูแผน" (Load เมื่อเปิด App แต่ไม่ Save เมื่อวางแผนหรือปิด App)', 'info');
     }
   }
 
@@ -163,11 +171,11 @@ export class StorageSyncManager {
       if (isPlan) {
         btnUserMode.classList.remove('mode-view');
         btnUserMode.classList.add('mode-plan');
-        btnUserMode.title = 'โหมดผู้ใช้งาน: วางแผน (Load เปิด App / Save ปิด App) - คลิกเพื่อสลับโหมด';
+        btnUserMode.title = 'โหมดผู้ใช้งาน: วางแผน (วางแผนลง Board & ปิด App จะ Save ลง Google Drive) - คลิกเพื่อสลับโหมด';
       } else {
         btnUserMode.classList.remove('mode-plan');
         btnUserMode.classList.add('mode-view');
-        btnUserMode.title = 'โหมดผู้ใช้งาน: ดูแผน (Load เปิด App / ไม่ Save ปิด App) - คลิกเพื่อสลับโหมด';
+        btnUserMode.title = 'โหมดผู้ใช้งาน: ดูแผน (Load เปิด App / ไม่ Save เมื่อวางแผนหรือปิด App) - คลิกเพื่อสลับโหมด';
       }
     }
 
@@ -192,10 +200,11 @@ export class StorageSyncManager {
     if (typeof window === 'undefined') return;
 
     const handleAutoSave = () => {
-      if (!this.state) return;
-      const payload = this.state.buildPlanPayload();
+      // ถ้าอยู่ในโหมดดูแผน (view mode) ห้ามบันทึกใดๆ ทั้งสิ้นตอนออกจาก Web App
+      if (!this.state || this.getUserMode() !== 'plan') return;
+      const payload = this.state.buildPlanPayload(false);
 
-      // บันทึก Local Cache ทันที (เฉพาะเมื่อขนาดไม่เกินโควต้า 4MB)
+      // บันทึก Local Cache ทันที (เฉพาะเมื่ออยู่ในโหมดวางแผน และขนาดไม่เกินโควต้า 4MB)
       try {
         const payloadStr = JSON.stringify(payload);
         if (payloadStr.length < 4 * 1024 * 1024) {
@@ -212,8 +221,8 @@ export class StorageSyncManager {
         }
       } catch (e) {}
 
-      // ส่งข้อมูลขึ้น Cloud & Server ทันทีด้วย keepalive: true (เฉพาะเมื่อเปิด Auto-Sync และอยู่ในโหมดวางแผน)
-      if (this.autoSync && this.getUserMode() === 'plan') {
+      // ส่งข้อมูลขึ้น Cloud & Server ทันทีด้วย sendBeacon / keepalive (เฉพาะเมื่อเปิด Auto-Sync และอยู่ในโหมดวางแผน)
+      if (this.autoSync) {
         this.executePush(payload, true);
       }
     };
@@ -557,14 +566,15 @@ export class StorageSyncManager {
    * ในโหมดดูแผน (view mode) จะบันทึกเฉพาะใน Local Cache เท่านั้น (ยกเว้นผู้ใช้สั่ง Cloud Save โดยตรง allowViewMode = true)
    */
   pushToCloud(payload, immediate = false, isClosing = false, allowViewMode = false) {
-    // บันทึก Local Cache ทันทีเสมอ ป้องกันข้อมูลสูญหาย
+    // ถ้าอยู่ในโหมดดูแผน (view) และไม่ใช่การกดปุ่มบันทึก Cloud Save โดยตรง (allowViewMode) ให้งดการบันทึกทุกช่องทาง
+    if (this.getUserMode() !== 'plan' && !allowViewMode) return;
+
+    // บันทึก Local Cache ทันทีเมื่ออยู่ในโหมดวางแผน
     try {
-      // คัดลอก payload เพื่อบันทึก localStorage โดยแยก planMaterials ออกหากขนาดใหญ่ เพื่อป้องกัน QuotaExceededError
       const localCopy = { ...payload };
-      if (localCopy.planMaterials && Object.keys(localCopy.planMaterials).length > 20) {
-        delete localCopy.planMaterials;
-        delete localCopy.dwgToPdMap;
-      }
+      delete localCopy.planMaterials;
+      delete localCopy.dwgToPdMap;
+      delete localCopy._includeMaterials;
       const payloadStr = JSON.stringify(localCopy);
       if (payloadStr.length < 4 * 1024 * 1024) {
         localStorage.setItem(STORAGE_CACHE_KEY, payloadStr);
@@ -584,18 +594,15 @@ export class StorageSyncManager {
 
     if (!this.autoSync && !immediate && !isClosing && !allowViewMode) return;
 
-    // ถ้าอยู่ในโหมดดูแผน (view) และไม่ใช่การกดปุ่มบันทึก Cloud Save โดยตรง (allowViewMode) ให้งดการ Push ขึ้น Cloud / Server
-    if (this.getUserMode() !== 'plan' && !allowViewMode) return;
-
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
 
-    if (immediate || isClosing) {
+    if (immediate || isClosing || allowViewMode) {
       return this.executePush(payload, isClosing);
     }
 
-    const delay = 2000; // Debounce 2 วินาที
+    const delay = 600; // Debounce 0.6 วินาที
     this.debounceTimer = setTimeout(() => {
       this.executePush(payload, false);
     }, delay);
@@ -604,7 +611,7 @@ export class StorageSyncManager {
   async executePush(payload, isClosing = false) {
     const endpoint = this.getEndpointUrl();
 
-    // 1. ถ้าอยู่ Localhost หรือ Dev Server ให้ส่งไปที่ local API ด้วย
+    // 1. ถ้าอยู่ Localhost หรือ Dev Server ให้ส่งไปที่ local API ด้วย (ซึ่งจะบันทึกลง Google Drive Desktop โฟลเดอร์เดียวกับ LN Status Overview)
     const isLocalDev = typeof window !== 'undefined' && (
       window.location.hostname === 'localhost' ||
       window.location.hostname === '127.0.0.1' ||
@@ -612,27 +619,50 @@ export class StorageSyncManager {
       window.location.port === '5173'
     );
 
+    const pushBodyObj = { ...payload };
+    if (!pushBodyObj._includeMaterials) {
+      delete pushBodyObj.planMaterials;
+      delete pushBodyObj.dwgToPdMap;
+    }
+    delete pushBodyObj._includeMaterials;
+    const bodyStr = JSON.stringify(pushBodyObj);
+    const useKeepalive = isClosing && bodyStr.length < 60000;
+
     if (isLocalDev) {
       const candidateUrls = ['/pirom_pdplan/api/plan', '/api/plan'];
       for (const localApiUrl of candidateUrls) {
         try {
-          fetch(localApiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            keepalive: isClosing
-          }).catch(err => console.warn(`Local ${localApiUrl} push failed:`, err));
+          const targetUrl = isClosing ? `${localApiUrl}?forwardCloud=1` : localApiUrl;
+          if (useKeepalive && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+            const blob = new Blob([bodyStr], { type: 'application/json' });
+            navigator.sendBeacon(targetUrl, blob);
+          } else {
+            fetch(targetUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: bodyStr,
+              keepalive: useKeepalive
+            }).catch(err => console.warn(`Local ${localApiUrl} push failed:`, err));
+          }
           break;
         } catch (e) {}
       }
     }
 
-    // 2. ถ้ามี Cloud Endpoint ส่งไปยัง Google Drive
+    // 2. ถ้ามี Cloud Endpoint ส่งไปยัง Google Drive โฟลเดอร์เดียวกับ LN Status Overview
     if (!endpoint) {
       this.syncStatus = 'local_only';
       this.updateStatusBadge();
       this.updateModalValues();
       return;
+    }
+
+    if (useKeepalive && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      try {
+        const blob = new Blob([bodyStr], { type: 'text/plain;charset=utf-8' });
+        navigator.sendBeacon(endpoint, blob);
+        return;
+      } catch (e) {}
     }
 
     if (!isClosing) {
@@ -645,12 +675,12 @@ export class StorageSyncManager {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // text/plain ป้องกัน preflight CORS issue ใน Google Apps Script
-        body: JSON.stringify(payload),
-        keepalive: isClosing
+        body: bodyStr,
+        keepalive: useKeepalive
       });
 
       if (res.ok) {
-        this.recordSyncSuccess(payload);
+        this.recordSyncSuccess(pushBodyObj);
         this.updateModalValues();
       } else {
         throw new Error(`HTTP ${res.status}`);
@@ -675,62 +705,70 @@ export class StorageSyncManager {
   applyPayloadToState(data) {
     if (!data || !this.state) return;
 
-    if (Array.isArray(data.scheduledJobs)) this.state.scheduledJobs = data.scheduledJobs;
-    if (data.nests) this.state.nests = data.nests;
-    if (data.assemblyLinks) this.state.assemblyLinks = data.assemblyLinks;
-    if (data.lockedProjects) this.state.lockedProjects = data.lockedProjects;
-    if (data.priorityColors) this.state.priorityColors = data.priorityColors;
-    if (data.projectColors) this.state.projectColors = data.projectColors;
-    if (data.customerColors) this.state.customerColors = data.customerColors;
-    if (data.workCenters) {
-      if (this.state && typeof this.state.sanitizeWorkCenters === 'function') {
-        data.workCenters = this.state.sanitizeWorkCenters(data.workCenters);
+    this.state._isLoadingData = true;
+    try {
+      if (Array.isArray(data.workOrders) && data.workOrders.length > 0) {
+        this.state.workOrders = data.workOrders;
       }
-      this.state.workCenters = data.workCenters;
-      try {
-        localStorage.setItem('pdplan_machine_settings', JSON.stringify({
-          workCenters: data.workCenters,
-          workCenterOrder: data.workCenterOrder || this.state.workCenterOrder
-        }));
-      } catch (e) {}
-    }
-    if (data.workCenterOrder) this.state.workCenterOrder = data.workCenterOrder;
-    if (data.timelineOffset !== undefined) this.state.timelineOffset = data.timelineOffset;
-    if (data.activeScale) this.state.activeScale = data.activeScale;
-    if (data.completedPdHistory) {
-      if (Array.isArray(data.completedPdHistory)) {
-        const obj = {};
-        data.completedPdHistory.forEach(item => {
-          const id = typeof item === 'string' ? item : (item.id || item.woId || item.pdId);
-          if (id) obj[id] = true;
-        });
-        this.state.completedPdHistory = obj;
-      } else if (typeof data.completedPdHistory === 'object') {
-        this.state.completedPdHistory = data.completedPdHistory;
+      if (Array.isArray(data.scheduledJobs)) this.state.scheduledJobs = data.scheduledJobs;
+      if (data.nests) this.state.nests = data.nests;
+      if (data.assemblyLinks) this.state.assemblyLinks = data.assemblyLinks;
+      if (data.lockedProjects) this.state.lockedProjects = data.lockedProjects;
+      if (data.priorityColors) this.state.priorityColors = data.priorityColors;
+      if (data.projectColors) this.state.projectColors = data.projectColors;
+      if (data.customerColors) this.state.customerColors = data.customerColors;
+      if (data.workCenters) {
+        if (this.state && typeof this.state.sanitizeWorkCenters === 'function') {
+          data.workCenters = this.state.sanitizeWorkCenters(data.workCenters);
+        }
+        this.state.workCenters = data.workCenters;
+        try {
+          localStorage.setItem('pdplan_machine_settings', JSON.stringify({
+            workCenters: data.workCenters,
+            workCenterOrder: data.workCenterOrder || this.state.workCenterOrder
+          }));
+        } catch (e) {}
       }
-      try {
-        localStorage.setItem('pdplan_completed_pds', JSON.stringify(this.state.completedPdHistory));
-      } catch (e) {}
-    }
-    if (data.favoritePDs) this.state.favoritePDs = data.favoritePDs;
-    if (data.removedStepHistory) this.state.removedStepHistory = data.removedStepHistory;
-    if (data.planMaterials) this.state.planMaterials = data.planMaterials;
-    if (data.dwgToPdMap) this.state.dwgToPdMap = data.dwgToPdMap;
+      if (data.workCenterOrder) this.state.workCenterOrder = data.workCenterOrder;
+      if (data.timelineOffset !== undefined) this.state.timelineOffset = data.timelineOffset;
+      if (data.activeScale) this.state.activeScale = data.activeScale;
+      if (data.completedPdHistory) {
+        if (Array.isArray(data.completedPdHistory)) {
+          const obj = {};
+          data.completedPdHistory.forEach(item => {
+            const id = typeof item === 'string' ? item : (item.id || item.woId || item.pdId);
+            if (id) obj[id] = true;
+          });
+          this.state.completedPdHistory = obj;
+        } else if (typeof data.completedPdHistory === 'object') {
+          this.state.completedPdHistory = data.completedPdHistory;
+        }
+        try {
+          localStorage.setItem('pdplan_completed_pds', JSON.stringify(this.state.completedPdHistory));
+        } catch (e) {}
+      }
+      if (data.favoritePDs) this.state.favoritePDs = data.favoritePDs;
+      if (data.removedStepHistory) this.state.removedStepHistory = data.removedStepHistory;
+      if (data.planMaterials) this.state.planMaterials = data.planMaterials;
+      if (data.dwgToPdMap) this.state.dwgToPdMap = data.dwgToPdMap;
 
-    // กรอง PD ที่ผลิตจริงเสร็จแล้ว และขั้นตอนที่ถูกลบออก
-    this.state.scheduledJobs = this.state.scheduledJobs.filter(
-      j => !this.state.isPdInCompletedHistory(j.woId) && !this.state.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name)
-    );
-    this.state.workOrders = this.state.workOrders.filter(wo => !this.state.isPdInCompletedHistory(wo.id));
-    this.state.workOrders.forEach(wo => {
-      wo.steps = wo.steps.filter(step => !this.state.isStepIdentityRemoved(wo.id, step.machine, step.name));
-    });
-    this.state.deduplicateAllWorkOrders();
+      // กรอง PD ที่ผลิตจริงเสร็จแล้ว และขั้นตอนที่ถูกลบออก
+      this.state.scheduledJobs = this.state.scheduledJobs.filter(
+        j => !this.state.isPdInCompletedHistory(j.woId) && !this.state.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name)
+      );
+      this.state.workOrders = this.state.workOrders.filter(wo => !this.state.isPdInCompletedHistory(wo.id));
+      this.state.workOrders.forEach(wo => {
+        wo.steps = wo.steps.filter(step => !this.state.isStepIdentityRemoved(wo.id, step.machine, step.name));
+      });
+      this.state.deduplicateAllWorkOrders();
 
-    if (this.state.ganttController && this.state.scheduledJobs.length > 0) {
-      this.state.ganttController.fitTasks(this.state.scheduledJobs);
+      if (this.state.ganttController && this.state.scheduledJobs.length > 0) {
+        this.state.ganttController.fitTasks(this.state.scheduledJobs);
+      }
+      this.state.notify();
+    } finally {
+      this.state._isLoadingData = false;
     }
-    this.state.notify();
   }
 
   // ============================================================================

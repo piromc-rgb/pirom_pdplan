@@ -138,12 +138,16 @@ export default defineConfig({
 
           if (cleanUrl === '/api/pd' || cleanUrl.startsWith('/api/pd?')) {
             const pdFilePath = path.resolve(__dirname, 'pd.md');
+            const gdrivePdPath = path.join(gdriveDir, 'pd.md');
             
             if (req.method === 'GET') {
               res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              if (fs.existsSync(pdFilePath)) {
+              const activePdPath = (fs.existsSync(gdrivePdPath) && (!fs.existsSync(pdFilePath) || fs.statSync(gdrivePdPath).mtimeMs >= fs.statSync(pdFilePath).mtimeMs))
+                ? gdrivePdPath
+                : pdFilePath;
+              if (fs.existsSync(activePdPath)) {
                 try {
-                  const content = fs.readFileSync(pdFilePath, 'utf-8');
+                  const content = fs.readFileSync(activePdPath, 'utf-8');
                   const regex = /```json\s+([\s\S]*?)\s+```/;
                   const match = content.match(regex);
                   if (match) {
@@ -185,6 +189,9 @@ export default defineConfig({
                   markdownContent += `\`\`\`json\n${JSON.stringify(workOrders, null, 2)}\n\`\`\`\n`;
                   
                   fs.writeFileSync(pdFilePath, markdownContent, 'utf-8');
+                  if (fs.existsSync(gdriveDir)) {
+                    try { fs.writeFileSync(gdrivePdPath, markdownContent, 'utf-8'); } catch (e) {}
+                  }
                   res.statusCode = 200;
                   res.end(JSON.stringify({ success: true }));
                 } catch (err) {
@@ -255,6 +262,8 @@ export default defineConfig({
             }
             
             if (req.method === 'POST') {
+              const urlObj = new URL(cleanUrl, 'http://localhost');
+              const forwardCloud = urlObj.searchParams.get('forwardCloud') === '1';
               const chunks = [];
               req.on('data', chunk => {
                 chunks.push(chunk);
@@ -264,27 +273,29 @@ export default defineConfig({
                   const body = Buffer.concat(chunks).toString('utf-8');
                   const payload = JSON.parse(body);
                   delete payload.formattedRows; // Not needed in Plan.json
+                  delete payload._includeMaterials;
 
-                  // Safeguard: Preserve existing planMaterials if incoming payload does not contain them
-                  if ((!payload.planMaterials || Object.keys(payload.planMaterials).length === 0) && fs.existsSync(planFilePath)) {
-                    try {
-                      const oldContent = JSON.parse(fs.readFileSync(planFilePath, 'utf-8'));
-                      if (oldContent.planMaterials && Object.keys(oldContent.planMaterials).length > 0) {
-                        payload.planMaterials = oldContent.planMaterials;
-                      }
-                      if (oldContent.dwgToPdMap && Object.keys(oldContent.dwgToPdMap).length > 0) {
-                        payload.dwgToPdMap = oldContent.dwgToPdMap;
-                      }
-                    } catch (e) {}
+                  if (payload.planMaterials && Object.keys(payload.planMaterials).length > 0) {
+                    const cachePath = path.resolve(__dirname, 'plan_materials_cache.json');
+                    const pmPayload = {
+                      planMaterials: payload.planMaterials,
+                      dwgToPdMap: payload.dwgToPdMap || {}
+                    };
+                    fs.writeFileSync(cachePath, JSON.stringify(pmPayload), 'utf-8');
+                    if (fs.existsSync(gdriveDir)) {
+                      try { fs.writeFileSync(path.join(gdriveDir, 'plan_materials_cache.json'), JSON.stringify(pmPayload), 'utf-8'); } catch (e) {}
+                    }
                   }
+
+                  const lightPlan = Object.assign({}, payload);
+                  delete lightPlan.planMaterials;
+                  delete lightPlan.dwgToPdMap;
+                  const lightPlanStr = JSON.stringify(lightPlan, null, 2);
                   
-                  fs.writeFileSync(planFilePath, JSON.stringify(payload, null, 2), 'utf-8');
+                  fs.writeFileSync(planFilePath, lightPlanStr, 'utf-8');
                   if (fs.existsSync(gdriveDir)) {
                     try {
-                      const lightPlan = Object.assign({}, payload);
-                      delete lightPlan.planMaterials;
-                      delete lightPlan.dwgToPdMap;
-                      fs.writeFileSync(path.join(gdriveDir, 'Plan.json'), JSON.stringify(lightPlan, null, 2), 'utf-8');
+                      fs.writeFileSync(path.join(gdriveDir, 'Plan.json'), lightPlanStr, 'utf-8');
                     } catch (e) {}
                   }
 
@@ -309,13 +320,16 @@ export default defineConfig({
                     }
                   }
 
-                  if (payload.planMaterials && Object.keys(payload.planMaterials).length > 0) {
-                    const cachePath = path.resolve(__dirname, 'plan_materials_cache.json');
-                    const pmPayload = {
-                      planMaterials: payload.planMaterials,
-                      dwgToPdMap: payload.dwgToPdMap || {}
-                    };
-                    fs.writeFileSync(cachePath, JSON.stringify(pmPayload), 'utf-8');
+                  if (forwardCloud) {
+                    const savedCfg = readCloudConfig();
+                    const ep = (savedCfg.endpointUrl || '').trim();
+                    if (ep && ep.startsWith('http') && !ep.includes('drive.google.com/drive/folders')) {
+                      fetch(ep, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify(lightPlan)
+                      }).catch(err => console.warn('Server-side forwardCloud failed:', err));
+                    }
                   }
                   
                   // Also clean up old plan.md if it exists to keep workspace tidy
@@ -508,7 +522,7 @@ export default defineConfig({
               // Fallback for machines without Drive G: query Cloud Web App API if configured
               const savedCfg = readCloudConfig();
               const ep = (urlObj.searchParams.get('endpointUrl') || savedCfg.endpointUrl || '').trim();
-              const dwgFolderId = (urlObj.searchParams.get('dwgFolderId') || '17w0vlhgTfMW18p2H0LRq2aB1fOSHEdvg').trim();
+              const dwgFolderId = (urlObj.searchParams.get('dwgFolderId') || '1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm').trim();
               if (ep && ep.startsWith('http') && !ep.includes('drive.google.com/drive/folders')) {
                 try {
                   const sep = ep.includes('?') ? '&' : '?';
