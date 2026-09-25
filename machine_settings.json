@@ -1,10 +1,10 @@
 {
-  "updatedAt": "2026-09-24T14:16:30.497Z",
+  "updatedAt": "2026-09-25T22:02:38.886Z",
   "workCenters": {
     "DEA028": {
       "capacity": 1,
       "workHoursPerDay": 8,
-      "color": "var(--accent-orange)",
+      "color": "var(--accent-purple)",
       "name": "CNC CL-32",
       "altMachines": "",
       "transferMinutes": 10,
@@ -48,7 +48,7 @@
     },
     "DEA023": {
       "capacity": 1,
-      "workHoursPerDay": 9.5,
+      "workHoursPerDay": 10,
       "color": "var(--accent-orange)",
       "name": "CNC VF7",
       "altMachines": "DEA024",
@@ -57,7 +57,7 @@
     },
     "DEA024": {
       "capacity": 1,
-      "workHoursPerDay": 10,
+      "workHoursPerDay": 20,
       "color": "var(--accent-magenta)",
       "name": "CNC VF4",
       "altMachines": "DEA023",
@@ -128,7 +128,7 @@
       "leadTimeDays": 0
     },
     "DEA062": {
-      "capacity": 4,
+      "capacity": 1,
       "workHoursPerDay": 8,
       "color": "var(--accent-red)",
       "name": "ปรับแต่ง",
@@ -137,7 +137,7 @@
       "leadTimeDays": 0
     },
     "DEB013": {
-      "capacity": 3,
+      "capacity": 1,
       "workHoursPerDay": 8,
       "color": "var(--accent-orange)",
       "name": "เชื่อม CO2 WD",
@@ -146,8 +146,8 @@
       "leadTimeDays": 0
     },
     "DEB021": {
-      "capacity": 10,
-      "workHoursPerDay": 20,
+      "capacity": 1,
+      "workHoursPerDay": 8,
       "color": "var(--accent-magenta)",
       "name": "ทำสี",
       "altMachines": "",
@@ -164,8 +164,8 @@
       "leadTimeDays": 0
     },
     "DEC001": {
-      "capacity": 2,
-      "workHoursPerDay": 10,
+      "capacity": 1,
+      "workHoursPerDay": 8,
       "color": "var(--accent-teal)",
       "name": "ASSY ประกอบแมคคานิก",
       "altMachines": "",
@@ -177,24 +177,15 @@
       "workHoursPerDay": 8,
       "color": "var(--accent-purple)",
       "name": "เลื่อย",
-      "altMachines": "DEA017",
+      "altMachines": "",
       "transferMinutes": 10,
       "leadTimeDays": 0
     },
     "DEA032": {
       "capacity": 1,
-      "workHoursPerDay": 20,
+      "workHoursPerDay": 8,
       "color": "var(--accent-teal)",
       "name": "กัดเฟือง - HOB",
-      "altMachines": "",
-      "transferMinutes": 10,
-      "leadTimeDays": 0
-    },
-    "SUB038": {
-      "capacity": 1,
-      "workHoursPerDay": 8,
-      "color": "var(--accent-purple)",
-      "name": "ชุบชิงค์",
       "altMachines": "",
       "transferMinutes": 10,
       "leadTimeDays": 0
@@ -215,7 +206,7 @@
       "name": "หุ้มยาง",
       "altMachines": "",
       "transferMinutes": 10,
-      "leadTimeDays": 15
+      "leadTimeDays": 0
     },
     "DEA041": {
       "capacity": 1,
@@ -227,7 +218,7 @@
       "leadTimeDays": 0
     },
     "DEA033": {
-      "capacity": 2,
+      "capacity": 1,
       "workHoursPerDay": 8,
       "color": "var(--accent-magenta)",
       "name": "ชุบแข็ง",
@@ -242,13 +233,22 @@
       "name": "ชุบแข็ง",
       "altMachines": "",
       "transferMinutes": 10,
-      "leadTimeDays": 7
+      "leadTimeDays": 0
     },
     "SUB002-2": {
       "capacity": 1,
       "workHoursPerDay": 8,
       "color": "var(--accent-teal)",
       "name": "รมดำ",
+      "altMachines": "",
+      "transferMinutes": 10,
+      "leadTimeDays": 0
+    },
+    "SUB038": {
+      "capacity": 1,
+      "workHoursPerDay": 8,
+      "color": "var(--accent-purple)",
+      "name": "ชุบชิงค์",
       "altMachines": "",
       "transferMinutes": 10,
       "leadTimeDays": 0
@@ -278,7 +278,7 @@
       "name": "หุ้มยาง",
       "altMachines": "",
       "transferMinutes": 10,
-      "leadTimeDays": 15
+      "leadTimeDays": 0
     },
     "DEA015": {
       "capacity": 1,
@@ -308,7 +308,7 @@
       "leadTimeDays": 0
     },
     "DED001": {
-      "capacity": 2,
+      "capacity": 1,
       "workHoursPerDay": 8,
       "color": "var(--accent-teal)",
       "name": "ASSY ประกอบไฟฟ้า",
@@ -321,7 +321,7 @@
       "workHoursPerDay": 8,
       "color": "var(--accent-purple)",
       "name": "เลื่อย 2",
-      "altMachines": "DEA011",
+      "altMachines": "",
       "transferMinutes": 10,
       "leadTimeDays": 0
     },
@@ -332,7 +332,7 @@
       "name": "WIRE CUT",
       "altMachines": "",
       "transferMinutes": 10,
-      "leadTimeDays": 10
+      "leadTimeDays": 0
     },
     "SUB027-2": {
       "capacity": 1,
@@ -344,7 +344,7 @@
       "leadTimeDays": 0
     },
     "SUB027-3": {
-      "capacity": 2,
+      "capacity": 1,
       "workHoursPerDay": 8,
       "color": "var(--accent-red)",
       "name": "ชุบแข็ง",
@@ -368,7 +368,7 @@
       "name": "หุ้มยาง",
       "altMachines": "",
       "transferMinutes": 10,
-      "leadTimeDays": 7
+      "leadTimeDays": 0
     },
     "SUB005": {
       "capacity": 1,
@@ -377,7 +377,7 @@
       "name": "หุ้มยาง",
       "altMachines": "",
       "transferMinutes": 10,
-      "leadTimeDays": 7
+      "leadTimeDays": 0
     },
     "SUB026": {
       "capacity": 1,
@@ -431,7 +431,7 @@
       "name": "WIRE CUT",
       "altMachines": "",
       "transferMinutes": 10,
-      "leadTimeDays": 7
+      "leadTimeDays": 0
     },
     "DM0001": {
       "capacity": 1,
@@ -483,13 +483,13 @@
     "DEC001",
     "DEA011",
     "DEA032",
-    "SUB038",
     "DEA031",
     "SUB036",
     "DEA041",
     "DEA033",
     "SUB002",
     "SUB002-2",
+    "SUB038",
     "SUB029",
     "DEB012",
     "SUB031",

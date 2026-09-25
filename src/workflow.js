@@ -1131,7 +1131,13 @@ export class WorkflowController {
       return;
     }
 
+    const spinTok = typeof window.showIosSpinner === 'function' ? window.showIosSpinner(550) : null;
+    const hideSpin = () => {
+      if (typeof window.hideIosSpinner === 'function') window.hideIosSpinner(spinTok);
+    };
+
     const parseAndLoad = (arrayBuffer, filename) => {
+      const runParse = () => {
       try {
         const data = new Uint8Array(arrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
@@ -1588,6 +1594,14 @@ export class WorkflowController {
       } catch (err) {
         console.error(err);
         alert('เกิดข้อผิดพลาดในการนำเข้าไฟล์ Excel: ' + err.message);
+      } finally {
+        hideSpin();
+      }
+      };
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => setTimeout(runParse, 25));
+      } else {
+        setTimeout(runParse, 25);
       }
     };
 
@@ -1612,6 +1626,7 @@ export class WorkflowController {
             parseAndLoad(buffer, file.name);
           });
       };
+      reader.onerror = () => hideSpin();
       reader.readAsArrayBuffer(file);
     } else {
       const defaultFilename = this.state.storageSync 
@@ -1635,13 +1650,15 @@ export class WorkflowController {
           if (data && data.arrayBuffer && data.filename) {
             parseAndLoad(data.arrayBuffer, data.filename);
           } else {
+            hideSpin();
             alert(`กรุณาเลือกไฟล์ ${defaultFilename} (หรือวางไฟล์ไว้ในระบบ)`);
           }
         }).catch(err => {
+          hideSpin();
           console.warn('Failed to load excel from IndexedDB:', err);
           alert(`กรุณาเลือกไฟล์ ${defaultFilename} (หรือวางไฟล์ไว้ในระบบ)`);
         });
-      });
+      }).catch(() => hideSpin());
     }
   }
 

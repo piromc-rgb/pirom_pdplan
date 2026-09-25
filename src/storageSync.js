@@ -86,7 +86,7 @@ export class StorageSyncManager {
     } catch (e) {}
     this.updateUserModeUI();
     if (mode === 'plan') {
-      this.showToast('✏️ สลับเป็น "โหมดวางแผน" (วางแผนลง Board หรือปิด App จะ Auto Save ลง Google Drive ที่เดียวกับ LN Overview)', 'success');
+      this.showToast('✏️ สลับเป็นโหมด "EDIT" (วางแผนลง Board หรือปิด App จะ Auto Save ลง Google Drive ที่เดียวกับ LN Overview)', 'success');
       if (this.state && typeof this.state.buildPlanPayload === 'function') {
         if (typeof this.state.saveWorkOrdersToFile === 'function') this.state.saveWorkOrdersToFile();
         this.pushToCloud(this.state.buildPlanPayload(false), true);
@@ -96,7 +96,7 @@ export class StorageSyncManager {
         clearTimeout(this.debounceTimer);
         this.debounceTimer = null;
       }
-      this.showToast('👁️ สลับเป็น "โหมดดูแผน" (Load เมื่อเปิด App แต่ไม่ Save เมื่อวางแผนหรือปิด App)', 'info');
+      this.showToast('👁️ สลับเป็นโหมด "VIEW ONLY" (Load เมื่อเปิด App แต่ไม่ Save เมื่อวางแผนหรือปิด App)', 'info');
     }
   }
 
@@ -171,11 +171,11 @@ export class StorageSyncManager {
       if (isPlan) {
         btnUserMode.classList.remove('mode-view');
         btnUserMode.classList.add('mode-plan');
-        btnUserMode.title = 'โหมดผู้ใช้งาน: วางแผน (วางแผนลง Board & ปิด App จะ Save ลง Google Drive) - คลิกเพื่อสลับโหมด';
+        btnUserMode.title = 'โหมดผู้ใช้งาน: EDIT (วางแผนลง Board & ปิด App จะ Save ลง Google Drive) - คลิกเพื่อสลับโหมด';
       } else {
         btnUserMode.classList.remove('mode-plan');
         btnUserMode.classList.add('mode-view');
-        btnUserMode.title = 'โหมดผู้ใช้งาน: ดูแผน (Load เปิด App / ไม่ Save เมื่อวางแผนหรือปิด App) - คลิกเพื่อสลับโหมด';
+        btnUserMode.title = 'โหมดผู้ใช้งาน: VIEW ONLY (Load เปิด App / ไม่ Save เมื่อวางแผนหรือปิด App) - คลิกเพื่อสลับโหมด';
       }
     }
 
@@ -183,7 +183,7 @@ export class StorageSyncManager {
       userModeIcon.textContent = isPlan ? '✏️' : '👁️';
     }
     if (userModeText) {
-      userModeText.textContent = isPlan ? 'วางแผน' : 'ดูแผน';
+      userModeText.textContent = isPlan ? 'EDIT' : 'VIEW ONLY';
     }
 
     if (optView && optPlan) {

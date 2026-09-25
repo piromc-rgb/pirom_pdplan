@@ -27,11 +27,11 @@
               <span class="brand-chaken">CHAKEN</span>
               <span class="brand-planing">Planing</span>
             </div>
-            <div id="user-mode-wrapper" class="user-mode-wrapper" style="position: relative; display: inline-flex; align-items: center;">
-              <button id="btn-user-mode" class="badge btn-user-mode mode-view" type="button" title="โหมดผู้ใช้งาน: คลิกเพื่อเลือกโหมดดูแผน หรือ วางแผน">
+            <div id="user-mode-wrapper" class="user-mode-wrapper" style="position: relative; display: inline-flex; align-items: center; flex-shrink: 0;">
+              <button id="btn-user-mode" class="badge btn-user-mode mode-view" type="button" style="white-space: nowrap; flex-shrink: 0;" title="โหมดผู้ใช้งาน: คลิกเพื่อเลือกโหมด VIEW ONLY หรือ EDIT">
                 <span id="user-mode-icon" class="user-mode-icon">👁️</span>
-                <span id="user-mode-text" class="user-mode-text">ดูแผน</span>
-                <svg class="user-mode-arrow" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px; transition: transform 0.2s;">
+                <span id="user-mode-text" class="user-mode-text" style="white-space: nowrap;">VIEW ONLY</span>
+                <svg class="user-mode-arrow" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px; transition: transform 0.2s; flex-shrink: 0;">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
               </button>
@@ -43,7 +43,7 @@
                   <span class="mode-item-icon">👁️</span>
                   <div class="mode-item-body">
                     <div class="mode-item-title-row">
-                      <span class="mode-item-title title-view">1. ดูแผน <span class="mode-default-tag">(Default)</span></span>
+                      <span class="mode-item-title title-view">1. VIEW ONLY <span class="mode-default-tag">(Default)</span></span>
                       <span id="check-user-mode-view" class="mode-item-check check-view">✓</span>
                     </div>
                     <div class="mode-item-desc">Load ข้อมูลตอนเปิด App แต่ไม่ Save ตอนปิด App</div>
@@ -53,7 +53,7 @@
                   <span class="mode-item-icon">✏️</span>
                   <div class="mode-item-body">
                     <div class="mode-item-title-row">
-                      <span class="mode-item-title title-plan">2. วางแผน</span>
+                      <span class="mode-item-title title-plan">2. EDIT</span>
                       <span id="check-user-mode-plan" class="mode-item-check check-plan hidden">✓</span>
                     </div>
                     <div class="mode-item-desc">Load ข้อมูลตอนเปิด App และ Save ตอนปิด App</div>

@@ -647,7 +647,14 @@ class App {
       modelSelect.addEventListener('change', (e) => {
         const selectedModel = e.target.value;
         state.schedulingModel = selectedModel;
-        state.recomputeSchedule();
+        const spinTok = typeof window.showIosSpinner === 'function' ? window.showIosSpinner(420) : null;
+        setTimeout(() => {
+          try {
+            state.recomputeSchedule();
+          } finally {
+            if (typeof window.hideIosSpinner === 'function') window.hideIosSpinner(spinTok);
+          }
+        }, 25);
       });
     }
 
@@ -670,6 +677,7 @@ class App {
         }
 
         const origHtml = btnReschedule.innerHTML;
+        const spinTok = typeof window.showIosSpinner === 'function' ? window.showIosSpinner(450) : null;
         btnReschedule.disabled = true;
         btnReschedule.style.opacity = '0.75';
         btnReschedule.style.pointerEvents = 'none';
@@ -692,6 +700,7 @@ class App {
             btnReschedule.style.opacity = '';
             btnReschedule.style.pointerEvents = '';
             btnReschedule.innerHTML = origHtml;
+            if (typeof window.hideIosSpinner === 'function') window.hideIosSpinner(spinTok);
           }
         }, 50);
       });
@@ -4031,6 +4040,280 @@ class App {
     });
   }
 }
+
+// Global 12-Spoke iOS Loading & Calculation Spinner Controller
+(function initGlobalIosSpinner() {
+  const activeSpinnerTokens = new Map();
+  let spinnerTokenSeq = 0;
+
+  const ensureIosSpinnerElement = () => {
+    if (!document.getElementById('dwg-ios-spinner-style')) {
+      const st = document.createElement('style');
+      st.id = 'dwg-ios-spinner-style';
+      st.textContent = `
+        @keyframes dwgIosSpin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        #dwg-ios-spinner-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 999999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          pointer-events: none;
+        }
+        #dwg-ios-spinner-svg {
+          width: 72px;
+          height: 72px;
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          animation: dwgIosSpin 0.9s steps(12, end) infinite;
+          filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.35)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.75));
+        }
+      `;
+      (document.head || document.documentElement).appendChild(st);
+    }
+    let overlay = document.getElementById('dwg-ios-spinner-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'dwg-ios-spinner-overlay';
+      const opacities = [1, 0.10, 0.17, 0.25, 0.33, 0.41, 0.50, 0.58, 0.66, 0.75, 0.83, 0.92];
+      const spokes = opacities.map((op, i) => {
+        const deg = i * 30;
+        return `<rect x="46" y="6" width="8" height="24" rx="4" ry="4" fill="#ffffff" fill-opacity="${op}" transform="rotate(${deg} 50 50)" />`;
+      }).join('');
+      overlay.innerHTML = `<svg id="dwg-ios-spinner-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">${spokes}</svg>`;
+      (document.body || document.documentElement).appendChild(overlay);
+    } else if (overlay.parentNode !== document.body && document.body) {
+      document.body.appendChild(overlay);
+    }
+    return overlay;
+  };
+
+  const syncIosSpinnerVisibility = () => {
+    const overlay = document.getElementById('dwg-ios-spinner-overlay');
+    if (activeSpinnerTokens.size > 0) {
+      const el = overlay || ensureIosSpinnerElement();
+      el.style.display = 'flex';
+    } else if (overlay) {
+      overlay.remove();
+    }
+  };
+
+  const showIosSpinner = (minVisibleMs = 320) => {
+    const id = ++spinnerTokenSeq;
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const safetyTimer = setTimeout(() => {
+      activeSpinnerTokens.delete(id);
+      syncIosSpinnerVisibility();
+    }, 45000);
+    activeSpinnerTokens.set(id, { id, start: now, minMs: minVisibleMs, safetyTimer });
+    const overlay = ensureIosSpinnerElement();
+    overlay.style.display = 'flex';
+    void overlay.offsetWidth;
+    return id;
+  };
+
+  const hideIosSpinner = (token, overrideMinMs) => {
+    let targetId = token;
+    if (targetId == null || !activeSpinnerTokens.has(targetId)) {
+      const keys = Array.from(activeSpinnerTokens.keys());
+      targetId = keys.length > 0 ? keys[keys.length - 1] : null;
+    }
+    if (targetId == null) {
+      syncIosSpinnerVisibility();
+      return;
+    }
+    const entry = activeSpinnerTokens.get(targetId);
+    if (!entry) {
+      syncIosSpinnerVisibility();
+      return;
+    }
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const minMs = overrideMinMs !== undefined ? overrideMinMs : entry.minMs;
+    const remaining = Math.max(0, minMs - (now - entry.start));
+    const finalize = () => {
+      clearTimeout(entry.safetyTimer);
+      activeSpinnerTokens.delete(targetId);
+      syncIosSpinnerVisibility();
+    };
+    if (remaining > 0) {
+      setTimeout(finalize, remaining);
+    } else {
+      finalize();
+    }
+  };
+
+  const forceHideIosSpinner = () => {
+    activeSpinnerTokens.forEach(entry => clearTimeout(entry.safetyTimer));
+    activeSpinnerTokens.clear();
+    const overlay = document.getElementById('dwg-ios-spinner-overlay');
+    if (overlay) overlay.remove();
+  };
+
+  const yieldForSpinnerPaint = (fn) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => setTimeout(fn, 25));
+    } else {
+      setTimeout(fn, 25);
+    }
+  };
+
+  window.showIosSpinner = showIosSpinner;
+  window.hideIosSpinner = hideIosSpinner;
+  window.forceHideIosSpinner = forceHideIosSpinner;
+
+  const startupSpinToken = showIosSpinner(500);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => hideIosSpinner(startupSpinToken), 450);
+    });
+  } else {
+    setTimeout(() => hideIosSpinner(startupSpinToken), 450);
+  }
+
+  const wrapAsyncProto = (proto, methodName, minMs = 350) => {
+    if (!proto || typeof proto[methodName] !== 'function' || proto[methodName]._iosSpinWrapped) return;
+    const orig = proto[methodName];
+    const wrapped = async function(...args) {
+      const tok = showIosSpinner(minMs);
+      try {
+        return await orig.apply(this, args);
+      } finally {
+        hideIosSpinner(tok);
+      }
+    };
+    wrapped._iosSpinWrapped = true;
+    proto[methodName] = wrapped;
+  };
+
+  const wrapSyncCalc = (obj, methodName, minMs = 350, deferFrame = false) => {
+    if (!obj || typeof obj[methodName] !== 'function' || obj[methodName]._iosSpinWrapped) return;
+    const orig = obj[methodName];
+    const wrapped = function(...args) {
+      const tok = showIosSpinner(minMs);
+      if (deferFrame) {
+        yieldForSpinnerPaint(() => {
+          try {
+            orig.apply(this, args);
+          } finally {
+            hideIosSpinner(tok);
+          }
+        });
+        return;
+      }
+      try {
+        return orig.apply(this, args);
+      } finally {
+        hideIosSpinner(tok);
+      }
+    };
+    wrapped._iosSpinWrapped = true;
+    obj[methodName] = wrapped;
+  };
+
+  if (typeof StorageSyncManager !== 'undefined' && StorageSyncManager.prototype) {
+    wrapAsyncProto(StorageSyncManager.prototype, 'pullFromCloud', 450);
+    wrapAsyncProto(StorageSyncManager.prototype, 'fetchStatusOverview', 380);
+    wrapAsyncProto(StorageSyncManager.prototype, 'fetchPlanMaterials', 380);
+    if (typeof StorageSyncManager.prototype.executePush === 'function' && !StorageSyncManager.prototype.executePush._iosSpinWrapped) {
+      const origExecPush = StorageSyncManager.prototype.executePush;
+      StorageSyncManager.prototype.executePush = async function(payload, isBeacon = false) {
+        if (isBeacon) return origExecPush.call(this, payload, isBeacon);
+        const tok = showIosSpinner(320);
+        try {
+          return await origExecPush.call(this, payload, isBeacon);
+        } finally {
+          hideIosSpinner(tok);
+        }
+      };
+      StorageSyncManager.prototype.executePush._iosSpinWrapped = true;
+    }
+    if (typeof StorageSyncManager.prototype.importBackupJson === 'function' && !StorageSyncManager.prototype.importBackupJson._iosSpinWrapped) {
+      const origImportBackup = StorageSyncManager.prototype.importBackupJson;
+      StorageSyncManager.prototype.importBackupJson = function(file) {
+        if (!file) return;
+        const tok = showIosSpinner(450);
+        try {
+          return origImportBackup.call(this, file);
+        } finally {
+          setTimeout(() => hideIosSpinner(tok), 400);
+        }
+      };
+      StorageSyncManager.prototype.importBackupJson._iosSpinWrapped = true;
+    }
+  }
+
+  if (typeof QcCheckController !== 'undefined' && QcCheckController.prototype) {
+    wrapAsyncProto(QcCheckController.prototype, 'runCheck', 450);
+  }
+
+  if (typeof ContinuityAnalysisController !== 'undefined' && ContinuityAnalysisController.prototype) {
+    wrapSyncCalc(ContinuityAnalysisController.prototype, 'open', 350, true);
+    wrapSyncCalc(ContinuityAnalysisController.prototype, 'render', 300, false);
+  }
+
+  if (typeof AssemblyTreeController !== 'undefined' && AssemblyTreeController.prototype) {
+    wrapAsyncProto(AssemblyTreeController.prototype, 'showBomModal', 400);
+    wrapSyncCalc(AssemblyTreeController.prototype, 'selectAssembly', 350, true);
+  }
+
+  if (typeof WorkflowController !== 'undefined' && WorkflowController.prototype) {
+    wrapSyncCalc(WorkflowController.prototype, 'runPDSimulation', 420, true);
+  }
+
+  if (typeof App !== 'undefined' && App.prototype) {
+    if (typeof App.prototype.runAIOptimizationWithSelection === 'function' && !App.prototype.runAIOptimizationWithSelection._iosSpinWrapped) {
+      const origRunAI = App.prototype.runAIOptimizationWithSelection;
+      App.prototype.runAIOptimizationWithSelection = function(btn, selectedIds) {
+        const tok = showIosSpinner(650);
+        yieldForSpinnerPaint(() => {
+          try {
+            origRunAI.call(this, btn, selectedIds);
+          } finally {
+            setTimeout(() => hideIosSpinner(tok), 2100);
+          }
+        });
+      };
+      App.prototype.runAIOptimizationWithSelection._iosSpinWrapped = true;
+    }
+    if (typeof App.prototype.showAIResultModal === 'function' && !App.prototype.showAIResultModal._iosSpinWrapped) {
+      const origShowAIResult = App.prototype.showAIResultModal;
+      App.prototype.showAIResultModal = function(simJobs, lateJobs, onConfirmCallback, meta) {
+        const wrappedConfirm = (adjustTargets) => {
+          const tok = showIosSpinner(450);
+          yieldForSpinnerPaint(() => {
+            try {
+              if (typeof onConfirmCallback === 'function') onConfirmCallback(adjustTargets);
+            } finally {
+              hideIosSpinner(tok);
+            }
+          });
+        };
+        return origShowAIResult.call(this, simJobs, lateJobs, wrappedConfirm, meta);
+      };
+      App.prototype.showAIResultModal._iosSpinWrapped = true;
+    }
+    wrapSyncCalc(App.prototype, 'showSameItemGroupingModal', 350, true);
+    wrapSyncCalc(App.prototype, 'showProductionOrderListModal', 350, true);
+    wrapSyncCalc(App.prototype, 'showLateWOsListModal', 350, true);
+  }
+
+  if (typeof state !== 'undefined' && state) {
+    wrapSyncCalc(state, 'recomputeSchedule', 420, false);
+    wrapSyncCalc(state, 'updateWorkCenters', 400, false);
+    wrapSyncCalc(state, 'setActiveScale', 320, false);
+    wrapSyncCalc(state, 'setGanttMode', 320, false);
+    wrapSyncCalc(state, 'importPlan', 450, false);
+    wrapSyncCalc(state, 'simulateQuoteImpact', 350, false);
+  }
+})();
 
 // Start application when DOM loads
 window.addEventListener('DOMContentLoaded', () => {

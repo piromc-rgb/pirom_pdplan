@@ -231,6 +231,8 @@ body {
   border: 1px solid transparent;
   outline: none;
   text-transform: none !important;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .btn-user-mode.mode-view {
