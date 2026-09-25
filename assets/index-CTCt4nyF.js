@@ -2862,6 +2862,61 @@ window.showDwgPdfModal=function(e){if(!e)return;let raw=e.viewUrl||e.fileUrl||e.
   const dwgDirectUrlCache = {};
   const dwgInFlightPromises = {};
 
+  const showDwgSearchingSpinner = () => {
+    if (!document.getElementById("dwg-ios-spinner-style")) {
+      const st = document.createElement("style");
+      st.id = "dwg-ios-spinner-style";
+      st.textContent = `
+        @keyframes dwgIosSpin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        #dwg-ios-spinner-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 999999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          pointer-events: none;
+        }
+        #dwg-ios-spinner-svg {
+          width: 72px;
+          height: 72px;
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          animation: dwgIosSpin 0.9s steps(12, end) infinite;
+          filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.35)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.75));
+        }
+      `;
+      document.head.appendChild(st);
+    }
+    let overlay = document.getElementById("dwg-ios-spinner-overlay");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.id = "dwg-ios-spinner-overlay";
+      const opacities = [1, 0.10, 0.17, 0.25, 0.33, 0.41, 0.50, 0.58, 0.66, 0.75, 0.83, 0.92];
+      const spokes = opacities.map((op, i) => {
+        const deg = i * 30;
+        return `<rect x="46" y="6" width="8" height="24" rx="4" ry="4" fill="#ffffff" fill-opacity="${op}" transform="rotate(${deg} 50 50)" />`;
+      }).join("");
+      overlay.innerHTML = `<svg id="dwg-ios-spinner-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">${spokes}</svg>`;
+      document.body.appendChild(overlay);
+    }
+    overlay.style.display = "flex";
+  };
+
+  const hideDwgSearchingSpinner = () => {
+    const overlay = document.getElementById("dwg-ios-spinner-overlay");
+    if (overlay) {
+      overlay.remove();
+    }
+  };
+
   const toDirectDriveViewUrl = (data) => {
     if (!data) return "";
     if (data.fileId) return `https://drive.google.com/file/d/${data.fileId}/view`;
@@ -2962,19 +3017,26 @@ window.showDwgPdfModal=function(e){if(!e)return;let raw=e.viewUrl||e.fileUrl||e.
       oldModal.remove();
     }
 
-    const cleanKey = t.replace(/[-_\s.]/g, "").toUpperCase();
-    if (dwgDirectUrlCache[cleanKey]) {
-      openDirectNewTab(dwgDirectUrlCache[cleanKey]);
-      return;
-    }
+    showDwgSearchingSpinner();
+    try {
+      const cleanKey = t.replace(/[-_\s.]/g, "").toUpperCase();
+      if (dwgDirectUrlCache[cleanKey]) {
+        await new Promise(res => setTimeout(res, 250));
+        hideDwgSearchingSpinner();
+        openDirectNewTab(dwgDirectUrlCache[cleanKey]);
+        return;
+      }
 
-    const resolvedUrl = await window.prefetchDwgPdf(t);
-    if (resolvedUrl) {
-      openDirectNewTab(resolvedUrl);
-      return;
+      const resolvedUrl = await window.prefetchDwgPdf(t);
+      hideDwgSearchingSpinner();
+      if (resolvedUrl) {
+        openDirectNewTab(resolvedUrl);
+        return;
+      }
+    } finally {
+      hideDwgSearchingSpinner();
     }
 
     alert("ไม่พบ file แบบ");
-    showToastMsg(`⚠️ ไม่พบ file แบบ: ${t}`, "error");
   };
 })();
