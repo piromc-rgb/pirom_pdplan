@@ -1,6 +1,6 @@
 /**
  * ==============================================================================
- * CHAKEN Planing v1.0 - Google Drive Cloud Sync Service (Google Apps Script)
+ * CHAKEN Planing V1.01 - Google Drive Cloud Sync Service (Google Apps Script)
  * ==============================================================================
  * 
  * วัตถุประสงค์:
