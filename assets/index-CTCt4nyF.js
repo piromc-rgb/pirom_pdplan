@@ -154,7 +154,7 @@
           <td style="padding: 10px 8px; text-align: center;">${c}</td>
         `,r.appendChild(s)}));let c=o.cloneNode(!0);o.parentNode.replaceChild(c,o),c.addEventListener(`click`,()=>{this.exportWorkCenterPlanToCSV(e,s)}),t.classList.remove(`hidden`)}exportWorkCenterPlanToCSV(e,t){let n=[`Production Order ID`,`Part Name`,`Step No`,`Step Name`,`Qty`,`Start Date`,`Start Time`,`Finish Date`,`Finish Time`,`Status`],r=t.map(e=>{let t=a(e.startHour),n=a(e.startHour+e.estHours),r=t.toLocaleDateString(`en-GB`),i=t.toLocaleTimeString(`en-GB`,{hour:`2-digit`,minute:`2-digit`}),o=n.toLocaleDateString(`en-GB`),s=n.toLocaleTimeString(`en-GB`,{hour:`2-digit`,minute:`2-digit`});return[e.woId||e.id,e.partName,e.stepNum?`Step ${e.stepNum}`:``,e.stepName||``,e.qty,r,i,o,s,e.status]}),i=[n.join(`,`),...r.map(e=>e.map(e=>{let t=e.toString().replace(/"/g,`""`);return(t.includes(`,`)||t.includes(`"`)||t.includes(`
 `))&&(t=`"${t}"`),t}).join(`,`))].join(`
-`),o=new Blob([new Uint8Array([239,187,191]),i],{type:`text/csv;charset=utf-8;`}),s=URL.createObjectURL(o),c=document.createElement(`a`);c.setAttribute(`href`,s),c.setAttribute(`download`,`Plan_${e.replace(/\s+/g,`_`)}_${new Date().toISOString().slice(0,10)}.csv`),document.body.appendChild(c),c.click(),document.body.removeChild(c)}openPdPlanModal(e){return this.showPDPlanModal(e)}showPDPlanModal(e){let t=document.getElementById(`pd-plan-modal`);if(!t)return;let n=document.getElementById(`pd-plan-title`),r=document.getElementById(`pd-plan-status-badge`),i=document.getElementById(`btn-pd-plan-favorite`),o=document.getElementById(`pd-plan-step-count`),s=document.getElementById(`edit-pd-id`),c=document.getElementById(`edit-pd-project`),l=document.getElementById(`edit-pd-customer`),u=document.getElementById(`edit-pd-dwgno`),d=document.getElementById(`edit-pd-partname`),f=document.getElementById(`edit-pd-qty`),p=document.getElementById(`edit-pd-priority`),m=document.getElementById(`edit-pd-memo`),h=document.getElementById(`edit-pd-targetdate`),g=document.getElementById(`pd-plan-table-body`),_=document.getElementById(`btn-add-step-to-edit-pd`),v=document.getElementById(`btn-save-pd-changes`),y=document.getElementById(`btn-export-pd-csv`),b=document.getElementById(`btn-delete-this-pd`),x=document.getElementById(`chk-pd-completed-history`),S=(this.state.scheduledJobs||[]).filter(t=>t.woId===e||t.id===e),C=(this.state.workOrders||[]).find(t=>t.id===e);if(S.length===0&&!C){let t=null,n=null;if(this.state.dwgToPdMap){for(let[r,i]of Object.entries(this.state.dwgToPdMap))if(i.pdId===e){t=r,n=i;break}}if(n)C={id:e,customer:`General`,project:n.project||`General`,dwgNo:t||``,partName:t||``,qty:1,priority:`Normal`,steps:(n.operations||[]).map(t=>({id:`${e}-${t.stepNum}`,stepNum:t.stepNum,name:t.name||t.machine,machine:t.machine,estHours:.5,cycleMinutes:1,setupMinutes:0,status:t.status||`Unscheduled`}))};else{let t=this.state.planMaterials?.[e]||[];if(t.length>0){let n=t[0];C={id:e,customer:`General`,project:`General`,dwgNo:n.mat||``,partName:n.matDesc||``,qty:n.estimatedQty||1,priority:`Normal`,steps:t.map(t=>({id:`${e}-${t.stepNum}`,stepNum:t.stepNum,name:t.operDesc||t.wc,machine:t.wc,estHours:.5,cycleMinutes:1,setupMinutes:0,status:t.operStatus||`Unscheduled`}))}}}}if(S.length===0&&!C){this.showToast(`ไม่พบข้อมูล Production Order: ${e}`);return}let w=S[0]||C,T=C?.customer||w?.customer||`General`,E=C?.project||w?.project||`General`,D=C?.dwgNo||w?.dwgNo||``,O=C?.partName||w?.partName||``,k=C?.qty||w?.qty||100,A=C?.priority||w?.priority||`Normal`,j=this.state.pdMemos?.[e]||C?.memo||w?.memo||``,M=C?.dueHour===void 0?w?.dueHour===void 0?null:w.dueHour:C.dueHour;if(n&&(n.textContent=`Production Order: ${e}`),i){let t=()=>{let t=this.state.isPdFavorite(e);i.innerHTML=t?`&#9733;`:`&#9734;`,i.title=t?`เอาออกจากรายการโปรด`:`เพิ่มเป็นรายการโปรด`,i.style.color=t?`#ffd54a`:`var(--text-secondary)`};t(),i.onclick=()=>{this.state.togglePdFavorite(e),t()}}if(s&&(s.value=e),c&&(c.value=E),l&&(l.value=T),u&&(u.value=D,u.ondblclick=()=>window.openDwgPdf&&window.openDwgPdf(u.value||D)),document.getElementById(`btn-open-dwg-pdf`)&&(document.getElementById(`btn-open-dwg-pdf`).onclick=()=>window.openDwgPdf&&window.openDwgPdf(u?u.value:D)),d&&(d.value=O),f&&(f.value=k),p&&(p.value=A),m&&(m.value=j),x&&(x.checked=this.state.isPdInCompletedHistory(e)),h){if(M!=null){let e=a(M);h.value=`${e.getFullYear()}-${(e.getMonth()+1).toString().padStart(2,`0`)}-${e.getDate().toString().padStart(2,`0`)}`}else h.value=``}let N=[],P=new Set;S.forEach(e=>{let t=e.setupMinutes===void 0?0:e.setupMinutes,n=e.cycleMinutes;if(n==null&&e.estHours>0&&(e.qty||woQty)>0){let r=this.state.workCenters[e.machine]?.capacity||1,i=e.qty||woQty||1;n=parseFloat(((e.estHours*60*r-t)/i).toFixed(2)),n<=0&&(n=parseFloat((e.estHours*60*r/i).toFixed(2)))}(n==null||isNaN(n))&&(n=1),N.push({id:e.id,stepNum:e.stepNum,name:e.stepName||e.name||``,machine:e.machine||`DEA012`,setupMinutes:t,cycleMinutes:n,estHours:e.estHours,status:e.status||`Scheduled`,startHour:e.startHour,isScheduled:!0}),P.add(e.id)}),C&&Array.isArray(C.steps)&&C.steps.forEach(e=>{if(!P.has(e.id)){let t=e.setupMinutes===void 0?0:e.setupMinutes,n=e.cycleMinutes;if(n==null&&e.estHours>0&&woQty>0){let r=this.state.workCenters[e.machine]?.capacity||1;n=parseFloat(((e.estHours*60*r-t)/woQty).toFixed(2)),n<=0&&(n=parseFloat((e.estHours*60*r/woQty).toFixed(2)))}(n==null||isNaN(n))&&(n=1),N.push({id:e.id,stepNum:e.stepNum,name:e.name||``,machine:e.machine||`DEA012`,setupMinutes:t,cycleMinutes:n,estHours:e.estHours,status:`Unscheduled`,startHour:null,isScheduled:!1}),P.add(e.id)}}),N.sort((e,t)=>(e.stepNum||0)-(t.stepNum||0));let F=N.length,I=N.filter(e=>e.status===`Completed`).length;r&&(F>0&&I===F?(r.textContent=`✓ เสร็จสิ้นครบ ${I}/${F} ขั้นตอน`,r.style.color=`#22c55e`,r.style.borderColor=`#22c55e`,r.style.background=`rgba(34, 197, 94, 0.15)`):(r.textContent=`ความคืบหน้า ${I}/${F} ขั้นตอน`,r.style.color=`var(--accent-teal)`,r.style.borderColor=`var(--accent-teal)`,r.style.background=`rgba(0, 242, 254, 0.1)`)),o&&(o.textContent=`(รวมทั้งหมด ${F} ขั้นตอน)`),g.innerHTML=``;let L=e=>{let t=parseFloat(f.value)||1,n=parseFloat(e.querySelector(`.modal-step-setup`).value)||0,r=parseFloat(e.querySelector(`.modal-step-cycle`).value)||0,i=e.querySelector(`.modal-step-machine`).value,a=this.state.workCenters[i]?.capacity||1,o=(n+t*r)/60/a||1/60;e.querySelector(`.modal-step-esthours`).value=parseFloat((o*60).toFixed(1))},R=e=>{let t=document.createElement(`tr`);t.className=`modal-step-row`,t.setAttribute(`data-step-id`,e.id||``),t.style.borderBottom=`1px solid var(--border-glass)`,t.style.background=`rgba(255,255,255,0.01)`;let n=this.state.workCenterOrder.map(t=>{let n=this.state.workCenters[t]?.name||t;return`<option value="${t}" ${t===e.machine||t.toLowerCase()===(e.machine||``).toLowerCase()?`selected`:``} style="color: #000000; background: #ffffff;">${t} - ${n}</option>`}).join(``),r=`<span style="padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; background: rgba(148, 163, 184, 0.1); color: var(--text-secondary); border: 1px solid var(--border-glass);">Unscheduled</span>`,i=`<span style="color: var(--text-secondary); font-style: italic; font-size: 10px; white-space: nowrap;">In Backlog</span>`;if(e.isScheduled&&e.startHour!==null&&e.startHour!==void 0){let t=a(e.startHour),n=a(e.startHour+(e.estHours||1));i=`<span style="font-family: monospace; font-size: 9.5px; color: var(--text-primary); font-weight: 600; white-space: nowrap; display: inline-block;">${t.getDate().toString().padStart(2,`0`)}/${(t.getMonth()+1).toString().padStart(2,`0`)} ${`${t.getHours().toString().padStart(2,`0`)}:${t.getMinutes().toString().padStart(2,`0`)}`}-${`${n.getHours().toString().padStart(2,`0`)}:${n.getMinutes().toString().padStart(2,`0`)}`}</span>`,r=e.status===`Completed`?`<span style="padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: bold; text-transform: uppercase; background: rgba(22, 163, 74, 0.15); color: #22c55e; border: 1px solid #22c55e;">✓ Done</span>`:e.status===`Running`?`<span style="padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: bold; text-transform: uppercase; background: rgba(57, 255, 20, 0.1); color: var(--accent-green); border: 1px solid var(--accent-green);">Running</span>`:e.status===`Paused`?`<span style="padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: bold; text-transform: uppercase; background: rgba(255, 153, 0, 0.1); color: var(--accent-orange); border: 1px solid var(--accent-orange);">Paused</span>`:`<span style="padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: bold; text-transform: uppercase; background: rgba(0, 242, 254, 0.1); color: var(--accent-teal); border: 1px solid var(--accent-teal);">Scheduled</span>`}t.innerHTML=`
+`),o=new Blob([new Uint8Array([239,187,191]),i],{type:`text/csv;charset=utf-8;`}),s=URL.createObjectURL(o),c=document.createElement(`a`);c.setAttribute(`href`,s),c.setAttribute(`download`,`Plan_${e.replace(/\s+/g,`_`)}_${new Date().toISOString().slice(0,10)}.csv`),document.body.appendChild(c),c.click(),document.body.removeChild(c)}openPdPlanModal(e){return this.showPDPlanModal(e)}showPDPlanModal(e){let t=document.getElementById(`pd-plan-modal`);if(!t)return;let n=document.getElementById(`pd-plan-title`),r=document.getElementById(`pd-plan-status-badge`),i=document.getElementById(`btn-pd-plan-favorite`),o=document.getElementById(`pd-plan-step-count`),s=document.getElementById(`edit-pd-id`),c=document.getElementById(`edit-pd-project`),l=document.getElementById(`edit-pd-customer`),u=document.getElementById(`edit-pd-dwgno`),d=document.getElementById(`edit-pd-partname`),f=document.getElementById(`edit-pd-qty`),p=document.getElementById(`edit-pd-priority`),m=document.getElementById(`edit-pd-memo`),h=document.getElementById(`edit-pd-targetdate`),g=document.getElementById(`pd-plan-table-body`),_=document.getElementById(`btn-add-step-to-edit-pd`),v=document.getElementById(`btn-save-pd-changes`),y=document.getElementById(`btn-export-pd-csv`),b=document.getElementById(`btn-delete-this-pd`),x=document.getElementById(`chk-pd-completed-history`),S=(this.state.scheduledJobs||[]).filter(t=>t.woId===e||t.id===e),C=(this.state.workOrders||[]).find(t=>t.id===e);if(S.length===0&&!C){let t=null,n=null;if(this.state.dwgToPdMap){for(let[r,i]of Object.entries(this.state.dwgToPdMap))if(i.pdId===e){t=r,n=i;break}}if(n)C={id:e,customer:`General`,project:n.project||`General`,dwgNo:t||``,partName:t||``,qty:1,priority:`Normal`,steps:(n.operations||[]).map(t=>({id:`${e}-${t.stepNum}`,stepNum:t.stepNum,name:t.name||t.machine,machine:t.machine,estHours:.5,cycleMinutes:1,setupMinutes:0,status:t.status||`Unscheduled`}))};else{let t=this.state.planMaterials?.[e]||[];if(t.length>0){let n=t[0];C={id:e,customer:`General`,project:`General`,dwgNo:n.mat||``,partName:n.matDesc||``,qty:n.estimatedQty||1,priority:`Normal`,steps:t.map(t=>({id:`${e}-${t.stepNum}`,stepNum:t.stepNum,name:t.operDesc||t.wc,machine:t.wc,estHours:.5,cycleMinutes:1,setupMinutes:0,status:t.operStatus||`Unscheduled`}))}}}}if(S.length===0&&!C){this.showToast(`ไม่พบข้อมูล Production Order: ${e}`);return}let w=S[0]||C,T=C?.customer||w?.customer||`General`,E=C?.project||w?.project||`General`,D=C?.dwgNo||w?.dwgNo||``,O=C?.partName||w?.partName||``,k=C?.qty||w?.qty||100,A=C?.priority||w?.priority||`Normal`,j=this.state.pdMemos?.[e]||C?.memo||w?.memo||``,M=C?.dueHour===void 0?w?.dueHour===void 0?null:w.dueHour:C.dueHour;if(n&&(n.textContent=`Production Order: ${e}`),i){let t=()=>{let t=this.state.isPdFavorite(e);i.innerHTML=t?`&#9733;`:`&#9734;`,i.title=t?`เอาออกจากรายการโปรด`:`เพิ่มเป็นรายการโปรด`,i.style.color=t?`#ffd54a`:`var(--text-secondary)`};t(),i.onclick=()=>{this.state.togglePdFavorite(e),t()}}if(s&&(s.value=e),c&&(c.value=E),l&&(l.value=T),u&&(u.value=D,window.prefetchDwgPdf&&window.prefetchDwgPdf(D),u.oninput=()=>window.prefetchDwgPdf&&window.prefetchDwgPdf(u.value),u.ondblclick=()=>window.openDwgPdf&&window.openDwgPdf(u.value||D)),document.getElementById(`btn-open-dwg-pdf`)&&(document.getElementById(`btn-open-dwg-pdf`).onclick=()=>window.openDwgPdf&&window.openDwgPdf(u?u.value:D)),d&&(d.value=O),f&&(f.value=k),p&&(p.value=A),m&&(m.value=j),x&&(x.checked=this.state.isPdInCompletedHistory(e)),h){if(M!=null){let e=a(M);h.value=`${e.getFullYear()}-${(e.getMonth()+1).toString().padStart(2,`0`)}-${e.getDate().toString().padStart(2,`0`)}`}else h.value=``}let N=[],P=new Set;S.forEach(e=>{let t=e.setupMinutes===void 0?0:e.setupMinutes,n=e.cycleMinutes;if(n==null&&e.estHours>0&&(e.qty||woQty)>0){let r=this.state.workCenters[e.machine]?.capacity||1,i=e.qty||woQty||1;n=parseFloat(((e.estHours*60*r-t)/i).toFixed(2)),n<=0&&(n=parseFloat((e.estHours*60*r/i).toFixed(2)))}(n==null||isNaN(n))&&(n=1),N.push({id:e.id,stepNum:e.stepNum,name:e.stepName||e.name||``,machine:e.machine||`DEA012`,setupMinutes:t,cycleMinutes:n,estHours:e.estHours,status:e.status||`Scheduled`,startHour:e.startHour,isScheduled:!0}),P.add(e.id)}),C&&Array.isArray(C.steps)&&C.steps.forEach(e=>{if(!P.has(e.id)){let t=e.setupMinutes===void 0?0:e.setupMinutes,n=e.cycleMinutes;if(n==null&&e.estHours>0&&woQty>0){let r=this.state.workCenters[e.machine]?.capacity||1;n=parseFloat(((e.estHours*60*r-t)/woQty).toFixed(2)),n<=0&&(n=parseFloat((e.estHours*60*r/woQty).toFixed(2)))}(n==null||isNaN(n))&&(n=1),N.push({id:e.id,stepNum:e.stepNum,name:e.name||``,machine:e.machine||`DEA012`,setupMinutes:t,cycleMinutes:n,estHours:e.estHours,status:`Unscheduled`,startHour:null,isScheduled:!1}),P.add(e.id)}}),N.sort((e,t)=>(e.stepNum||0)-(t.stepNum||0));let F=N.length,I=N.filter(e=>e.status===`Completed`).length;r&&(F>0&&I===F?(r.textContent=`✓ เสร็จสิ้นครบ ${I}/${F} ขั้นตอน`,r.style.color=`#22c55e`,r.style.borderColor=`#22c55e`,r.style.background=`rgba(34, 197, 94, 0.15)`):(r.textContent=`ความคืบหน้า ${I}/${F} ขั้นตอน`,r.style.color=`var(--accent-teal)`,r.style.borderColor=`var(--accent-teal)`,r.style.background=`rgba(0, 242, 254, 0.1)`)),o&&(o.textContent=`(รวมทั้งหมด ${F} ขั้นตอน)`),g.innerHTML=``;let L=e=>{let t=parseFloat(f.value)||1,n=parseFloat(e.querySelector(`.modal-step-setup`).value)||0,r=parseFloat(e.querySelector(`.modal-step-cycle`).value)||0,i=e.querySelector(`.modal-step-machine`).value,a=this.state.workCenters[i]?.capacity||1,o=(n+t*r)/60/a||1/60;e.querySelector(`.modal-step-esthours`).value=parseFloat((o*60).toFixed(1))},R=e=>{let t=document.createElement(`tr`);t.className=`modal-step-row`,t.setAttribute(`data-step-id`,e.id||``),t.style.borderBottom=`1px solid var(--border-glass)`,t.style.background=`rgba(255,255,255,0.01)`;let n=this.state.workCenterOrder.map(t=>{let n=this.state.workCenters[t]?.name||t;return`<option value="${t}" ${t===e.machine||t.toLowerCase()===(e.machine||``).toLowerCase()?`selected`:``} style="color: #000000; background: #ffffff;">${t} - ${n}</option>`}).join(``),r=`<span style="padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; background: rgba(148, 163, 184, 0.1); color: var(--text-secondary); border: 1px solid var(--border-glass);">Unscheduled</span>`,i=`<span style="color: var(--text-secondary); font-style: italic; font-size: 10px; white-space: nowrap;">In Backlog</span>`;if(e.isScheduled&&e.startHour!==null&&e.startHour!==void 0){let t=a(e.startHour),n=a(e.startHour+(e.estHours||1));i=`<span style="font-family: monospace; font-size: 9.5px; color: var(--text-primary); font-weight: 600; white-space: nowrap; display: inline-block;">${t.getDate().toString().padStart(2,`0`)}/${(t.getMonth()+1).toString().padStart(2,`0`)} ${`${t.getHours().toString().padStart(2,`0`)}:${t.getMinutes().toString().padStart(2,`0`)}`}-${`${n.getHours().toString().padStart(2,`0`)}:${n.getMinutes().toString().padStart(2,`0`)}`}</span>`,r=e.status===`Completed`?`<span style="padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: bold; text-transform: uppercase; background: rgba(22, 163, 74, 0.15); color: #22c55e; border: 1px solid #22c55e;">✓ Done</span>`:e.status===`Running`?`<span style="padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: bold; text-transform: uppercase; background: rgba(57, 255, 20, 0.1); color: var(--accent-green); border: 1px solid var(--accent-green);">Running</span>`:e.status===`Paused`?`<span style="padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: bold; text-transform: uppercase; background: rgba(255, 153, 0, 0.1); color: var(--accent-orange); border: 1px solid var(--accent-orange);">Paused</span>`:`<span style="padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: bold; text-transform: uppercase; background: rgba(0, 242, 254, 0.1); color: var(--accent-teal); border: 1px solid var(--accent-teal);">Scheduled</span>`}t.innerHTML=`
         <td style="padding: 5px 3px; text-align: center;">
           <input type="number" class="modal-step-num" value="${e.stepNum||10}" min="1" step="1" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 3px 2px; border-radius: 4px; font-size: 10px; width: 38px; text-align: center; font-weight: bold; outline: none;">
         </td>
@@ -2860,6 +2860,7 @@ window.showDwgPdfModal=function(e){if(!e)return;let raw=e.viewUrl||e.fileUrl||e.
   }
 
   const dwgDirectUrlCache = {};
+  const dwgInFlightPromises = {};
 
   const toDirectDriveViewUrl = (data) => {
     if (!data) return "";
@@ -2870,6 +2871,85 @@ window.showDwgPdfModal=function(e){if(!e)return;let raw=e.viewUrl||e.fileUrl||e.
     return raw;
   };
 
+  const openDirectNewTab = (targetUrl) => {
+    const a = document.createElement("a");
+    a.href = targetUrl;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => a.remove(), 100);
+  };
+
+  window.prefetchDwgPdf = async function(rawDwg) {
+    const t = (rawDwg || "").trim();
+    if (!t) return null;
+    const cleanKey = t.replace(/[-_\s.]/g, "").toUpperCase();
+    if (dwgDirectUrlCache[cleanKey]) return dwgDirectUrlCache[cleanKey];
+    if (dwgInFlightPromises[cleanKey]) return dwgInFlightPromises[cleanKey];
+
+    const promise = (async () => {
+      const dwgConfigVal = getSavedDwgUrl();
+      const isLocal = isLocalDwgPath(dwgConfigVal);
+      const localDirParam = isLocal ? `&dwgDir=${encodeURIComponent(dwgConfigVal)}` : "";
+      const driveFolderId = extractDwgDriveId(dwgConfigVal);
+
+      let r = "";
+      if (window.storageSyncManager && typeof window.storageSyncManager.getEndpointUrl === "function") {
+        r = window.storageSyncManager.getEndpointUrl();
+      }
+      if (!r) {
+        try {
+          r = localStorage.getItem("PDPLAN_STORAGE_ENDPOINT") || localStorage.getItem("pdplan_sync_endpoint") || "";
+        } catch {}
+      }
+      if (r && r.startsWith("http") && !r.includes("drive.google.com/drive/folders")) {
+        try {
+          let sep = r.includes("?") ? "&" : "?";
+          let cloudUrl = `${r}${sep}action=find-dwg-pdf&dwgNo=${encodeURIComponent(t)}&dwgFolderId=${encodeURIComponent(driveFolderId)}&t=${Date.now()}`;
+          let a = await fetch(cloudUrl, { method: "GET", redirect: "follow" });
+          if (a.ok) {
+            let data = await a.json();
+            let directUrl = toDirectDriveViewUrl(data);
+            if (data && data.status === "success" && directUrl) {
+              dwgDirectUrlCache[cleanKey] = directUrl;
+              return directUrl;
+            }
+          }
+        } catch {}
+      }
+
+      try {
+        let apis = window.location.pathname.startsWith("/pirom_pdplan")
+          ? ["/pirom_pdplan/api/dwg-pdf", "/api/dwg-pdf"]
+          : ["/api/dwg-pdf", "/pirom_pdplan/api/dwg-pdf"];
+        for (let apiPath of apis) {
+          try {
+            let res = await fetch(`${apiPath}?dwgNo=${encodeURIComponent(t)}&preferCloud=1${localDirParam}`);
+            if (res.ok) {
+              let data = await res.json();
+              let directUrl = toDirectDriveViewUrl(data);
+              if (data && data.status === "success" && directUrl) {
+                dwgDirectUrlCache[cleanKey] = directUrl;
+                return directUrl;
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+
+      return null;
+    })();
+
+    dwgInFlightPromises[cleanKey] = promise;
+    try {
+      return await promise;
+    } finally {
+      delete dwgInFlightPromises[cleanKey];
+    }
+  };
+
   window.openDwgPdf = async function(e) {
     let t = (e || "").trim();
     if (!t) {
@@ -2877,100 +2957,23 @@ window.showDwgPdfModal=function(e){if(!e)return;let raw=e.viewUrl||e.fileUrl||e.
       return;
     }
 
-    // Close in-app modal if it was open
     const oldModal = document.getElementById("dwg-pdf-modal");
     if (oldModal) {
-      oldModal.classList.add("hidden");
-      oldModal.style.setProperty("display", "none", "important");
+      oldModal.remove();
     }
 
     const cleanKey = t.replace(/[-_\s.]/g, "").toUpperCase();
     if (dwgDirectUrlCache[cleanKey]) {
-      window.open(dwgDirectUrlCache[cleanKey], "_blank");
-      showToastMsg(`☁️ เปิดไฟล์แบบจาก Google Drive: ${t}`, "success");
+      openDirectNewTab(dwgDirectUrlCache[cleanKey]);
       return;
     }
 
-    const popupWin = window.open("", "_blank");
-    if (popupWin && popupWin.document) {
-      try {
-        popupWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>กำลังเปิดแบบ ${t} - Google Drive</title><style>body{margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1f1f1f;color:#e3e3e3;font-family:system-ui,-apple-system,sans-serif;gap:14px}.spin{width:38px;height:38px;border:3px solid rgba(255,255,255,0.15);border-top-color:#38bdf8;border-radius:50%;animation:s 0.8s linear infinite}@keyframes s{to{transform:rotate(360deg)}}</style></head><body><div class="spin"></div><div style="font-size:15px;font-weight:600">☁️ กำลังเปิดไฟล์แบบ Drawing: ${t} จาก Google Drive...</div><div style="font-size:12px;color:#9aa0a6">กรุณารอสักครู่ ระบบกำลังเชื่อมต่อไปยัง Google Drive โดยตรง</div></body></html>`);
-        popupWin.document.close();
-      } catch {}
+    const resolvedUrl = await window.prefetchDwgPdf(t);
+    if (resolvedUrl) {
+      openDirectNewTab(resolvedUrl);
+      return;
     }
 
-    const openUrlInTab = (targetUrl) => {
-      if (popupWin && !popupWin.closed) {
-        popupWin.location.replace(targetUrl);
-      } else {
-        window.open(targetUrl, "_blank");
-      }
-    };
-
-    const dwgConfigVal = getSavedDwgUrl();
-    const isLocal = isLocalDwgPath(dwgConfigVal);
-    const localDirParam = isLocal ? `&dwgDir=${encodeURIComponent(dwgConfigVal)}` : "";
-    const driveFolderId = extractDwgDriveId(dwgConfigVal);
-
-    showToastMsg(`🔍 กำลังค้นหาและเปิดไฟล์แบบจาก Google Drive: ${t}...`, "info");
-
-    // 1. ค้นหาและเปิดโดยตรงจาก Google Drive Cloud API เป็นอันดับแรก
-    let r = "";
-    if (window.storageSyncManager && typeof window.storageSyncManager.getEndpointUrl === "function") {
-      r = window.storageSyncManager.getEndpointUrl();
-    }
-    if (!r) {
-      try {
-        r = localStorage.getItem("PDPLAN_STORAGE_ENDPOINT") || localStorage.getItem("pdplan_sync_endpoint") || "";
-      } catch {}
-    }
-    if (r && r.startsWith("http") && !r.includes("drive.google.com/drive/folders")) {
-      try {
-        let sep = r.includes("?") ? "&" : "?";
-        let cloudUrl = `${r}${sep}action=find-dwg-pdf&dwgNo=${encodeURIComponent(t)}&dwgFolderId=${encodeURIComponent(driveFolderId)}&t=${Date.now()}`;
-        let a = await fetch(cloudUrl, { method: "GET", redirect: "follow" });
-        if (a.ok) {
-          let data = await a.json();
-          let directUrl = toDirectDriveViewUrl(data);
-          if (data && data.status === "success" && directUrl) {
-            dwgDirectUrlCache[cleanKey] = directUrl;
-            openUrlInTab(directUrl);
-            showToastMsg(`☁️ เปิดไฟล์แบบจาก Google Drive: ${data.fileName || data.filename || t}`, "success");
-            return;
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud find-dwg-pdf failed:", err);
-      }
-    }
-
-    // 2. Fallback ผ่าน API ของ Server (สั่ง preferCloud=1 เพื่อดึงลิงก์ Google Drive หรือเปิดไฟล์สำรอง)
-    try {
-      let apis = window.location.pathname.startsWith("/pirom_pdplan")
-        ? ["/pirom_pdplan/api/dwg-pdf", "/api/dwg-pdf"]
-        : ["/api/dwg-pdf", "/pirom_pdplan/api/dwg-pdf"];
-      for (let apiPath of apis) {
-        try {
-          let res = await fetch(`${apiPath}?dwgNo=${encodeURIComponent(t)}&preferCloud=1${localDirParam}`);
-          if (res.ok) {
-            let data = await res.json();
-            let directUrl = toDirectDriveViewUrl(data);
-            if (data && data.status === "success" && directUrl) {
-              if (directUrl.includes("drive.google.com")) {
-                dwgDirectUrlCache[cleanKey] = directUrl;
-              }
-              openUrlInTab(directUrl);
-              showToastMsg(`📄 เปิดไฟล์แบบ: ${data.fileName || data.filename || t}`, "success");
-              return;
-            }
-          }
-        } catch {}
-      }
-    } catch {}
-
-    if (popupWin && !popupWin.closed) {
-      try { popupWin.close(); } catch {}
-    }
     alert("ไม่พบ file แบบ");
     showToastMsg(`⚠️ ไม่พบ file แบบ: ${t}`, "error");
   };
