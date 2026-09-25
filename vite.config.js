@@ -496,6 +496,41 @@ export default defineConfig({
               if (matchedFilePath) break;
             }
 
+            const preferCloud = urlObj.searchParams.get('preferCloud') === '1' && urlObj.searchParams.get('stream') !== '1';
+            const tryCloudLookup = async () => {
+              const savedCfg = readCloudConfig();
+              const ep = (urlObj.searchParams.get('endpointUrl') || savedCfg.endpointUrl || '').trim();
+              const dwgFolderId = (urlObj.searchParams.get('dwgFolderId') || '1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm').trim();
+              if (ep && ep.startsWith('http') && !ep.includes('drive.google.com/drive/folders')) {
+                try {
+                  const sep = ep.includes('?') ? '&' : '?';
+                  const cloudUrl = `${ep}${sep}action=find-dwg-pdf&dwgNo=${encodeURIComponent(dwgNo)}&dwgFolderId=${encodeURIComponent(dwgFolderId)}&t=${Date.now()}`;
+                  const cr = await fetch(cloudUrl, { method: 'GET', redirect: 'follow' });
+                  if (cr.ok) {
+                    const cdata = await cr.json();
+                    if (cdata && cdata.status === 'success') {
+                      if (cdata.fileId) {
+                        cdata.viewUrl = `https://drive.google.com/file/d/${cdata.fileId}/view`;
+                        cdata.fileUrl = cdata.viewUrl;
+                      }
+                      return Object.assign({ source: 'cloud_api' }, cdata);
+                    }
+                  }
+                } catch {}
+              }
+              return null;
+            };
+
+            if (preferCloud) {
+              const cloudRes = await tryCloudLookup();
+              if (cloudRes) {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                res.end(JSON.stringify(cloudRes));
+                return;
+              }
+            }
+
             if (matchedFilePath) {
               const fileName = path.basename(matchedFilePath);
               const dirParam = customDwgDir ? `&dwgDir=${encodeURIComponent(customDwgDir)}` : '';
@@ -520,24 +555,12 @@ export default defineConfig({
               return;
             } else {
               // Fallback for machines without Drive G: query Cloud Web App API if configured
-              const savedCfg = readCloudConfig();
-              const ep = (urlObj.searchParams.get('endpointUrl') || savedCfg.endpointUrl || '').trim();
-              const dwgFolderId = (urlObj.searchParams.get('dwgFolderId') || '1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm').trim();
-              if (ep && ep.startsWith('http') && !ep.includes('drive.google.com/drive/folders')) {
-                try {
-                  const sep = ep.includes('?') ? '&' : '?';
-                  const cloudUrl = `${ep}${sep}action=find-dwg-pdf&dwgNo=${encodeURIComponent(dwgNo)}&dwgFolderId=${encodeURIComponent(dwgFolderId)}&t=${Date.now()}`;
-                  const cr = await fetch(cloudUrl, { method: 'GET', redirect: 'follow' });
-                  if (cr.ok) {
-                    const cdata = await cr.json();
-                    if (cdata && cdata.status === 'success') {
-                      res.statusCode = 200;
-                      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-                      res.end(JSON.stringify(Object.assign({ source: 'cloud_api' }, cdata)));
-                      return;
-                    }
-                  }
-                } catch {}
+              const cloudRes = await tryCloudLookup();
+              if (cloudRes) {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                res.end(JSON.stringify(cloudRes));
+                return;
               }
               res.statusCode = 404;
               res.setHeader('Content-Type', 'application/json; charset=utf-8');

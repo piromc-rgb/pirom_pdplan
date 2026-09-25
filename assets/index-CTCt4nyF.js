@@ -2120,7 +2120,7 @@ function doPost(e) {
         </tr>
       `).join(``),g.textContent=`แสดง ${e.length} จากทั้งหมด ${i} กลุ่ม (รวม ${e.reduce((e,t)=>e+t.totalQty,0).toLocaleString()} ชิ้น)`,h.querySelectorAll(`.group-pd-badge`).forEach(e=>{e.addEventListener(`click`,e=>{let t=e.currentTarget.getAttribute(`data-wo-id`);t&&this.gantt&&this.gantt.showPDPlanModal&&this.gantt.showPDPlanModal(t)})})};v();let y=d.querySelector(`#group-modal-search`);y&&y.addEventListener(`input`,e=>{p=(e.target.value||``).trim(),v()});let b=d.querySelector(`#group-modal-machine-filter`);b&&b.addEventListener(`change`,e=>{m=e.target.value,v()});let x=d.querySelector(`#group-modal-sort`);x&&x.addEventListener(`change`,e=>{f=e.target.value,v()}),d.querySelector(`#btn-export-group-csv`)?.addEventListener(`click`,()=>{let e=e=>`"${String(e??``).replace(/"/g,`""`)}"`,t=[`ลำดับ`,`Drawing No`,`รายละเอียดชิ้นงาน`,`รหัสเครื่องจักร`,`ชื่อเครื่องจักร`,`ขั้นตอน`,`รายการ PD ที่ผลิตต่อกัน`,`จำนวน PD`,`จำนวนรวม (ชิ้น)`,`วันที่เริ่มผลิต`,`วันที่ผลิตเสร็จ`,`ระยะเวลา (ชม.)`],n=r.map((t,n)=>[n+1,e(t.dwgNo),e(t.partName),e(t.machine),e(t.machineName),e(t.stepName),e(t.pds.join(` -> `)),t.pds.length,t.totalQty,e(t.startDateStr),e(t.endDateStr),t.durationHours].join(`,`)),a=`﻿`+[e(`รายการชิ้นงานที่จัดกลุ่ม Item เดียวกันในแผนปัจจุบัน (${i} กลุ่ม, รวม ${s} ชิ้น)`),t.map(e).join(`,`),...n].join(`\r
 `),o=new Blob([a],{type:`text/csv;charset=utf-8;`}),c=URL.createObjectURL(o),l=document.createElement(`a`);l.href=c,l.download=`Grouped_Items_Plan_${new Date().toISOString().slice(0,10)}.csv`,document.body.appendChild(l),l.click(),document.body.removeChild(l),URL.revokeObjectURL(c)}),d.querySelector(`#btn-print-group-list`)?.addEventListener(`click`,()=>{window.print()});let S=()=>{d.remove()};d.querySelector(`#btn-close-group-modal`)?.addEventListener(`click`,S),d.querySelector(`#btn-close-group-modal-footer`)?.addEventListener(`click`,S),d.addEventListener(`click`,e=>{e.target===d&&S()})}};window.addEventListener(`DOMContentLoaded`,()=>{new U});
-window.showDwgPdfModal=function(e){let t=document.getElementById("dwg-pdf-modal"),n=document.getElementById("dwg-pdf-modal-title"),r=document.getElementById("dwg-pdf-modal-badge"),i=document.getElementById("dwg-pdf-modal-filename"),a=document.getElementById("btn-dwg-pdf-open-external"),o=document.getElementById("btn-dwg-pdf-download"),s=document.getElementById("dwg-pdf-iframe"),l=document.getElementById("dwg-pdf-loading"),d=document.getElementById("btn-dwg-pdf-fullscreen"),c=document.getElementById("btn-close-dwg-pdf-modal"),u=document.getElementById("dwg-pdf-window"),hBar=document.getElementById("dwg-pdf-modal-header")||(u?u.querySelector(".modal-header"):null);if(!t||!s||!u)return;let f=e.dwgNo||"Drawing",p=e.fileName||`${f}.pdf`,m=e.viewUrl||e.fileUrl||"",h=e.downloadUrl||m;n&&(n.textContent=`Drawing: ${f}`),r&&(r.textContent=e.source==="cloud"?"☁️ Google Drive":"💻 Local / Cloud"),i&&(i.textContent=p,i.title=p),a&&(a.href=m),o&&(o.href=h,o.setAttribute("download",p)),l&&(l.style.display="flex",l.style.opacity="1"),s.onload=()=>{l&&(l.style.opacity="0",setTimeout(()=>{l.style.display="none"},200))},s.src=m;let isFullscreen=!1,posX=0,posY=0,isDragging=!1,dragStartX=0,dragStartY=0,startPosX=0,startPosY=0,wasDragging=!1;u.style.transform="translate(0px, 0px)",u.style.transition="all 0.2s ease",u.style.maxWidth="95vw",u.style.width="1250px",u.style.height="90vh",u.style.borderRadius="12px",t.style.padding="15px",t.classList.remove("hidden"),t.style.setProperty("display","flex","important");let onMouseMove=ev=>{if(!isDragging)return;wasDragging=!0;let dx=ev.clientX-dragStartX,dy=ev.clientY-dragStartY,nextX=startPosX+dx,nextY=startPosY+dy,rect=u.getBoundingClientRect(),natLeft=(window.innerWidth-rect.width)/2,natTop=(window.innerHeight-rect.height)/2,minX=-(natLeft+rect.width-150),maxX=window.innerWidth-150-natLeft,minY=-natTop+10,maxY=window.innerHeight-60-natTop;posX=Math.min(Math.max(nextX,minX),maxX),posY=Math.min(Math.max(nextY,minY),maxY),u.style.transform=`translate(${posX}px, ${posY}px)`};let onMouseUp=()=>{if(!isDragging)return;isDragging=!1,hBar&&(hBar.style.cursor="grab"),document.body.style.userSelect="",u.style.transition="all 0.2s ease",s&&(s.style.pointerEvents="auto"),window.removeEventListener("mousemove",onMouseMove),window.removeEventListener("mouseup",onMouseUp),setTimeout(()=>{wasDragging=!1},60)};hBar&&(hBar.style.cursor="grab",hBar.style.userSelect="none",hBar.onmousedown=ev=>{if(isFullscreen||ev.target.closest("button, a, input, select")||ev.button!==0)return;isDragging=!0,wasDragging=!1,dragStartX=ev.clientX,dragStartY=ev.clientY,startPosX=posX,startPosY=posY,u.style.transition="none",hBar.style.cursor="grabbing",document.body.style.userSelect="none",s&&(s.style.pointerEvents="none"),window.addEventListener("mousemove",onMouseMove),window.addEventListener("mouseup",onMouseUp),ev.preventDefault()},hBar.ondblclick=ev=>{ev.target.closest("button, a, input, select")||d&&d.click()}),d&&(d.onclick=()=>{isFullscreen=!isFullscreen,isFullscreen?(u.style.transform="none",u.style.maxWidth="100vw",u.style.width="100vw",u.style.height="100vh",u.style.borderRadius="0",t.style.padding="0",hBar&&(hBar.style.cursor="default")):(u.style.maxWidth="95vw",u.style.width="1250px",u.style.height="90vh",u.style.borderRadius="12px",t.style.padding="15px",u.style.transform=`translate(${posX}px, ${posY}px)`,hBar&&(hBar.style.cursor="grab"))});let close=()=>{t.classList.add("hidden"),t.style.setProperty("display","none","important"),s.src="",document.removeEventListener("keydown",onKeyDown),window.removeEventListener("mousemove",onMouseMove),window.removeEventListener("mouseup",onMouseUp),s&&(s.style.pointerEvents="auto"),hBar&&(hBar.onmousedown=null,hBar.ondblclick=null)};let onKeyDown=ev=>{"Escape"===ev.key&&close()};document.addEventListener("keydown",onKeyDown),c&&(c.onclick=close),t.onclick=ev=>{ev.target===t&&!wasDragging&&close()}};
+window.showDwgPdfModal=function(e){if(!e)return;let raw=e.viewUrl||e.fileUrl||e.previewUrl||"",m=raw.match(/\/file\/d\/([a-zA-Z0-9_-]+)/),directUrl=e.fileId?`https://drive.google.com/file/d/${e.fileId}/view`:m&&m[1]?`https://drive.google.com/file/d/${m[1]}/view`:raw;if(directUrl){window.open(directUrl,"_blank")}};
 (function(){
   const DEFAULT_DWG_URL = "https://drive.google.com/drive/folders/1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm";
   const DEFAULT_DWG_ID = "1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm";
@@ -2859,44 +2859,62 @@ window.showDwgPdfModal=function(e){let t=document.getElementById("dwg-pdf-modal"
     setTimeout(bindDwgFolderControls, 50);
   }
 
+  const dwgDirectUrlCache = {};
+
+  const toDirectDriveViewUrl = (data) => {
+    if (!data) return "";
+    if (data.fileId) return `https://drive.google.com/file/d/${data.fileId}/view`;
+    const raw = data.viewUrl || data.fileUrl || data.previewUrl || "";
+    const m = raw.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (m && m[1]) return `https://drive.google.com/file/d/${m[1]}/view`;
+    return raw;
+  };
+
   window.openDwgPdf = async function(e) {
     let t = (e || "").trim();
     if (!t) {
       alert("ไม่พบ file แบบ");
       return;
     }
+
+    // Close in-app modal if it was open
+    const oldModal = document.getElementById("dwg-pdf-modal");
+    if (oldModal) {
+      oldModal.classList.add("hidden");
+      oldModal.style.setProperty("display", "none", "important");
+    }
+
+    const cleanKey = t.replace(/[-_\s.]/g, "").toUpperCase();
+    if (dwgDirectUrlCache[cleanKey]) {
+      window.open(dwgDirectUrlCache[cleanKey], "_blank");
+      showToastMsg(`☁️ เปิดไฟล์แบบจาก Google Drive: ${t}`, "success");
+      return;
+    }
+
+    const popupWin = window.open("", "_blank");
+    if (popupWin && popupWin.document) {
+      try {
+        popupWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>กำลังเปิดแบบ ${t} - Google Drive</title><style>body{margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1f1f1f;color:#e3e3e3;font-family:system-ui,-apple-system,sans-serif;gap:14px}.spin{width:38px;height:38px;border:3px solid rgba(255,255,255,0.15);border-top-color:#38bdf8;border-radius:50%;animation:s 0.8s linear infinite}@keyframes s{to{transform:rotate(360deg)}}</style></head><body><div class="spin"></div><div style="font-size:15px;font-weight:600">☁️ กำลังเปิดไฟล์แบบ Drawing: ${t} จาก Google Drive...</div><div style="font-size:12px;color:#9aa0a6">กรุณารอสักครู่ ระบบกำลังเชื่อมต่อไปยัง Google Drive โดยตรง</div></body></html>`);
+        popupWin.document.close();
+      } catch {}
+    }
+
+    const openUrlInTab = (targetUrl) => {
+      if (popupWin && !popupWin.closed) {
+        popupWin.location.replace(targetUrl);
+      } else {
+        window.open(targetUrl, "_blank");
+      }
+    };
+
     const dwgConfigVal = getSavedDwgUrl();
     const isLocal = isLocalDwgPath(dwgConfigVal);
     const localDirParam = isLocal ? `&dwgDir=${encodeURIComponent(dwgConfigVal)}` : "";
     const driveFolderId = extractDwgDriveId(dwgConfigVal);
 
-    showToastMsg(`🔍 กำลังค้นหาไฟล์แบบ: ${t}...`, "info");
-    try {
-      let apis = window.location.pathname.startsWith("/pirom_pdplan")
-        ? ["/pirom_pdplan/api/dwg-pdf", "/api/dwg-pdf"]
-        : ["/api/dwg-pdf", "/pirom_pdplan/api/dwg-pdf"];
-      for (let r of apis) {
-        try {
-          let res = await fetch(`${r}?dwgNo=${encodeURIComponent(t)}${localDirParam}`);
-          if (res.ok) {
-            let data = await res.json();
-            let viewUrl = data.viewUrl || data.fileUrl;
-            if (data && data.status === "success" && viewUrl) {
-              window.showDwgPdfModal({
-                dwgNo: t,
-                fileName: data.fileName,
-                viewUrl: viewUrl,
-                fileUrl: data.fileUrl,
-                source: "local"
-              });
-              showToastMsg(`📄 เปิดไฟล์แบบ: ${data.fileName || t}`, "success");
-              return;
-            }
-          }
-        } catch {}
-      }
-    } catch {}
+    showToastMsg(`🔍 กำลังค้นหาและเปิดไฟล์แบบจาก Google Drive: ${t}...`, "info");
 
+    // 1. ค้นหาและเปิดโดยตรงจาก Google Drive Cloud API เป็นอันดับแรก
     let r = "";
     if (window.storageSyncManager && typeof window.storageSyncManager.getEndpointUrl === "function") {
       r = window.storageSyncManager.getEndpointUrl();
@@ -2913,23 +2931,45 @@ window.showDwgPdfModal=function(e){let t=document.getElementById("dwg-pdf-modal"
         let a = await fetch(cloudUrl, { method: "GET", redirect: "follow" });
         if (a.ok) {
           let data = await a.json();
-          let viewUrl = data.previewUrl || data.viewUrl || data.fileUrl;
-          if (data && data.status === "success" && viewUrl) {
-            window.showDwgPdfModal({
-              dwgNo: t,
-              fileName: data.fileName || data.filename,
-              viewUrl: viewUrl,
-              fileUrl: data.fileUrl || viewUrl,
-              downloadUrl: data.downloadUrl || viewUrl,
-              source: "cloud"
-            });
-            showToastMsg(`☁️ เปิดไฟล์แบบจาก Cloud: ${data.fileName || data.filename || t}`, "success");
+          let directUrl = toDirectDriveViewUrl(data);
+          if (data && data.status === "success" && directUrl) {
+            dwgDirectUrlCache[cleanKey] = directUrl;
+            openUrlInTab(directUrl);
+            showToastMsg(`☁️ เปิดไฟล์แบบจาก Google Drive: ${data.fileName || data.filename || t}`, "success");
             return;
           }
         }
       } catch (err) {
         console.warn("Cloud find-dwg-pdf failed:", err);
       }
+    }
+
+    // 2. Fallback ผ่าน API ของ Server (สั่ง preferCloud=1 เพื่อดึงลิงก์ Google Drive หรือเปิดไฟล์สำรอง)
+    try {
+      let apis = window.location.pathname.startsWith("/pirom_pdplan")
+        ? ["/pirom_pdplan/api/dwg-pdf", "/api/dwg-pdf"]
+        : ["/api/dwg-pdf", "/pirom_pdplan/api/dwg-pdf"];
+      for (let apiPath of apis) {
+        try {
+          let res = await fetch(`${apiPath}?dwgNo=${encodeURIComponent(t)}&preferCloud=1${localDirParam}`);
+          if (res.ok) {
+            let data = await res.json();
+            let directUrl = toDirectDriveViewUrl(data);
+            if (data && data.status === "success" && directUrl) {
+              if (directUrl.includes("drive.google.com")) {
+                dwgDirectUrlCache[cleanKey] = directUrl;
+              }
+              openUrlInTab(directUrl);
+              showToastMsg(`📄 เปิดไฟล์แบบ: ${data.fileName || data.filename || t}`, "success");
+              return;
+            }
+          }
+        } catch {}
+      }
+    } catch {}
+
+    if (popupWin && !popupWin.closed) {
+      try { popupWin.close(); } catch {}
     }
     alert("ไม่พบ file แบบ");
     showToastMsg(`⚠️ ไม่พบ file แบบ: ${t}`, "error");

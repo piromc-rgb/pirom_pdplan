@@ -1803,64 +1803,12 @@ export class StorageSyncManager {
       this.showToast('⚠️ ไม่พบรหัส Drawing No.', 'error');
       return;
     }
-
-    const dwgModal = document.getElementById('dwg-pdf-modal');
-    const titleEl = document.getElementById('dwg-pdf-modal-title');
-    const badgeEl = document.getElementById('dwg-pdf-modal-badge');
-    const filenameEl = document.getElementById('dwg-pdf-modal-filename');
-    const btnOpenExternal = document.getElementById('btn-dwg-pdf-open-external');
-    const btnDownload = document.getElementById('btn-dwg-pdf-download');
-    const loadingEl = document.getElementById('dwg-pdf-loading');
-    const iframe = document.getElementById('dwg-pdf-iframe');
-
-    const dwgLocation = this.getDwgFolderUrl();
-    const localDir = this.getDwgLocalDir();
-    const driveFolderId = this.getDwgFolderId();
-    const driveFolderHref = this.isDwgLocationLocal(dwgLocation)
-      ? `https://drive.google.com/drive/folders/${DEFAULT_DWG_FOLDER_ID}`
-      : (dwgLocation.startsWith('http') ? dwgLocation : `https://drive.google.com/drive/folders/${driveFolderId}`);
-
-    if (dwgModal) {
-      dwgModal.classList.remove('hidden');
-      dwgModal.style.display = 'flex';
+    if (typeof window !== 'undefined' && typeof window.openDwgPdf === 'function') {
+      return window.openDwgPdf(cleanDwg);
     }
-    if (titleEl) titleEl.textContent = `Drawing PDF Viewer: ${cleanDwg}`;
-    if (badgeEl) badgeEl.textContent = cleanDwg;
-    if (filenameEl) filenameEl.textContent = `กำลังค้นหาไฟล์จากตำแหน่ง DWG ที่ตั้งไว้ (${dwgLocation})...`;
-    if (loadingEl) {
-      loadingEl.style.display = 'flex';
-      loadingEl.innerHTML = `
-        <span style="font-size: 28px;">⏳</span>
-        <span style="font-size: 13px; color: var(--text-primary); font-weight: 600;">กำลังค้นหาไฟล์แบบ Drawing PDF (${cleanDwg})...</span>
-        <span style="font-size: 11px; color: var(--text-secondary); font-family: monospace;">ตำแหน่งที่ค้นหา: ${dwgLocation}</span>
-      `;
-    }
-    if (iframe) iframe.src = '';
-
-    // 1. Try Local Dev Server (/api/dwg-pdf) first when available
-    try {
-      const apiUrl = `./api/dwg-pdf?mode=info&dwgNo=${encodeURIComponent(cleanDwg)}${localDir ? `&dwgDir=${encodeURIComponent(localDir)}` : ''}`;
-      const res = await fetch(apiUrl);
-      if (res.ok) {
-        const info = await res.json();
-        if (info && info.status === 'success') {
-          const streamUrl = info.fileUrl || `./api/dwg-pdf?dwgNo=${encodeURIComponent(cleanDwg)}${localDir ? `&dwgDir=${encodeURIComponent(localDir)}` : ''}&stream=1`;
-          if (filenameEl) filenameEl.textContent = `📂 Local: ${info.filename || info.fileName || (cleanDwg + '.pdf')}`;
-          if (btnOpenExternal) btnOpenExternal.href = streamUrl;
-          if (btnDownload) {
-            btnDownload.href = streamUrl;
-            btnDownload.setAttribute('download', info.filename || info.fileName || `${cleanDwg}.pdf`);
-          }
-          if (iframe) iframe.src = streamUrl;
-          return;
-        }
-      }
-    } catch (e) {
-      // Ignore local fetch errors when running on static hosting
-    }
-
-    // 2. Try Cloud Endpoint (Google Apps Script action=find-dwg-pdf)
     const endpoint = this.getEndpointUrl();
+    const driveFolderId = this.getDwgFolderId();
+    const popupWin = typeof window !== 'undefined' ? window.open('', '_blank') : null;
     if (endpoint) {
       try {
         const sep = endpoint.includes('?') ? '&' : '?';
@@ -1868,17 +1816,14 @@ export class StorageSyncManager {
         const res = await fetch(cloudUrl, { method: 'GET', redirect: 'follow' });
         if (res.ok) {
           const data = await res.json();
-          if (data && data.status === 'success' && data.fileId) {
-            const previewUrl = data.previewUrl || `https://drive.google.com/file/d/${data.fileId}/preview`;
-            const viewUrl = data.viewUrl || `https://drive.google.com/file/d/${data.fileId}/view`;
-            const downloadUrl = data.downloadUrl || `https://drive.google.com/uc?export=download&id=${data.fileId}`;
-            if (filenameEl) filenameEl.textContent = `☁️ Google Drive: ${data.filename || (cleanDwg + '.pdf')}`;
-            if (btnOpenExternal) btnOpenExternal.href = viewUrl;
-            if (btnDownload) {
-              btnDownload.href = downloadUrl;
-              btnDownload.setAttribute('download', data.filename || `${cleanDwg}.pdf`);
+          if (data && data.status === 'success' && (data.fileId || data.viewUrl)) {
+            const viewUrl = data.fileId ? `https://drive.google.com/file/d/${data.fileId}/view` : data.viewUrl;
+            if (popupWin && !popupWin.closed) {
+              popupWin.location.replace(viewUrl);
+            } else {
+              window.open(viewUrl, '_blank');
             }
-            if (iframe) iframe.src = previewUrl;
+            this.showToast(`☁️ เปิดไฟล์แบบจาก Google Drive: ${data.filename || data.fileName || cleanDwg}`, 'success');
             return;
           }
         }
@@ -1886,36 +1831,10 @@ export class StorageSyncManager {
         console.warn('Cloud DWG PDF lookup failed:', err);
       }
     }
-
-    // 3. Not found — show helpful message with button to open the configured DWG folder or Setting Location
-    if (filenameEl) filenameEl.textContent = `ไม่พบไฟล์ ${cleanDwg}.pdf ในตำแหน่งที่กำหนด`;
-    if (btnOpenExternal) btnOpenExternal.href = driveFolderHref;
-    if (loadingEl) {
-      loadingEl.style.display = 'flex';
-      loadingEl.innerHTML = `
-        <span style="font-size: 32px;">📂</span>
-        <span style="font-size: 14px; color: var(--text-primary); font-weight: 700;">ไม่พบไฟล์แบบ "${cleanDwg}.pdf"</span>
-        <span style="font-size: 11.5px; color: var(--text-secondary); text-align: center; max-width: 520px; line-height: 1.5;">
-          ตำแหน่งเก็บไฟล์ DWG ปัจจุบัน: <code style="color: #a855f7;">${dwgLocation}</code><br>
-          คุณสามารถตรวจสอบไฟล์ในโฟลเดอร์ หรือเปลี่ยนตำแหน่งเก็บไฟล์ DWG ได้ที่เมนู <strong>Setting Location</strong>
-        </span>
-        <div style="display: flex; gap: 10px; margin-top: 8px;">
-          <a href="${driveFolderHref}" target="_blank" rel="noopener noreferrer" class="btn btn-glowing" style="padding: 6px 14px; font-size: 11.5px; border-radius: 6px; text-decoration: none;">
-            🔗 เปิดโฟลเดอร์ DWG ใน Google Drive ↗
-          </a>
-          <button type="button" id="btn-dwg-open-setting-location" class="btn" style="padding: 6px 14px; font-size: 11.5px; border-radius: 6px; border: 1px solid var(--border-glass); background: rgba(255,255,255,0.08); color: var(--text-primary); cursor: pointer;">
-            ⚙️ ตั้งค่าตำแหน่งเก็บไฟล์ DWG
-          </button>
-        </div>
-      `;
-      document.getElementById('btn-dwg-open-setting-location')?.addEventListener('click', () => {
-        if (dwgModal) {
-          dwgModal.classList.add('hidden');
-          dwgModal.style.display = 'none';
-        }
-        this.openSyncModal();
-      });
+    if (popupWin && !popupWin.closed) {
+      try { popupWin.close(); } catch (e) {}
     }
+    this.showToast(`⚠️ ไม่พบไฟล์แบบ: ${cleanDwg}`, 'error');
   }
 
   fallbackCopyText(text) {
