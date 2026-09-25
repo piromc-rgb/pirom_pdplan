@@ -4,15 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing Pro - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing v1.0 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="/pirom_pdplan/assets/index-Dg3dlGZ7.js"></script>
-    <link rel="stylesheet" crossorigin href="/pirom_pdplan/assets/index-CU3fCOEj.css">
+    <script type="module" crossorigin src="/pirom_pdplan/assets/index-B6EJkqkY.js"></script>
+    <link rel="stylesheet" crossorigin href="/pirom_pdplan/assets/index-BOnFYm8_.css">
   </head>
   <body>
     <div id="app-container">
@@ -23,9 +23,44 @@
       <header class="app-header">
         <div class="brand-logo" style="flex-direction: column; align-items: flex-start; gap: 2px;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="brand-mie">CHAKEN</span>
-            <span class="brand-trak">Planing Pro</span>
-            <span class="badge">APS Scheduling</span>
+            <div class="brand-logo-main" style="display: inline-flex; align-items: center; gap: 8px; user-select: none;">
+              <span class="brand-chaken">CHAKEN</span>
+              <span class="brand-planing">Planing</span>
+            </div>
+            <div id="user-mode-wrapper" class="user-mode-wrapper" style="position: relative; display: inline-flex; align-items: center;">
+              <button id="btn-user-mode" class="badge btn-user-mode mode-view" type="button" title="โหมดผู้ใช้งาน: คลิกเพื่อเลือกโหมดดูแผน หรือ วางแผน">
+                <span id="user-mode-icon" class="user-mode-icon">👁️</span>
+                <span id="user-mode-text" class="user-mode-text">ดูแผน</span>
+                <svg class="user-mode-arrow" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px; transition: transform 0.2s;">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+              <div id="user-mode-menu" class="user-mode-dropdown hidden" style="position: absolute; top: calc(100% + 6px); left: 0; min-width: 275px; z-index: 99999;">
+                <div class="user-mode-dropdown-header">
+                  <span>⚙️ โหมดผู้ใช้งาน (User Mode)</span>
+                </div>
+                <div id="user-mode-option-view" class="user-mode-item active" data-mode="view">
+                  <span class="mode-item-icon">👁️</span>
+                  <div class="mode-item-body">
+                    <div class="mode-item-title-row">
+                      <span class="mode-item-title title-view">1. ดูแผน <span class="mode-default-tag">(Default)</span></span>
+                      <span id="check-user-mode-view" class="mode-item-check check-view">✓</span>
+                    </div>
+                    <div class="mode-item-desc">Load ข้อมูลตอนเปิด App แต่ไม่ Save ตอนปิด App</div>
+                  </div>
+                </div>
+                <div id="user-mode-option-plan" class="user-mode-item item-plan" data-mode="plan">
+                  <span class="mode-item-icon">✏️</span>
+                  <div class="mode-item-body">
+                    <div class="mode-item-title-row">
+                      <span class="mode-item-title title-plan">2. วางแผน</span>
+                      <span id="check-user-mode-plan" class="mode-item-check check-plan hidden">✓</span>
+                    </div>
+                    <div class="mode-item-desc">Load ข้อมูลตอนเปิด App และ Save ตอนปิด App</div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <button id="btn-theme-toggle" class="btn-theme-toggle" title="Toggle Light/Dark Theme" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; border-radius: 50%; margin-left: 5px; transition: all 0.2s;">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="theme-icon-sun">
                 <circle cx="12" cy="12" r="5"/>
@@ -42,19 +77,71 @@
                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
               </svg>
             </button>
-            <button id="btn-toggle-dep-lines" class="btn-action-small" title="เปิด/ปิด การแสดงผลเส้นเชื่อมโยง Task (Show/Hide Task Dependency Lines)" style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; margin-left: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">
+            <div class="display-options-wrapper" style="position: relative; display: inline-block; margin-left: 6px;">
+              <button id="btn-display-options" class="btn-action-small" title="ตัวเลือกการแสดงผลบนบอร์ด" style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+                <span>Option</span>
+              </button>
+              <div id="display-options-panel" class="hidden" style="position: absolute; top: 100%; left: 0; margin-top: 6px; background: var(--bg-darker); border: 1px solid var(--border-glass); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.45); padding: 6px; z-index: 500; min-width: 220px;">
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                  <span>เส้นเชื่อมโยง</span>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-dep-lines" checked><span class="ios-toggle-slider"></span></span>
+                </label>
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                  <span title="ซ่อน/แสดง Work Center ที่ไม่มีงานแสดงผลอยู่บนบอร์ดขณะนี้">WC ว่าง: ซ่อน</span>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-hide-unused-wc" checked><span class="ios-toggle-slider"></span></span>
+                </label>
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                  <span title="แสดงเลข Priority มุมขวาบนของ Task Bar">Priority</span>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-priority-badge"><span class="ios-toggle-slider"></span></span>
+                </label>
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                  <span title="รวม Task Bar ที่ทับซ้อนกัน (Priority เดียวกัน) เป็นแท่งเดียวตอน Zoom Out">Merge Bar</span>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-merge-bars" checked><span class="ios-toggle-slider"></span></span>
+                </label>
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                  <span title="ใช้เครื่องจักรช่วยงาน (Offload ไปเครื่องสำรอง เมื่อเครื่องหลักไม่ว่าง)">เครื่องช่วยงาน</span>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-machine-offload" checked><span class="ios-toggle-slider"></span></span>
+                </label>
+                <div class="display-option-row" style="padding: 6px 10px; border-radius: 6px; font-size: 11px; color: var(--text-primary);">
+                  <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; margin: 0;">
+                    <span title="จัดกลุ่ม Item/รหัสแบบเดียวกันให้ผลิตต่อเนื่องหรือพร้อมกัน เพื่อลดเวลา Setup และเพิ่มประสิทธิภาพเครื่องจักร">Group Item เดียวกัน</span>
+                    <span class="ios-toggle"><input type="checkbox" id="toggle-group-same-item" checked><span class="ios-toggle-slider"></span></span>
+                  </label>
+                  <button id="btn-view-grouped-items" type="button" title="เปิดดูรายการชิ้นงานที่มีการจัดกลุ่มผลิตต่อเนื่องในแผนปัจจุบันทั้งหมด พร้อมวันที่เริ่มผลิต" style="display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; margin-top: 6px; padding: 5px 8px; font-size: 10.5px; font-weight: 600; border-radius: 5px; background: rgba(0, 0, 0, 0.04); border: 1px solid var(--border-glass); color: var(--text-primary); cursor: pointer; transition: all 0.2s;">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                    </svg>
+                    <span>📋 ดูรายการที่ Group ในแผนปัจจุบัน</span>
+                  </button>
+                </div>
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary); border-top: 1px solid var(--border-glass); margin-top: 4px; padding-top: 8px;" title="เปิด/ปิดการ Sync ข้อมูล Cloud อัตโนมัติ: โหลดข้อมูลเมื่อเปิดแอป และบันทึกข้อมูลเมื่อปิดแอป">
+                  <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <span style="font-weight: 600;">Sync ข้อมูล Cloud</span>
+                    <span style="font-size: 9.5px; color: var(--text-secondary);">Load เปิด app / Save ปิด App</span>
+                  </div>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-cloud-sync" checked><span class="ios-toggle-slider"></span></span>
+                </label>
+
+              </div>
+            </div>
+            <button id="btn-header-storage-sync" class="btn-action-small" title="Setting Location Keep Data File (ตั้งค่าที่เก็บไฟล์ข้อมูล & Cloud Sync)" style="display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; margin-left: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
               </svg>
-              <span id="dep-lines-text">เส้นเชื่อมโยง: ON</span>
+              <span>Setting Location</span>
+              <span id="header-sync-status-badge" class="sync-pill local" style="white-space: nowrap; font-size: 9px; padding: 1px 5px; line-height: 1.2;">💾 Cache</span>
             </button>
-            <button id="btn-toggle-hide-unused-wc" class="btn-action-small" title="ซ่อน/แสดง Work Center ที่ไม่มีงานแสดงผลอยู่บนบอร์ดขณะนี้ (ตามตัวกรอง Priority / Project ที่เลือกอยู่)" style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; margin-left: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">
+            <button id="btn-toggle-work-mode" class="btn-action-small" title="สลับโหมดการทำงาน: วางแผน (ลาก/แก้ไขแผนงานปกติ) หรือ Work Center Terminal (คลิก Task Bar เพื่อเปิด MIE Shop Floor Kiosk Simulator ทันที)" style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; margin-left: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.29 20.29 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a20.29 20.29 0 0 1-3.22 4.36M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
-                <line x1="1" y1="1" x2="23" y2="23"/>
+                <rect x="3" y="4" width="18" height="12" rx="1.5"></rect>
+                <path d="M8 20h8M12 16v4"></path>
               </svg>
-              <span id="hide-unused-wc-text">WC ว่าง: ซ่อน</span>
+              <span id="work-mode-text">โหมด: วางแผน</span>
             </button>
           </div>
           <div id="header-datetime" style="font-size: 10px; color: var(--text-secondary); font-family: monospace; padding-left: 2px;"></div>
@@ -76,6 +163,30 @@
               <path d="M11 21h-1l1-7H5.5L13 3h1l-1 7h5.5L11 21z"/>
             </svg>
             AI Auto-Optimize (APS)
+          </button>
+
+          <button id="btn-reschedule" class="btn btn-glowing" title="คำนวณแผนงานทั้งหมดใหม่ตาม Scheduling Model ปัจจุบัน - ใช้เมื่อแก้ไข Priority, Work Center Settings, Lock/Unlock Project ฯลฯ แล้วต้องการให้บอร์ดอัปเดตตามทันที" style="margin-left: 8px; background: linear-gradient(135deg, var(--accent-purple, #a855f7), #7c3aed);">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+              <polyline points="21 3 21 9 15 9"/>
+            </svg>
+            Reschedule
+          </button>
+
+          <button id="btn-continuity-analysis" class="btn btn-glowing" title="วิเคราะห์ช่วงเวลาว่างของสถานีงาน และหาสาเหตุว่าเกิดจาก PD/สถานีงานอะไร" style="margin-left: 8px; background: linear-gradient(135deg, #0891b2, #0e7490);">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 3v18h18"/>
+              <path d="M18.7 8l-5.1 5.1-2.8-2.8L7 14"/>
+            </svg>
+            วิเคราะห์ความต่อเนื่อง
+          </button>
+
+          <button id="btn-qc-check" class="btn btn-glowing" title="ตรวจสอบกับ Google Sheets QC Log เพื่อปิดและลบ PD ที่ส่งเข้าคลัง PRD/SEMI ออกจากผังการผลิต" style="margin-left: 8px; background: linear-gradient(135deg, #059669, #047857);">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 11l3 3L22 4"/>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            </svg>
+            ตรวจ QC Log
           </button>
         </div>
 
@@ -116,6 +227,9 @@
             <button id="btn-import-excel" class="btn" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 4px;">
               <span>📥 Import from Excel</span>
             </button>
+            <button id="btn-view-completed-pd" class="btn" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(22, 163, 74, 0.1); border: 1px solid var(--accent-green, #16a34a); color: var(--accent-green, #16a34a); font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 4px;">
+              <span>✅ View PD ที่ผลิตเสร็จแล้ว</span>
+            </button>
           </div>
           
           <div class="tab-content" id="backlog-tab-content" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; margin-top: 10px;">
@@ -125,11 +239,50 @@
             </div>
           </div>
 
+          <div class="tab-content hidden" id="assembly-list-tab-content" style="flex: 1; display: none; flex-direction: column; overflow: hidden; margin-top: 10px;">
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--text-secondary); cursor: pointer; user-select: none; margin-bottom: 8px;" title="ซ่อน Assembly ที่ไม่มีงานตรงกับตัวกรอง Priority / Project / Customer / Work Center ที่เลือกอยู่ในแท็บ Resources">
+              <input type="checkbox" id="chk-assembly-follow-filters" checked style="width: auto; margin: 0; cursor: pointer;">
+              แสดงตามตัวกรอง (Priority / Project / Customer / Work Center)
+            </label>
+            <input type="text" id="assembly-list-search-input" placeholder="ค้นหา PD / ชื่องาน..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); outline: none; margin-bottom: 8px;">
+            <div class="scrollable-list" id="assembly-set-list" style="flex: 1; overflow-y: auto;">
+              <!-- Rendered dynamically: all root Assembly Sets -->
+            </div>
+          </div>
+
+          <!-- Assembly TreeView Sidebar Tab (Shown in Assembly Set mode) -->
+          <div class="tab-content hidden" id="assembly-tree-sidebar-tab" style="flex: 1; display: none; flex-direction: column; overflow: hidden; margin-top: 6px;">
+            <div style="padding-bottom: 8px; border-bottom: 1px solid var(--border-glass); margin-bottom: 8px; position: relative;">
+              <label for="sidebar-main-pd-input" style="display: flex; align-items: center; justify-content: space-between; font-size: 10.5px; font-weight: 700; color: var(--accent-teal); text-transform: uppercase; margin-bottom: 5px;">
+                <span>🎯 เลขที่ PD ตัว Main:</span>
+              </label>
+              <div style="position: relative; width: 100%;">
+                <input type="text" id="sidebar-main-pd-input" placeholder="🔍 ค้นหา/ระบุเลขที่ PD Main..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 12px; font-weight: 700; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(0, 242, 254, 0.05); color: var(--text-primary); outline: none;">
+                <div id="sidebar-main-pd-dropdown" class="hidden" style="position: absolute; top: 100%; left: 0; right: 0; margin-top: 3px; max-height: 240px; overflow-y: auto; background: var(--bg-darker); border: 1px solid var(--border-glass); border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); z-index: 200;"></div>
+              </div>
+              <button id="btn-sidebar-view-bom" type="button" class="btn" style="width: 100%; margin-top: 6px; padding: 5px 8px; font-size: 11px; font-weight: 700; background: rgba(16, 185, 129, 0.12); border: 1px solid var(--accent-green); color: var(--accent-green); border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; transition: background 0.2s;" title="แสดงรายการ BOM ทั้งหมดใน PD แม่ พร้อมสถานะ">
+                📑 รายการ BOM ทั้งหมดใน PD แม่
+              </button>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding: 0 2px;">
+              <span style="font-size: 10.5px; font-weight: 700; color: var(--text-secondary);">ผังโครงสร้าง (Tree Diagram):</span>
+              <div style="display: flex; gap: 4px;">
+                <button id="btn-sidebar-tree-expand-all" type="button" class="btn-action-small" style="font-size: 9.5px; padding: 2px 6px;" title="ขยายทุกกิ่ง">⊞ ขยาย</button>
+                <button id="btn-sidebar-tree-collapse-all" type="button" class="btn-action-small" style="font-size: 9.5px; padding: 2px 6px;" title="ยุบทุกกิ่ง">⊟ ยุบ</button>
+              </div>
+            </div>
+            <div class="scrollable-list treeview-container" id="sidebar-assembly-treeview" style="flex: 1; overflow-y: auto; overflow-x: auto; padding: 4px 2px;">
+              <!-- Hierarchical TreeView dynamically rendered -->
+            </div>
+          </div>
+
           <div class="sidebar-footer" style="padding: 12px; border-top: 1px solid var(--border-glass);">
             <button id="btn-clear-backlog" class="btn" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); color: var(--accent-red); font-weight: bold; border-radius: 6px; cursor: pointer;">
               <span>🗑️ Clear Backlog</span>
             </button>
           </div>
+          <!-- Resizer Splitter Handle between Sidebar Left and Gantt Board -->
+          <div class="sidebar-left-resizer" id="sidebar-left-resizer" title="ลากเพื่อปรับขนาดแถบด้านซ้าย (ดับเบิลคลิกเพื่อรีเซ็ตขนาด)"></div>
         </aside>
 
         <!-- CENTER PANEL: GANTT PLANNING BOARD -->
@@ -139,7 +292,10 @@
               <button id="btn-toggle-backlog-header" class="btn-action-small" title="Toggle Backlog Sidebar" style="margin: 0; padding: 4px 8px; font-size: 10.5px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 6px; cursor: pointer; font-weight: bold;">
                 📋 Backlog
               </button>
-              <button id="btn-toggle-resources-header" class="btn-action-small" title="Toggle Resources Sidebar" style="margin: 0; padding: 4px 8px; font-size: 10.5px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 6px; cursor: pointer; font-weight: bold;">
+              <button id="btn-toggle-assembly-list-header" class="btn-action-small" title="แสดงรายชื่อ Assembly Set ทั้งหมดในพื้นที่ PD Backlog" style="margin: 0; padding: 4px 8px; font-size: 10.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 6px; cursor: pointer; font-weight: bold;">
+                🔗 Assembly
+              </button>
+              <button id="btn-toggle-resources-header" class="btn-action-small" title="Toggle Resources Sidebar" style="margin: 0; padding: 4px 8px; font-size: 10.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 6px; cursor: pointer; font-weight: bold;">
                 👥 Resources
               </button>
             </div>
@@ -198,6 +354,7 @@
                   <button class="scale-btn" data-scale="min15">15m</button>
                   <button class="scale-btn" data-scale="min30">30m</button>
                   <button class="scale-btn" data-scale="hr">1H</button>
+                  <button class="scale-btn" data-scale="hr4">4H</button>
                   <button class="scale-btn active" data-scale="day">1D</button>
                   <button class="scale-btn" data-scale="week">1W</button>
                   <button class="scale-btn" data-scale="month">1M</button>
@@ -210,9 +367,26 @@
                   <button class="mode-btn" data-mode="pd">Production Order (PD)</button>
                   <button class="mode-btn" data-mode="assembly">Assembly Set</button>
                 </div>
-                <div class="timeline-nav-controls">
-                  <button id="btn-timeline-now" class="btn-action-small" title="Scroll to Current Time" style="margin: 0; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--text-primary);">Go to Now</button>
-                  <span id="board-date-range-display" style="font-size: 11px; font-weight: bold; color: var(--accent-teal); margin-left: 10px; font-family: monospace; letter-spacing: 0.5px;"></span>
+                <button id="btn-pd-order-list" class="btn-action-small hidden" title="แสดงสรุปรายการ Production Order ที่กำลังกรอง/แสดงผลอยู่บน Board ในรูปแบบตาราง" style="display: none; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700; padding: 4px 10px; border-radius: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; transition: all 0.2s;">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="8" y1="6" x2="21" y2="6"></line>
+                    <line x1="8" y1="12" x2="21" y2="12"></line>
+                    <line x1="8" y1="18" x2="21" y2="18"></line>
+                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                  </svg>
+                  <span>Production Order List</span>
+                </button>
+                <div class="timeline-nav-controls" style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
+                  <div style="display: flex; align-items: center;">
+                    <button id="btn-timeline-now" class="btn-action-small" title="Scroll to Current Time" style="margin: 0; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--text-primary);">Go to Now</button>
+                    <span id="board-date-range-display" style="font-size: 11px; font-weight: bold; color: var(--accent-teal); margin-left: 10px; font-family: monospace; letter-spacing: 0.5px;"></span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <button id="btn-timeline-goto-date" class="btn-action-small" title="Scroll to a specific date" style="margin: 0; background: rgba(255, 165, 0, 0.15); border: 1px solid var(--accent-orange); color: var(--text-primary);">Goto Date</button>
+                    <input type="date" id="timeline-goto-date-input" style="display: none; font-size: 11px; padding: 2px 4px; border-radius: 4px; border: 1px solid var(--accent-orange); background: var(--bg-card); color: var(--text-primary);">
+                  </div>
                 </div>
               </div>
             </div>
@@ -255,7 +429,7 @@
                 </defs>
               </svg>
               <div class="gantt-timeline-ruler">
-                <div class="row-label-header" id="row-label-header">Work Center</div>
+                <div class="row-label-header" id="row-label-header" style="position: sticky; left: 0;"><span id="row-label-header-text">Work Center</span><div id="gantt-label-col-resizer" title="ลากเพื่อปรับความกว้างคอลัมน์" style="position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: col-resize; z-index: 60;"></div></div>
                 <div class="ruler-hours">
                   <span>08:00</span>
                   <span>10:00</span>
@@ -279,14 +453,29 @@
           <div id="assembly-tree-view-wrapper" class="assembly-tree-view-wrapper hidden" style="display: none; flex-direction: column; flex: 1; background: #ffffff; color: #111827; position: relative; overflow: hidden; border-top: 1px solid var(--border-glass);">
             <!-- Toolbar matching the exact screenshot: Print button + Assembly Select + Controls -->
             <div class="assembly-tree-toolbar" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
-              <div style="display: flex; align-items: center; gap: 12px;">
-                <button id="btn-print-assembly-tree" class="btn btn-secondary" style="padding: 4px 16px; font-size: 12px; font-weight: bold; background: #ffffff; color: #0284c7; border: 1px solid #0284c7; border-radius: 4px; box-shadow: none;">Print</button>
-                <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #334155; font-weight: 600;">
-                  <label for="assembly-tree-select-wo">Assembly Set:</label>
-                  <select id="assembly-tree-select-wo" style="padding: 4px 10px; font-size: 12px; border: 1px solid #94a3b8; border-radius: 4px; background: #ffffff; color: #0f172a; outline: none; font-weight: 600;"></select>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <button id="btn-print-assembly-tree" class="btn btn-secondary" style="padding: 4px 14px; font-size: 12px; font-weight: bold; background: #ffffff; color: #0284c7; border: 1px solid #0284c7; border-radius: 4px; box-shadow: none;">Print</button>
+                <button id="btn-tree-view-bom" type="button" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px; font-weight: bold; background: #ecfdf5; color: #059669; border: 1px solid #059669; border-radius: 4px; box-shadow: none; display: flex; align-items: center; gap: 4px; cursor: pointer; transition: all 0.2s;" title="แสดงรายการ BOM ทั้งหมดใน PD แม่ พร้อมสถานะ">📑 รายการ BOM</button>
+                <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #334155; font-weight: 600; position: relative;">
+                  <label for="assembly-tree-search-input">Assembly Set:</label>
+                  <div style="position: relative;">
+                    <input type="text" id="assembly-tree-search-input" placeholder="ค้นหา PD / ชื่องาน..." autocomplete="off" style="padding: 4px 10px; font-size: 12px; border: 1px solid #94a3b8; border-radius: 4px; background: #ffffff; color: #0f172a; outline: none; font-weight: 600; width: 220px;">
+                    <div id="assembly-tree-search-dropdown" class="hidden" style="position: absolute; top: 100%; left: 0; margin-top: 2px; width: 340px; max-height: 320px; overflow-y: auto; background: #ffffff; border: 1px solid #94a3b8; border-radius: 4px; box-shadow: 0 6px 16px rgba(0,0,0,0.15); z-index: 100;"></div>
+                  </div>
+                </div>
+                <!-- Focused Node Breadcrumb & Reset button -->
+                <div id="tree-focus-breadcrumb" style="display: flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 4px; background: #f1f5f9; border: 1px solid #cbd5e1; font-size: 11px;">
+                  <span style="color: #64748b; font-weight: 600;">ภาพขยาย:</span>
+                  <span id="tree-focus-text" style="color: #0284c7; font-weight: 800; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">-</span>
+                  <button id="btn-tree-reset-focus" type="button" class="btn" style="display: none; padding: 2px 7px; font-size: 10px; font-weight: 700; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 4px; cursor: pointer; line-height: 1.2;" title="กลับไปดูภาพรวมของ Main PD">↩️ ดูผังหลัก</button>
                 </div>
               </div>
               <div style="display: flex; align-items: center; gap: 8px;">
+                <button id="btn-tree-toggle-raw" class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px; font-weight: 700; border-radius: 4px; border: 1px solid #0284c7; background: #f0f9ff; color: #0284c7; cursor: pointer; transition: all 0.2s; margin-right: 4px;" title="แสดง/ซ่อน รายการวัตถุดิบคลังในผัง">📦 วัตถุดิบ: แสดง</button>
+                <div class="tree-orientation-segmented-group" style="display: inline-flex; align-items: center; background: #e2e8f0; border: 1px solid #cbd5e1; border-radius: 6px; padding: 2px; margin-right: 4px;">
+                  <button id="btn-tree-orient-hor" type="button" class="btn" style="padding: 3px 9px; font-size: 11px; font-weight: 700; border-radius: 4px; border: none; background: #ffffff; color: #0284c7; box-shadow: 0 1px 2px rgba(0,0,0,0.1); cursor: pointer; transition: all 0.2s;" title="ผังแนวนอน (Horizontal Tree Diagram - ซ้ายไปขวา)">⬌ Hor Tree</button>
+                  <button id="btn-tree-orient-ver" type="button" class="btn" style="padding: 3px 9px; font-size: 11px; font-weight: 700; border-radius: 4px; border: none; background: transparent; color: #64748b; box-shadow: none; cursor: pointer; transition: all 0.2s;" title="ผังแนวตั้ง (Vertical Tree Diagram - บนลงล่าง)">⬍ Ver Tree</button>
+                </div>
                 <button id="btn-tree-zoom-in" class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px; background: #ffffff; color: #334155; border: 1px solid #cbd5e1; border-radius: 4px; box-shadow: none;">🔍 Zoom +</button>
                 <button id="btn-tree-zoom-out" class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px; background: #ffffff; color: #334155; border: 1px solid #cbd5e1; border-radius: 4px; box-shadow: none;">🔍 Zoom -</button>
                 <button id="btn-tree-fit" class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px; background: #ffffff; color: #0284c7; border: 1px solid #0284c7; border-radius: 4px; box-shadow: none;">🎯 Fit View</button>
@@ -295,30 +484,61 @@
               </div>
             </div>
 
+            <!-- Print Header Banner (Shown only during Print) -->
+            <div id="assembly-tree-print-header" class="assembly-tree-print-header" style="display: none; padding: 10px 16px 8px; border-bottom: 2px solid #0f172a; background: #ffffff;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; font-family: 'Inter', system-ui, -apple-system, sans-serif;">
+                <div style="flex: 1;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 15px; font-weight: 900; color: #0f172a; letter-spacing: -0.2px;">ASSEMBLY PARTS TREE DIAGRAM (ผังโครงสร้างชุดประกอบ)</span>
+                    <span id="print-header-mode" style="font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">ผังแนวนอน</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 18px; margin-top: 6px; font-size: 11.5px; color: #334155;">
+                    <span><strong>เลขที่ PD:</strong> <span id="print-header-pd" style="color: #0284c7; font-weight: 900; font-size: 12.5px;">-</span></span>
+                    <span><strong>Drawing No:</strong> <span id="print-header-dwg" style="font-family: monospace; font-weight: 700; color: #0f172a;">-</span></span>
+                    <span><strong>Project / SO:</strong> <span id="print-header-project" style="font-weight: 800; color: #0f172a;">-</span></span>
+                    <span><strong>ลูกค้า:</strong> <span id="print-header-customer" style="font-weight: 700; color: #334155;">-</span></span>
+                  </div>
+                </div>
+                <div style="text-align: right; min-width: 280px; font-size: 11px; color: #475569;">
+                  <div><strong>ชื่อชิ้นงาน (Part Name):</strong> <span id="print-header-partname" style="font-weight: 800; color: #0f172a;">-</span></div>
+                  <div style="margin-top: 3px; display: flex; justify-content: flex-end; gap: 10px;">
+                    <span><strong>จำนวน:</strong> <span id="print-header-qty" style="font-weight: 700; color: #0f172a;">-</span></span>
+                    <span>| <strong>วัตถุดิบคลัง:</strong> <span id="print-header-rawstatus" style="font-weight: 700; color: #0284c7;">-</span></span>
+                    <span>| <strong>พิมพ์เมื่อ:</strong> <span id="print-header-date" style="color: #64748b;">-</span></span>
+                  </div>
+                  <div style="margin-top: 5px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; font-size: 9.5px; font-weight: bold; color: #334155;">
+                    <span style="display: flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 12px; height: 10px; background: #86efac; border: 1px solid #166534; border-radius: 2px;"></span> เสร็จสมบูรณ์ (Released)</span>
+                    <span style="display: flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 12px; height: 10px; background: #fde047; border: 1px solid #854d0e; border-radius: 2px;"></span> กำลังผลิต (Working)</span>
+                    <span style="display: flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 12px; height: 10px; background: #fca5a5; border: 1px solid #991b1b; border-radius: 2px;"></span> รอเริ่ม (Scheduled)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Canvas Area: Header Card, Status Legend Box, and Node Graph Canvas -->
             <div id="assembly-tree-canvas-container" style="flex: 1; position: relative; overflow: auto; background: #ffffff; cursor: grab;">
               <!-- Top-Left Floating Header & Status Legend (Matching Screenshot Exact Position) -->
               <div id="assembly-tree-legend-container" style="position: absolute; top: 16px; left: 16px; z-index: 20; display: flex; flex-direction: column; gap: 10px; pointer-events: auto;">
                 <!-- Main Header Box -->
-                <div id="assembly-tree-header-box" style="border: 2px solid #000000; background: #ffffff; padding: 8px 16px; border-radius: 2px; min-width: 220px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">
-                  <div id="tree-header-partno" style="font-weight: 900; font-size: 13px; color: #000000; text-align: center;">42354-01,L</div>
-                  <div id="tree-header-desc" style="font-size: 9.5px; font-weight: bold; color: #333333; text-align: center; margin-top: 2px;">MCU, 1/2 ATR, ASSEMBLY, NTSC, DCE3.0, AVT</div>
+                <div id="assembly-tree-header-box" style="border: 1.5px solid #1e293b; background: #ffffff; padding: 6px 14px; border-radius: 4px; min-width: 210px; max-width: 250px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); box-sizing: border-box;">
+                  <div id="tree-header-partno" style="font-weight: 800; font-size: 12.5px; color: #000000; text-align: center; word-break: break-word;">-</div>
+                  <div id="tree-header-desc" style="font-size: 9.5px; font-weight: 600; color: #334155; text-align: center; margin-top: 2px; line-height: 1.3; word-break: break-word;">ASSEMBLY SET</div>
                 </div>
 
                 <!-- Status Legend Box -->
-                <div style="border: 2px solid #000000; background: #ffffff; padding: 8px 12px; border-radius: 2px; min-width: 200px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">
-                  <div style="font-weight: bold; font-size: 11px; color: #000000; margin-bottom: 6px;">Status</div>
-                  <div style="display: flex; flex-direction: column; gap: 4px; font-size: 10px; font-weight: bold; color: #000000;">
+                <div style="border: 1.5px solid #1e293b; background: #ffffff; padding: 6px 12px; border-radius: 4px; min-width: 210px; max-width: 250px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); box-sizing: border-box;">
+                  <div style="font-weight: 700; font-size: 11px; color: #000000; margin-bottom: 5px;">Status</div>
+                  <div style="display: flex; flex-direction: column; gap: 4px; font-size: 9.5px; font-weight: 600; color: #000000;">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                      <div style="width: 24px; height: 16px; background: linear-gradient(to bottom, #dcfce7, #86efac); border: 1.5px solid #166534; border-radius: 2px;"></div>
+                      <div style="width: 22px; height: 14px; background: linear-gradient(to bottom, #dcfce7, #86efac); border: 1.5px solid #166534; border-radius: 2px; flex-shrink: 0;"></div>
                       <span>Released / Completed</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
-                      <div style="width: 24px; height: 16px; background: linear-gradient(to bottom, #fef9c3, #fde047); border: 1.5px solid #854d0e; border-radius: 2px;"></div>
+                      <div style="width: 22px; height: 14px; background: linear-gradient(to bottom, #fef9c3, #fde047); border: 1.5px solid #854d0e; border-radius: 2px; flex-shrink: 0;"></div>
                       <span>Working, Rev A or greater (In Progress)</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
-                      <div style="width: 24px; height: 16px; background: linear-gradient(to bottom, #fee2e2, #fca5a5); border: 1.5px solid #991b1b; border-radius: 2px;"></div>
+                      <div style="width: 22px; height: 14px; background: linear-gradient(to bottom, #fee2e2, #fca5a5); border: 1.5px solid #991b1b; border-radius: 2px; flex-shrink: 0;"></div>
                       <span>Working, Rev '-' (Waiting / Scheduled)</span>
                     </div>
                   </div>
@@ -348,7 +568,7 @@
               <button id="tab-right-priority" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Priority</button>
               <button id="tab-right-project" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Project</button>
               <button id="tab-right-pdrange" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">PD Range</button>
-              <button id="tab-right-machinelink" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Machine Link</button>
+              <button id="tab-right-customer" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Customer</button>
             </div>
             <button id="btn-hide-sidebar" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass);" title="Collapse Sidebar">▶</button>
           </div>
@@ -432,7 +652,11 @@
             <div class="resource-section">
               <h4>PD Range Filter (กรองตามช่วงเลขที่ PD)</h4>
               <p class="tool-desc" style="font-size: 10px; color: var(--text-secondary); margin-bottom: 8px;">ระบุช่วงเลขที่ Production Order (เช่น PD2607785-PD2607834) เพื่อใช้เป็นเงื่อนไขในการกรองการแสดงผลบนบอร์ด:</p>
-              
+
+              <div id="pdrange-favorites-container" style="display: none; flex-direction: column; gap: 6px; margin-bottom: 10px;">
+                <!-- Dynamic favorite (starred) PD list will be injected here -->
+              </div>
+
               <div style="display: flex; gap: 6px; margin-bottom: 8px;">
                 <input type="text" id="input-pdrange" placeholder="e.g. PD2607785-PD2607834" style="flex: 1; background-color: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 4px 8px; border-radius: 4px; font-size: 10px; outline: none;">
                 <button id="btn-add-pdrange" class="btn" style="font-size: 10px; padding: 4px 8px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold;">+ เพิ่ม</button>
@@ -447,34 +671,25 @@
               <div id="pdrange-filters-container" style="display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--bg-darkest); border-radius: 8px; border: 1px solid var(--border-glass); max-height: 300px; overflow-y: auto;">
                 <!-- Dynamic PD range checkboxes will be injected here -->
               </div>
+
+              <button id="btn-pdrange-mark-completed" class="btn hidden" style="margin-top: 8px; width: 100%; font-size: 10.5px; padding: 7px 8px; background: rgba(34, 197, 94, 0.12); border: 1px solid #22c55e; color: #22c55e; border-radius: 4px; cursor: pointer; font-weight: bold;">✓ ผลิตเสร็จแล้ว</button>
             </div>
           </div>
 
-          <!-- Machine Link Panel -->
-          <div id="panel-right-machinelink" class="sidebar-right-panel hidden" style="display: flex; flex-direction: column; gap: 15px;">
+          <!-- Customer Filter Panel -->
+          <div id="panel-right-customer" class="sidebar-right-panel hidden" style="display: flex; flex-direction: column; gap: 15px;">
             <div class="resource-section">
-              <h4>IoT Status Tower Lights</h4>
-              <p class="tool-desc" style="font-size: 10px; color: var(--text-secondary); margin-bottom: 5px;">Real-time machine sensor indicators:</p>
-              <div class="machinelink-list" id="machinelink-sensors-list" style="display: flex; flex-direction: column; gap: 8px;">
-                <!-- Rendered dynamically -->
+              <h4>Gantt Customer Filter (กรองตามลูกค้า)</h4>
+              <p class="tool-desc" style="font-size: 10px; color: var(--text-secondary); margin-bottom: 8px;">เลือกลูกค้าที่จะให้แสดงผลบนบอร์ด Gantt:</p>
+              <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                <button id="btn-customer-select-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold;">เลือกทั้งหมด</button>
+                <button id="btn-customer-select-filtered" class="btn" title="เลือกเฉพาะลูกค้าที่ตรงกับคำค้นหาด้านล่าง (ลูกค้าอื่นจะถูกซ่อน)" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255, 165, 0, 0.1); border: 1px solid var(--accent-orange); color: var(--accent-orange); border-radius: 4px; cursor: pointer; font-weight: bold;">เลือกที่กรอง</button>
+                <button id="btn-customer-deselect-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-weight: bold;">ล้างทั้งหมด</button>
               </div>
-            </div>
-            <div class="resource-section">
-              <h4>Downtime Loss Analysis</h4>
-              <div class="machinelink-loss-chart" style="display: flex; flex-direction: column; gap: 8px;">
-                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 3px;">Time Loss Allocation (Hours):</div>
-                <div class="loss-bar-container" style="display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,0.05); width: 100%;">
-                  <div class="loss-bar-fill setup" style="width: 25%; background: var(--accent-purple);" title="Setup Loss (25%)"></div>
-                  <div class="loss-bar-fill breakdown" style="width: 15%; background: var(--accent-red);" title="Breakdown Loss (15%)"></div>
-                  <div class="loss-bar-fill stops" style="width: 10%; background: var(--accent-orange);" title="Minor Stops Loss (10%)"></div>
-                  <div class="loss-bar-fill runtime" style="width: 50%; background: var(--accent-green);" title="Actual Runtime (50%)"></div>
-                </div>
-                <div class="loss-legend" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; font-size: 8px; color: var(--text-secondary);">
-                  <span class="loss-leg-item" style="display: flex; align-items: center; gap: 3px;"><span class="loss-color setup" style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-purple); display: inline-block;"></span>Setup (25%)</span>
-                  <span class="loss-leg-item" style="display: flex; align-items: center; gap: 3px;"><span class="loss-color breakdown" style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-red); display: inline-block;"></span>Breakdown (15%)</span>
-                  <span class="loss-leg-item" style="display: flex; align-items: center; gap: 3px;"><span class="loss-color stops" style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-orange); display: inline-block;"></span>Stops (10%)</span>
-                  <span class="loss-leg-item" style="display: flex; align-items: center; gap: 3px;"><span class="loss-color runtime" style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); display: inline-block;"></span>Run (50%)</span>
-                </div>
+              <input type="text" id="customer-search-input" placeholder="ค้นหาลูกค้า..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); outline: none; margin-bottom: 8px;">
+
+              <div id="customer-filters-container" style="display: flex; flex-direction: column; gap: 12px; padding: 12px; background: var(--bg-darkest); border-radius: 8px; border: 1px solid var(--border-glass);">
+                <!-- Dynamic customer checkboxes will be injected here -->
               </div>
             </div>
           </div>
@@ -504,6 +719,8 @@
                 <button id="btn-project-select-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold;">เลือกทั้งหมด</button>
                 <button id="btn-project-deselect-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-weight: bold;">ล้างทั้งหมด</button>
               </div>
+
+              <input type="text" id="project-search-input" placeholder="ค้นหาโครงการ..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); outline: none; margin-bottom: 8px;">
 
               <div id="project-filters-container" style="display: flex; flex-direction: column; gap: 12px; padding: 12px; background: var(--bg-darkest); border-radius: 8px; border: 1px solid var(--border-glass);">
                 <!-- Dynamic project checkboxes will be injected here -->
@@ -789,10 +1006,10 @@
           </div>
           <div class="modal-body" style="display: flex; flex-direction: column; gap: 15px; max-height: 400px; overflow-y: auto; padding-right: 5px;">
             <div class="form-group" style="display: flex; flex-direction: column; gap: 4px;">
-              <label style="font-weight: bold; font-size: 10px; color: var(--text-primary);">Select Excel File (เลือกไฟล์ Excel)</label>
+              <label style="font-weight: bold; font-size: 10px; color: var(--text-primary);">Select Excel File / ไฟล์ Status Overview (ค่าเริ่มต้น: LN Status Overview.xls)</label>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <button type="button" id="btn-custom-choose-file" style="background-color: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 8px 12px; border-radius: 6px; font-size: 11px; outline: none; cursor: pointer; font-weight: bold; transition: all 0.2s;">Choose File</button>
-                <span id="custom-file-name" style="font-size: 11px; color: var(--text-secondary); font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 350px;">No file chosen</span>
+                <span id="custom-file-name" style="font-size: 11px; color: var(--text-secondary); font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 350px;">LN Status Overview.xls</span>
               </div>
               <input type="file" id="new-pd-excel-file" accept=".xlsx, .xls" style="display: none;">
             </div>
@@ -825,7 +1042,8 @@
             </div>
             <div style="font-size: 10px; color: var(--text-secondary); line-height: 1.4; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
               <strong>Import Rules / คอลัมน์ที่ใช้อ่าน:</strong><br>
-              - Sheet name: <strong>Data</strong><br>
+              - Target File: <strong>LN Status Overview.xls</strong> (หรือไฟล์ Status Overview อื่นๆ)<br>
+              - Sheet name: <strong>data</strong><br>
               - ID: <strong>Production Order</strong> (ช่วง ID ที่ระบุด้านบน)<br>
               - Dwg No: <strong>Item_5</strong><br>
               - Part Name: <strong>Description</strong><br>
@@ -837,6 +1055,22 @@
           <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; border-top: 1px solid var(--border-glass); padding-top: 15px;">
             <button class="btn btn-secondary" id="btn-cancel-import-excel" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary);">Cancel</button>
             <button class="btn btn-glowing" id="btn-confirm-import-excel" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; box-shadow: var(--shadow-neon);">Import Orders</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- IMPORT EXCEL RESULT REPORT MODAL -->
+      <div id="import-excel-report-modal" class="modal-overlay hidden">
+        <div class="modal-content card-glass" style="max-width: 650px; width: 92%; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+          <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px;">
+            <h3 style="font-family: var(--font-display); font-size: 15px; color: var(--accent-teal); text-transform: uppercase; margin: 0;">📊 ผลการนำเข้า Excel</h3>
+            <span class="modal-close" id="btn-close-import-excel-report" style="cursor: pointer; font-size: 20px; color: var(--text-secondary);">&times;</span>
+          </div>
+          <div class="modal-body" id="import-excel-report-body" style="overflow-y: auto; max-height: 480px; display: flex; flex-direction: column; gap: 14px;">
+            <!-- Populated dynamically -->
+          </div>
+          <div class="modal-footer" style="display: flex; justify-content: flex-end; border-top: 1px solid var(--border-glass); padding-top: 15px; margin-top: 15px;">
+            <button class="btn btn-glowing" id="btn-close-import-excel-report-footer" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; box-shadow: var(--shadow-neon);">Close</button>
           </div>
         </div>
       </div>
@@ -880,21 +1114,22 @@
 
       <!-- PD PLAN & EDIT MODAL -->
       <div id="pd-plan-modal" class="modal-overlay hidden">
-        <div class="modal-content card-glass" style="max-width: 880px; width: 95%; padding: 22px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 12px 35px rgba(0,0,0,0.6);">
-          <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-glass); padding-bottom: 12px;">
+        <div class="modal-content card-glass" style="max-width: 950px; width: 95%; padding: 14px 18px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 12px 35px rgba(0,0,0,0.6);">
+          <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; border-bottom: 1px solid var(--border-glass); padding: 0 0 8px 0;">
             <div style="display: flex; align-items: center; gap: 10px;">
               <h3 id="pd-plan-title" style="font-family: var(--font-display); font-size: 15px; color: var(--accent-teal); text-transform: uppercase; margin: 0;">Production Order Details & Edit</h3>
               <span id="pd-plan-status-badge" style="font-size: 10px; font-weight: bold; padding: 2px 8px; border-radius: 4px; background: rgba(0, 242, 254, 0.1); color: var(--accent-teal); border: 1px solid var(--accent-teal);"></span>
+              <button id="btn-pd-plan-favorite" title="เพิ่มเป็นรายการโปรด" style="background: none; border: none; cursor: pointer; font-size: 18px; line-height: 1; padding: 0; color: var(--text-secondary);">&#9734;</button>
             </div>
             <span class="modal-close" id="btn-close-pd-plan" style="cursor: pointer; font-size: 22px; color: var(--text-secondary); line-height: 1;">&times;</span>
           </div>
-          <div class="modal-body" style="overflow-y: auto; max-height: 60vh; margin-bottom: 15px; display: flex; flex-direction: column; gap: 16px; padding-right: 4px;">
+          <div class="modal-body" style="overflow-y: auto; max-height: 65vh; margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px; padding: 4px 4px 6px 4px;">
             
             <!-- General Info Form -->
-            <div style="background: rgba(255,255,255,0.02); padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-glass); display: flex; flex-direction: column; gap: 10px;">
+            <div style="background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-glass); display: flex; flex-direction: column; gap: 8px;">
               <div style="font-size: 11px; font-weight: bold; color: var(--accent-teal); text-transform: uppercase; letter-spacing: 0.5px;">ข้อมูลทั่วไป (General Information)</div>
               
-              <div style="display: grid; grid-template-columns: 1.2fr 1.2fr 1.2fr 1.2fr; gap: 10px;">
+              <div style="display: grid; grid-template-columns: 110px 150px 1fr 150px; gap: 10px;">
                 <div class="form-group" style="display: flex; flex-direction: column; gap: 4px;">
                   <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary);">PD Number / ID</label>
                   <input type="text" id="edit-pd-id" readonly style="background: var(--bg-darkest); color: var(--accent-teal); border: 1px solid var(--border-glass); padding: 6px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; font-family: monospace; cursor: not-allowed; opacity: 0.9;">
@@ -908,12 +1143,17 @@
                   <input type="text" id="edit-pd-customer" placeholder="e.g. General" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 6px 8px; border-radius: 6px; font-size: 11px; outline: none;">
                 </div>
                 <div class="form-group" style="display: flex; flex-direction: column; gap: 4px;">
-                  <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary);">Dwg No (หมายเลขแบบ)</label>
-                  <input type="text" id="edit-pd-dwgno" placeholder="e.g. DWG-001" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 6px 8px; border-radius: 6px; font-size: 11px; outline: none;">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary);">Dwg No (หมายเลขแบบ)</label>
+                    <button type="button" id="btn-open-dwg-pdf" title="คลิกเพื่อเปิดไฟล์แบบ PDF (หรือดับเบิลคลิกที่ช่อง Dwg No)" style="background: rgba(2, 132, 199, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); font-size: 9px; font-weight: bold; border-radius: 4px; padding: 1px 5px; cursor: pointer; display: inline-flex; align-items: center; gap: 2px;">
+                      📄 PDF
+                    </button>
+                  </div>
+                  <input type="text" id="edit-pd-dwgno" placeholder="e.g. DWG-001" title="ดับเบิลคลิกเพื่อเปิดไฟล์แบบ PDF ใน Cloud / โฟลเดอร์ dwg" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 6px 8px; border-radius: 6px; font-size: 11px; outline: none; cursor: pointer;">
                 </div>
               </div>
 
-              <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px;">
+              <div style="display: grid; grid-template-columns: 1fr 120px 140px; gap: 10px;">
                 <div class="form-group" style="display: flex; flex-direction: column; gap: 4px;">
                   <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary);">Part Name (ชื่อชิ้นงาน)</label>
                   <input type="text" id="edit-pd-partname" placeholder="e.g. SR-53 ลิ่มมอเตอร์แกน Y" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 6px 8px; border-radius: 6px; font-size: 11px; outline: none;">
@@ -942,18 +1182,18 @@
               </div>
 
               <div style="overflow-x: auto; border: 1px solid var(--border-glass); border-radius: 8px; background: rgba(0,0,0,0.2);">
-                <table class="pd-plan-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 11px; min-width: 820px;">
+                <table class="pd-plan-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 11px;">
                   <thead>
                     <tr style="background: rgba(255,255,255,0.03); border-bottom: 1.5px solid var(--border-glass); color: var(--text-primary); font-weight: bold;">
-                      <th style="padding: 8px; width: 50px; text-align: center;">Step</th>
-                      <th style="padding: 8px; width: 190px;">Work Center (เครื่องจักร)</th>
-                      <th style="padding: 8px; width: 135px;">Operation Name</th>
-                      <th style="padding: 8px; width: 70px; text-align: center;">Setup (m)</th>
-                      <th style="padding: 8px; width: 80px; text-align: center;">Cycle (m/pc)</th>
-                      <th style="padding: 8px; width: 70px; text-align: center;">Est (m)</th>
-                      <th style="padding: 8px; width: 85px; text-align: center;">Status</th>
-                      <th style="padding: 8px; width: 165px; text-align: center; white-space: nowrap;">Schedule Time</th>
-                      <th style="padding: 8px; width: 35px; text-align: center;"></th>
+                      <th style="padding: 6px 4px; width: 44px; text-align: center;">Step</th>
+                      <th style="padding: 6px 6px; width: 160px;">Work Center (เครื่องจักร)</th>
+                      <th style="padding: 6px 6px; min-width: 110px;">Operation Name</th>
+                      <th style="padding: 6px 2px; width: 52px; text-align: center;">Setup (m)</th>
+                      <th style="padding: 6px 2px; width: 62px; text-align: center;">Cycle (m/pc)</th>
+                      <th style="padding: 6px 2px; width: 52px; text-align: center;">Est (m)</th>
+                      <th style="padding: 6px 4px; width: 75px; text-align: center;">Status</th>
+                      <th style="padding: 6px 4px; width: 125px; text-align: center; white-space: nowrap;">Schedule Time</th>
+                      <th style="padding: 6px 2px; width: 28px; text-align: center;"></th>
                     </tr>
                   </thead>
                   <tbody id="pd-plan-table-body" style="color: var(--text-secondary);">
@@ -963,12 +1203,55 @@
               </div>
             </div>
 
+            <!-- Welding Materials Section (Plan + Mat) -->
+            <div id="pd-plan-mat-section" class="hidden" style="display: none; flex-direction: column; gap: 6px; margin-top: 4px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 11px; font-weight: 800; color: #d97706; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 14px;">⚡</span> รายการวัสดุ / ชิ้นส่วนประกอบงานเชื่อม (Plan + Mat)
+                  </span>
+                  <span id="pd-plan-mat-count" style="font-size: 10.5px; color: #475569; font-weight: 600;"></span>
+                </div>
+                <div style="font-size: 10px; color: #0284c7; font-weight: 700; background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 4px; padding: 2px 8px;">
+                  🔗 ข้อกำหนด: วางแผนเชื่อมต่อจากแผนผลิตของ PD Mat. ทุกตัว
+                </div>
+              </div>
+
+              <div style="overflow-x: auto; border: 1.5px solid var(--border-glass); border-radius: 8px; background: rgba(255,255,255,0.02);">
+                <table class="pd-mat-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 11px;">
+                  <thead>
+                    <tr style="background: rgba(0,0,0,0.06); border-bottom: 2px solid var(--border-glass); color: #0f172a; font-weight: 800;">
+                      <th style="padding: 6px 8px; width: 130px; white-space: nowrap; color: #0f172a;">Mat. (รหัสแบบ/วัสดุ)</th>
+                      <th style="padding: 6px 8px; color: #0f172a;">Mat._1 (ชื่อรายการ / รายละเอียด)</th>
+                      <th style="padding: 6px 6px; width: 55px; text-align: center; white-space: nowrap; color: #0f172a;">Qty</th>
+                      <th style="padding: 6px 6px; width: 115px; text-align: center; white-space: nowrap; color: #0f172a;">Production Order</th>
+                      <th style="padding: 6px 6px; width: 95px; text-align: center; white-space: nowrap; color: #0f172a;">สถานะ</th>
+                      <th style="padding: 6px 8px; width: 115px; text-align: left; white-space: nowrap; color: #0f172a;">Op status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pd-plan-mat-table-body" style="color: #0f172a;">
+                    <!-- Dynamically populated mat rows -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Memo -->
+            <div class="form-group" style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary);">Memo (หมายเหตุ)</label>
+              <input type="text" id="edit-pd-memo" placeholder="หมายเหตุเพิ่มเติม..." style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 6px 8px; border-radius: 6px; font-size: 11px; outline: none;">
+            </div>
+
           </div>
           <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-glass); padding-top: 15px;">
-            <div>
+            <div style="display: flex; align-items: center; gap: 14px;">
               <button class="btn" id="btn-delete-this-pd" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--accent-red); color: var(--accent-red); font-weight: bold; transition: all 0.2s;">
                 🗑️ ลบ PD นี้
               </button>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); cursor: pointer; user-select: none;" title="เมื่อติ๊ก PD นี้จะถูกจำไว้ว่าผลิตเสร็จแล้ว และจะไม่ถูกนำกลับเข้าแผนอีกตอน Load App หรือ Import Excel ใหม่">
+                <input type="checkbox" id="chk-pd-completed-history" style="width: auto; margin: 0; cursor: pointer;">
+                ผลิตจริงเสร็จแล้ว
+              </label>
             </div>
             <div style="display: flex; gap: 10px; align-items: center;">
               <button class="btn" id="btn-export-pd-csv" style="padding: 8px 14px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-primary); font-weight: 600; display: flex; align-items: center; gap: 4px;">
@@ -1028,6 +1311,126 @@
         </div>
       </div>
 
+      <!-- ASSEMBLY BOM EXPLORER MODAL -->
+      <div id="assembly-bom-modal" class="modal-overlay hidden" style="z-index: 1050;">
+        <div class="modal-content card-glass" style="max-width: 1140px; width: 96%; max-height: 90vh; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 40px rgba(0,0,0,0.6); display: flex; flex-direction: column;">
+          
+          <!-- Modal Header -->
+          <div class="modal-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; border-bottom: 1px solid var(--border-glass); padding-bottom: 12px;">
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <h3 style="font-size: 16px; font-weight: 800; color: var(--accent-teal); margin: 0; display: flex; align-items: center; gap: 6px;">
+                  📑 รายการ BOM ทั้งหมดใน PD แม่ (BOM Explorer)
+                </h3>
+                <span id="bom-modal-pd-badge" style="font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 4px; background: rgba(0, 242, 254, 0.15); color: var(--accent-teal); border: 1px solid rgba(0, 242, 254, 0.3);">-</span>
+              </div>
+              <div id="bom-modal-pd-desc" style="font-size: 11.5px; color: var(--text-secondary); margin-top: 4px;">
+                -
+              </div>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <!-- PD Selector Dropdown inside modal -->
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <label for="bom-modal-pd-select" style="font-size: 11px; color: var(--text-secondary); font-weight: bold; white-space: nowrap;">เลือก PD แม่:</label>
+                <select id="bom-modal-pd-select" style="padding: 4px 8px; font-size: 11px; border-radius: 6px; background: var(--bg-darker); border: 1px solid var(--border-glass); color: var(--text-primary); outline: none; max-width: 220px;"></select>
+              </div>
+              <span class="modal-close" id="btn-close-assembly-bom" style="cursor: pointer; font-size: 24px; color: var(--text-secondary); line-height: 1; padding: 0 4px;">&times;</span>
+            </div>
+          </div>
+
+          <!-- Summary Badges & Stats Bar -->
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
+            <div style="flex: 1; min-width: 140px; padding: 8px 12px; border-radius: 8px; background: rgba(0,0,0,0.03); border: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 11px; font-weight: 700; color: #1e293b;">📦 Mat ทั้งหมด</span>
+              <strong id="bom-stat-total" style="font-size: 14px; font-weight: 800; color: #0f172a;">0</strong>
+            </div>
+            <div style="flex: 1; min-width: 140px; padding: 8px 12px; border-radius: 8px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 11px; font-weight: 700; color: #047857;">✅ เสร็จสิ้น (Complete)</span>
+              <strong id="bom-stat-completed" style="font-size: 14px; font-weight: 800; color: #047857;">0</strong>
+            </div>
+            <div style="flex: 1; min-width: 140px; padding: 8px 12px; border-radius: 8px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 11px; font-weight: 700; color: #92400e;">⏳ กำลังดำเนินการ</span>
+              <strong id="bom-stat-progress" style="font-size: 14px; font-weight: 800; color: #92400e;">0</strong>
+            </div>
+            <div style="flex: 1; min-width: 140px; padding: 8px 12px; border-radius: 8px; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 11px; font-weight: 700; color: #b91c1c;">⚠️ รอเบิก / ค้างจ่าย</span>
+              <strong id="bom-stat-toissue" style="font-size: 14px; font-weight: 800; color: #b91c1c;">0</strong>
+            </div>
+          </div>
+
+          <!-- Controls & Filter Toolbar -->
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; padding: 8px 10px; border-radius: 8px; background: rgba(0,0,0,0.02); border: 1px solid #cbd5e1;">
+            <!-- Status Filter Segmented Buttons -->
+            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;" id="bom-status-filter-group">
+              <span style="font-size: 11px; font-weight: 800; color: #0f172a; margin-right: 4px;">กรองสถานะ:</span>
+              <button type="button" class="bom-status-filter-btn active" data-filter="all" style="padding: 4px 10px; font-size: 11px; font-weight: 800; border-radius: 6px; border: 1px solid #0284c7; background: rgba(2, 132, 199, 0.16); color: #0369a1; cursor: pointer; transition: all 0.2s;">
+                ทั้งหมด (<span id="bom-filter-count-all">0</span>)
+              </button>
+              <button type="button" class="bom-status-filter-btn" data-filter="completed" style="padding: 4px 10px; font-size: 11px; font-weight: 700; border-radius: 6px; border: 1px solid #cbd5e1; background: transparent; color: #334155; cursor: pointer; transition: all 0.2s;">
+                ✅ เสร็จสิ้น (<span id="bom-filter-count-completed">0</span>)
+              </button>
+              <button type="button" class="bom-status-filter-btn" data-filter="in_progress" style="padding: 4px 10px; font-size: 11px; font-weight: 700; border-radius: 6px; border: 1px solid #cbd5e1; background: transparent; color: #334155; cursor: pointer; transition: all 0.2s;">
+                ⏳ กำลังดำเนินการ (<span id="bom-filter-count-progress">0</span>)
+              </button>
+              <button type="button" class="bom-status-filter-btn" data-filter="to_issue" style="padding: 4px 10px; font-size: 11px; font-weight: 700; border-radius: 6px; border: 1px solid #cbd5e1; background: transparent; color: #334155; cursor: pointer; transition: all 0.2s;">
+                ⚠️ รอเบิก (<span id="bom-filter-count-toissue">0</span>)
+              </button>
+            </div>
+
+            <!-- Scope selector & Search box -->
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <select id="bom-modal-scope-select" style="padding: 4px 8px; font-size: 11px; border-radius: 6px; background: var(--bg-darker); border: 1px solid var(--border-glass); color: var(--text-primary); outline: none;">
+                <option value="all">🌿 รวมทุกระดับ (Main + Sub-PDs)</option>
+                <option value="main">🎯 เฉพาะใน PD แม่ (Direct BOM)</option>
+              </select>
+              <div style="position: relative;">
+                <input type="text" id="bom-modal-search-input" placeholder="🔍 ค้นหารหัส / ชื่อ Mat / WC..." style="padding: 4px 10px; font-size: 11px; border-radius: 6px; background: var(--bg-darker); border: 1px solid var(--border-glass); color: var(--text-primary); outline: none; width: 180px;">
+              </div>
+            </div>
+          </div>
+
+          <!-- Table Container -->
+          <div style="flex: 1; overflow-y: auto; overflow-x: auto; margin-bottom: 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: rgba(255,255,255,0.7);">
+            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 11px;">
+              <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 10; border-bottom: 2px solid #cbd5e1;">
+                <tr style="color: #0f172a; font-weight: 800; text-transform: uppercase;">
+                  <th style="padding: 9px 4px; width: 32px; text-align: center;">#</th>
+                  <th style="padding: 9px 4px; width: 80px; text-align: center;">ประเภท</th>
+                  <th style="padding: 9px 4px; width: 90px;">อยู่ใน PD</th>
+                  <th style="padding: 9px 6px; width: 95px;">OP</th>
+                  <th style="padding: 9px 6px; width: 115px;">รหัส Mat</th>
+                  <th style="padding: 9px 10px; min-width: 280px;">รายการวัสดุ / Drawing No</th>
+                  <th style="padding: 9px 4px; width: 65px; text-align: right;">แผน (Est)</th>
+                  <th style="padding: 9px 4px; width: 65px; text-align: right;">เบิกจริง (Act)</th>
+                  <th style="padding: 9px 4px; width: 65px; text-align: right;">ค้างจ่าย</th>
+                  <th style="padding: 9px 6px; width: 110px; text-align: center;">สถานะ</th>
+                </tr>
+              </thead>
+              <tbody id="assembly-bom-table-body">
+                <!-- Rendered dynamically -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Modal Footer -->
+          <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-glass); padding-top: 12px; margin-top: 0;">
+            <div id="bom-modal-footer-stats" style="font-size: 11px; color: var(--text-secondary);">
+              แสดง 0 รายการ
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="btn" id="btn-export-bom-csv" style="padding: 6px 14px; font-size: 11px; font-weight: bold; border-radius: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                📥 Export CSV
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-close-assembly-bom-footer" style="padding: 6px 14px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary);">
+                ปิด (Close)
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
       <!-- WORK CENTER SETTINGS MODAL -->
       <div id="workcenter-settings-modal" class="modal-overlay hidden">
         <div class="modal-content card-glass" style="max-width: 1050px; width: 98%; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
@@ -1064,9 +1467,80 @@
               </tbody>
             </table>
           </div>
-          <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border-glass); padding-top: 15px;">
-            <button class="btn btn-secondary" id="btn-cancel-workcenter-settings" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary);">Cancel</button>
-            <button class="btn btn-glowing" id="btn-save-workcenter-settings" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; box-shadow: var(--shadow-neon);">Save Settings</button>
+          <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; border-top: 1px solid var(--border-glass); padding-top: 15px;">
+            <div style="display: flex; gap: 8px;">
+              <input type="file" id="input-load-wc-config-file" accept="application/json,.json" style="display: none;">
+              <button class="btn" id="btn-load-workcenter-config-file" title="โหลดค่าตั้งค่าเครื่องจักรจากไฟล์ .json" style="padding: 8px 14px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); font-weight: bold;">📂 Load File</button>
+              <button class="btn" id="btn-save-workcenter-config-file" title="บันทึกค่าตั้งค่าเครื่องจักรปัจจุบันเป็นไฟล์ .json" style="padding: 8px 14px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); font-weight: bold;">💾 Save File</button>
+            </div>
+            <span id="wc-config-filename-label" style="font-size: 10.5px; color: var(--text-secondary); text-align: center; flex: 1;">Config: (ค่าเริ่มต้นของระบบ)</span>
+            <div style="display: flex; gap: 10px;">
+              <button class="btn btn-secondary" id="btn-cancel-workcenter-settings" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary);">Cancel</button>
+              <button class="btn btn-glowing" id="btn-save-workcenter-settings" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; box-shadow: var(--shadow-neon);">Save Settings</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMPLETED PD LIST MODAL -->
+      <div id="completed-pd-list-modal" class="modal-overlay hidden">
+        <div class="modal-content card-glass" style="max-width: 650px; width: 92%; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+          <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px;">
+            <h3 style="font-family: var(--font-display); font-size: 15px; color: var(--accent-green, #16a34a); text-transform: uppercase; margin: 0;">✅ Production Order ที่ผลิตเสร็จแล้ว (<span id="completed-pd-list-count">0</span>)</h3>
+            <span class="modal-close" id="btn-close-completed-pd-list" style="cursor: pointer; font-size: 20px; color: var(--text-secondary);">&times;</span>
+          </div>
+          <p style="font-size: 10.5px; color: var(--text-secondary); margin: 0 0 12px 0;">PD ในรายการนี้จะไม่ถูกนำกลับเข้าแผนอีก ไม่ว่าจะ reload หน้า, sync ข้อมูลใหม่ หรือรัน AI Auto-Optimize (รายละเอียด Part Name / Customer ไม่แสดง เพราะถูกนำออกจากแผนแล้วถาวร)</p>
+          <div class="modal-body" style="overflow-y: auto; max-height: 420px;">
+            <div id="completed-pd-list-body" style="display: flex; flex-direction: column; gap: 6px;">
+              <!-- Populated dynamically -->
+            </div>
+            <div id="completed-pd-list-empty-msg" class="hidden" style="text-align: center; padding: 30px 20px; color: var(--text-secondary); font-size: 12px;">
+              ยังไม่มี Production Order ที่บันทึกว่าผลิตเสร็จแล้ว
+            </div>
+          </div>
+          <div class="modal-footer" style="display: flex; justify-content: flex-end; border-top: 1px solid var(--border-glass); padding-top: 15px; margin-top: 15px;">
+            <button class="btn btn-secondary" id="btn-close-completed-pd-list-footer" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary);">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PRODUCTION ORDER SEARCH MODAL -->
+      <div id="pd-search-modal" class="modal-overlay hidden">
+        <div class="modal-content card-glass" style="max-width: 620px; width: 92%; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+          <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px;">
+            <h3 style="font-family: var(--font-display); font-size: 15px; color: var(--accent-teal); text-transform: uppercase; margin: 0;">🔍 ค้นหา Production Order</h3>
+            <span class="modal-close" id="btn-close-pd-search" style="cursor: pointer; font-size: 20px; color: var(--text-secondary);">&times;</span>
+          </div>
+          <input type="text" id="pd-search-input" placeholder="ค้นหาด้วย PD Number / Part Name / Drawing Number..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 8px 12px; font-size: 12px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); outline: none; margin-bottom: 12px;">
+          <div class="modal-body" style="overflow-y: auto; max-height: 420px;">
+            <div id="pd-search-results" style="display: flex; flex-direction: column; gap: 6px;">
+              <!-- Populated dynamically -->
+            </div>
+            <div id="pd-search-empty-msg" style="text-align: center; padding: 30px 20px; color: var(--text-secondary); font-size: 12px;">
+              พิมพ์เพื่อค้นหา Production Order
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MACHINE CONTINUITY ANALYSIS MODAL -->
+      <div id="continuity-analysis-modal" class="modal-overlay hidden">
+        <div class="modal-content card-glass" style="max-width: 900px; width: 94%; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+          <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px;">
+            <h3 style="font-family: var(--font-display); font-size: 15px; color: #22d3ee; text-transform: uppercase; margin: 0;">📊 วิเคราะห์ความต่อเนื่องของสถานีงาน</h3>
+            <span class="modal-close" id="btn-close-continuity-analysis" style="cursor: pointer; font-size: 20px; color: var(--text-secondary);">&times;</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+            <label for="continuity-machine-select" style="font-size: 11px; color: var(--text-secondary); white-space: nowrap;">เลือกสถานีงาน:</label>
+            <select id="continuity-machine-select" style="flex: 1; background: var(--bg-darkest); border: 1px solid var(--border-glass); color: var(--text-primary); font-size: 12px; padding: 6px 10px; border-radius: 6px; outline: none;">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+          <div id="continuity-summary" style="font-size: 11px; color: var(--text-secondary); margin-bottom: 12px; background: var(--bg-darkest); padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-glass);">
+            เลือกสถานีงานเพื่อเริ่มวิเคราะห์
+          </div>
+          <div class="modal-body" style="overflow-y: auto; max-height: 440px;">
+            <div id="continuity-results" style="display: flex; flex-direction: column; gap: 8px;"></div>
           </div>
         </div>
       </div>
@@ -1075,7 +1549,7 @@
 
       <!-- WORK CENTER DAILY CALENDAR SCHEDULE MODAL -->
       <div id="wc-daily-schedule-modal" class="modal-overlay hidden">
-        <div class="modal-content card-glass" style="max-width: 650px; width: 90%; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
+        <div class="modal-content card-glass" style="max-width: 1100px; width: 94%; padding: 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
           <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-glass); padding-bottom: 12px; flex-wrap: wrap; gap: 10px;">
             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
               <h3 id="wc-daily-title" style="font-family: var(--font-display); font-size: 14px; color: var(--accent-teal); text-transform: uppercase; margin: 0;">Work Center Daily Schedule</h3>
@@ -1087,7 +1561,7 @@
             </div>
             <div style="display: flex; align-items: center; gap: 10px;">
               <button id="btn-export-daily-pdf" class="btn btn-glowing" style="padding: 6px 12px; font-size: 10px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; box-shadow: var(--shadow-neon); display: flex; align-items: center; gap: 4px;">
-                <span>📄 PDF (4M Checklist)</span>
+                <span>📄 PDF</span>
               </button>
               <span class="modal-close" id="btn-close-wc-daily" style="cursor: pointer; font-size: 20px; color: var(--text-secondary);">&times;</span>
             </div>
@@ -1102,7 +1576,7 @@
             <button id="btn-next-day" style="background: none; border: none; color: var(--accent-teal); cursor: pointer; font-size: 16px; padding: 4px 10px; border-radius: 4px; transition: background 0.2s;" title="ถัดไป 1 วัน">▶</button>
           </div>
           
-          <div class="modal-body" style="overflow-y: auto; max-height: 420px; padding-right: 5px;">
+          <div class="modal-body" style="overflow-y: auto; max-height: 72vh; padding-right: 5px;">
             <!-- Schedule timeline wrapper -->
             <div id="wc-daily-schedule-timeline" style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
               <!-- Calendar slots generated dynamically -->
@@ -1116,6 +1590,326 @@
           <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border-glass); padding-top: 15px; margin-top: 15px;">
             <button class="btn btn-secondary" id="btn-close-wc-daily-footer" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary);">Close</button>
           </div>
+        </div>
+      </div>
+
+      <!-- STORAGE LOCATION & CLOUD SYNC MODAL -->
+      <div id="storage-sync-modal" class="modal-overlay hidden">
+        <div class="modal-content card-glass" style="max-width: 700px; width: 95%; max-height: 90vh; overflow-y: auto; padding: 22px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-glass); padding-bottom: 12px; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 20px;">📁</span>
+              <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--accent-teal);">Setting Location Keep Data File (ตั้งค่าที่เก็บไฟล์ข้อมูล)</h3>
+            </div>
+            <button id="btn-close-sync-modal" style="background: none; border: none; font-size: 18px; color: var(--text-secondary); cursor: pointer; padding: 4px 8px;">✕</button>
+          </div>
+
+          <!-- Summary Status Box -->
+          <div style="background: rgba(2, 132, 199, 0.06); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 10px; font-size: 11.5px;">
+              <div>
+                <span style="color: var(--text-secondary);">สถานะการเชื่อมต่อ:</span>
+                <div id="sync-modal-status-text" style="font-weight: bold; margin-top: 2px;">พร้อมใช้งาน</div>
+              </div>
+              <div>
+                <span style="color: var(--text-secondary);">ซิงค์ล่าสุด:</span>
+                <div id="sync-modal-last-sync" style="font-weight: bold; margin-top: 2px;">ยังไม่มีการซิงค์</div>
+              </div>
+              <div>
+                <span style="color: var(--text-secondary);">PD ผลิตเสร็จแล้ว:</span>
+                <div id="sync-modal-completed-count" style="font-weight: bold; color: var(--accent-green); margin-top: 2px;">0 รายการ</div>
+              </div>
+              <div>
+                <span style="color: var(--text-secondary);">งานที่วางแผนอยู่:</span>
+                <div id="sync-modal-scheduled-count" style="font-weight: bold; color: var(--accent-teal); margin-top: 2px;">0 Tasks</div>
+              </div>
+              <div>
+                <span style="color: var(--text-secondary);">Work Center (เครื่องจักร):</span>
+                <div id="sync-modal-wc-count" style="font-weight: bold; color: #38bdf8; margin-top: 2px;">0 เครื่อง</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Data Files Overview & Connection Check -->
+          <div style="background: rgba(0,0,0,0.03); border: 1px solid var(--border-glass); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 11px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+              <div style="font-weight: 700; color: var(--text-primary);">📂 รายการไฟล์ข้อมูลและสถานะการเชื่อมต่อพื้นที่เก็บข้อมูล:</div>
+              <button type="button" id="btn-check-all-storage" class="btn btn-glowing" style="padding: 5px 12px; font-size: 11px; font-weight: 700; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; background: linear-gradient(135deg, #0284c7, #0ea5e9); color: #fff; border: none; cursor: pointer; box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3);">
+                <span>🔍</span>
+                <span>ตรวจสอบการเชื่อมต่อทั้งหมด</span>
+              </button>
+            </div>
+            <div id="storage-connection-summary-box" style="display: none; margin-bottom: 8px; padding: 7px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.35); color: #059669;"></div>
+            <div style="display: flex; flex-direction: column; gap: 6px; color: var(--text-secondary);">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <div>• <strong style="color: var(--text-primary);">Plan.json:</strong> แผนงานหลักบน Gantt Chart, สถานะงาน, และการตั้งค่าทั้งหมด</div>
+                <span id="conn-status-plan" style="font-size: 10px; font-family: monospace; padding: 1px 6px; border-radius: 4px; background: rgba(0,0,0,0.05); color: var(--text-secondary);">รอตรวจสอบ</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <div>• <strong style="color: #38bdf8;">machine_settings.json:</strong> ค่า Setting เครื่องจักร Work Centers ทั้งหมด (ชม.ทำงาน/วัน, เครื่องช่วยงาน, Lead Time)</div>
+                <span id="conn-status-machine" style="font-size: 10px; font-family: monospace; padding: 1px 6px; border-radius: 4px; background: rgba(0,0,0,0.05); color: var(--text-secondary);">รอตรวจสอบ</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <div>• <strong style="color: #22c55e;">completed_pds.json:</strong> รายการ PD ที่ผลิตเสร็จแล้ว (Completed PDs History)</div>
+                <span id="conn-status-completed" style="font-size: 10px; font-family: monospace; padding: 1px 6px; border-radius: 4px; background: rgba(0,0,0,0.05); color: var(--text-secondary);">รอตรวจสอบ</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <div>• <strong style="color: #f59e0b;">Status Overview (.xlsx / .xls):</strong> ไฟล์สถานะภาพรวมสำหรับนำเข้า Backlog (Sheet: <strong>data</strong>) และ BOM (<strong>Plan + Mat</strong>)</div>
+                <span id="conn-status-overview" style="font-size: 10px; font-family: monospace; padding: 1px 6px; border-radius: 4px; background: rgba(0,0,0,0.05); color: var(--text-secondary);">รอตรวจสอบ</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <div>• <strong style="color: #a855f7;">DWG / Drawing Files (.pdf / .dwg):</strong> โฟลเดอร์เก็บไฟล์แบบสั่งผลิตชิ้นงาน เชื่อมโยงตามรหัส Drawing No.</div>
+                <span id="conn-status-dwg" style="font-size: 10px; font-family: monospace; padding: 1px 6px; border-radius: 4px; background: rgba(0,0,0,0.05); color: var(--text-secondary);">รอตรวจสอบ</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Setting Location: Target Google Drive Folder -->
+          <div style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 6px;">
+              <label for="input-drive-folder-url" style="font-size: 12px; font-weight: 700; color: var(--text-primary);">
+                📁 Google Drive Folder Location (โฟลเดอร์จัดเก็บข้อมูล):
+              </label>
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <span id="badge-drive-conn-status" style="font-size: 10px; font-weight: 700; color: var(--accent-teal); background: rgba(2, 132, 199, 0.12); padding: 2px 6px; border-radius: 4px; font-family: monospace;">พร้อมเชื่อมต่อ</span>
+                <button type="button" id="btn-test-drive-folder" class="btn" title="ตรวจสอบการเชื่อมต่อโฟลเดอร์ Google Drive และไฟล์ข้อมูลหลัก" style="padding: 2px 8px; font-size: 10.5px; border: 1px solid rgba(2, 132, 199, 0.4); border-radius: 4px; background: rgba(2, 132, 199, 0.1); color: #0284c7; font-weight: 600; cursor: pointer;">
+                  🔌 เช็คการเชื่อมต่อ
+                </button>
+                <button type="button" id="btn-hero-copy-link" class="btn" style="padding: 2px 8px; font-size: 10.5px; border: 1px solid var(--border-glass); border-radius: 4px; background: rgba(0,0,0,0.04); color: var(--text-secondary); cursor: pointer;">
+                  📋 คัดลอก Link
+                </button>
+                <a id="link-open-drive-folder" href="https://drive.google.com/drive/folders/1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA?lfhs=2" target="_blank" rel="noopener noreferrer" style="font-size: 11px; color: var(--accent-teal); text-decoration: none; font-weight: 600;">
+                  🔗 เปิดโฟลเดอร์ใน Drive ↗
+                </a>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <input type="url" id="input-drive-folder-url" value="https://drive.google.com/drive/folders/1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA?lfhs=2" placeholder="https://drive.google.com/drive/folders/..." style="flex: 1; padding: 8px 12px; font-size: 11px; font-family: monospace; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.8); color: var(--text-primary);">
+              <button id="btn-save-drive-folder" class="btn btn-glowing" style="padding: 6px 14px; font-size: 11px; border-radius: 6px; white-space: nowrap;">
+                💾 บันทึก Folder
+              </button>
+              <button id="btn-reset-drive-folder" class="btn" title="รีเซ็ตเป็นโฟลเดอร์เริ่มต้น" style="padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(0,0,0,0.04); color: var(--text-secondary); white-space: nowrap;">
+                ↺ เริ่มต้น
+              </button>
+            </div>
+            <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px;">
+              * สามารถเปลี่ยนโฟลเดอร์ Google Drive สำหรับจัดเก็บและซิงค์ข้อมูลได้ตามต้องการ
+            </div>
+          </div>
+
+          <!-- Setting Location: DWG File Storage Location -->
+          <div style="margin-bottom: 16px; background: rgba(168, 85, 247, 0.05); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 8px; padding: 12px 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+              <label for="input-dwg-folder-url" style="font-size: 12px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                <span>📐</span>
+                <span>ตำแหน่งเก็บไฟล์ DWG / Drawing PDF (DWG File Location):</span>
+              </label>
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <span id="badge-dwg-location-type" style="font-size: 10px; font-weight: 700; color: #9333ea; background: rgba(168, 85, 247, 0.15); padding: 2px 6px; border-radius: 4px; font-family: monospace;">Google Drive</span>
+                <button type="button" id="btn-test-dwg-folder" class="btn" title="ตรวจสอบการเชื่อมต่อและนับจำนวนไฟล์แบบ PDF ในโฟลเดอร์ DWG" style="padding: 2px 8px; font-size: 10.5px; border: 1px solid rgba(168, 85, 247, 0.45); border-radius: 4px; background: rgba(168, 85, 247, 0.12); color: #9333ea; font-weight: 600; cursor: pointer;">
+                  🔌 เช็คโฟลเดอร์ DWG
+                </button>
+                <button type="button" id="btn-copy-dwg-folder-link" class="btn" style="padding: 2px 8px; font-size: 10.5px; border: 1px solid var(--border-glass); border-radius: 4px; background: rgba(0,0,0,0.04); color: var(--text-secondary); cursor: pointer;">
+                  📋 คัดลอก
+                </button>
+                <a id="link-open-dwg-folder" href="https://drive.google.com/drive/folders/17w0vlhgTfMW18p2H0LRq2aB1fOSHEdvg" target="_blank" rel="noopener noreferrer" style="font-size: 11px; color: #9333ea; text-decoration: none; font-weight: 700;">
+                  🔗 เปิดโฟลเดอร์ DWG ↗
+                </a>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <input type="text" id="input-dwg-folder-url" value="https://drive.google.com/drive/folders/17w0vlhgTfMW18p2H0LRq2aB1fOSHEdvg" placeholder="วางลิงก์ Google Drive Folder หรือพาธโฟลเดอร์ในเครื่อง เช่น D:\PD Plan\dwg" style="flex: 1; min-width: 240px; padding: 8px 12px; font-size: 11px; font-family: monospace; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.9); color: var(--text-primary);">
+              <button type="button" id="btn-browse-dwg-folder" class="btn" title="เลือกโฟลเดอร์เก็บไฟล์ DWG / PDF จากในเครื่องคอมพิวเตอร์" style="padding: 6px 12px; font-size: 11px; border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 6px; background: rgba(168, 85, 247, 0.12); color: #9333ea; font-weight: 600; white-space: nowrap; cursor: pointer;">
+                📂 เลือกโฟลเดอร์
+              </button>
+              <button type="button" id="btn-save-dwg-folder" class="btn btn-glowing" style="padding: 6px 14px; font-size: 11px; border-radius: 6px; white-space: nowrap;">
+                💾 บันทึกตำแหน่ง DWG
+              </button>
+              <button type="button" id="btn-reset-dwg-folder" class="btn" title="รีเซ็ตเป็นโฟลเดอร์ DWG เริ่มต้น" style="padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(0,0,0,0.04); color: var(--text-secondary); white-space: nowrap;">
+                ↺ เริ่มต้น
+              </button>
+            </div>
+            <div style="font-size: 10px; color: var(--text-secondary); margin-top: 5px; line-height: 1.4;">
+              * รองรับทั้ง <strong>ลิงก์โฟลเดอร์ Google Drive</strong> (วางลิงก์แล้วกด <strong>🔗 เปิดโฟลเดอร์ DWG ↗</strong> ได้ทันที) หรือกด <strong>📂 เลือกโฟลเดอร์</strong> เพื่อระบุโฟลเดอร์ในเครื่อง (เช่น <code>D:\PD Plan\dwg</code>)
+            </div>
+          </div>
+
+          <!-- Setting: Status Overview File (Backlog & Plan+mat) -->
+          <div style="margin-bottom: 16px; background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 12px 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+              <label for="input-status-overview-filename" style="font-size: 12px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                <span>📄</span>
+                <span>ไฟล์ Status Overview (นำเข้า Backlog & Plan+mat):</span>
+              </label>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span id="badge-status-overview-file" style="font-size: 10px; font-weight: 700; color: #d97706; background: rgba(245, 158, 11, 0.15); padding: 2px 6px; border-radius: 4px; font-family: monospace;">LN Status Overview.xlsx</span>
+                <button type="button" id="btn-test-status-overview" class="btn" title="ตรวจสอบการเชื่อมต่อไฟล์ Status Overview และข้อมูล BOM Plan+mat" style="padding: 2px 8px; font-size: 10.5px; border: 1px solid rgba(245, 158, 11, 0.45); border-radius: 4px; background: rgba(245, 158, 11, 0.12); color: #d97706; font-weight: 600; cursor: pointer;">
+                  🔌 เช็คไฟล์
+                </button>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="input-status-overview-filename" placeholder="e.g. LN Status Overview.xlsx" style="flex: 1; padding: 8px 12px; font-size: 11.5px; font-family: monospace; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.9); color: var(--text-primary);">
+              <input type="file" id="input-file-status-overview-hidden" accept=".xlsx, .xls" style="display: none;">
+              <button type="button" id="btn-browse-status-overview-file" class="btn" title="เลือกไฟล์จากเครื่องแล้วบันทึกเป็นค่าเริ่มต้นทันที" style="padding: 6px 12px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.8); color: var(--text-primary); white-space: nowrap; cursor: pointer;">
+                📂 เลือกไฟล์
+              </button>
+              <button type="button" id="btn-save-status-overview-file" class="btn btn-glowing" style="padding: 6px 14px; font-size: 11.5px; border-radius: 6px; white-space: nowrap;">
+                💾 บันทึกชื่อไฟล์
+              </button>
+              <button type="button" id="btn-reset-status-overview-file" class="btn" title="รีเซ็ตเป็นไฟล์เริ่มต้น (LN Status Overview.xlsx)" style="padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(0,0,0,0.04); color: var(--text-secondary); white-space: nowrap;">
+                ↺ เริ่มต้น
+              </button>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding-top: 6px; border-top: 1px dashed rgba(245, 158, 11, 0.25);">
+              <div id="status-overview-cache-badge" style="font-size: 11px; color: var(--accent-teal); font-weight: 600;">
+                ⚡ แคชในเครื่อง: พร้อมใช้งาน
+              </div>
+              <button type="button" id="btn-force-reload-status-overview" class="btn" title="ดึงไฟล์ใหม่จาก Cloud/Server และบันทึกแคชใหม่" style="padding: 3px 8px; font-size: 10px; border: 1px solid var(--border-glass); border-radius: 4px; background: rgba(0,0,0,0.04); color: var(--text-secondary); cursor: pointer;">
+                🔄 ดึงไฟล์ใหม่ (รีเฟรชแคช)
+              </button>
+            </div>
+            <div style="font-size: 10px; color: var(--text-secondary); margin-top: 5px; line-height: 1.4;">
+              * <strong>ระบบ Local Cache:</strong> ดึงข้อมูลจากไฟล์ Status Overview แคชไว้ในเครื่องเพื่อเปิดและประมวลผลได้รวดเร็วทันที · <strong>โหมดวางแผน:</strong> เมื่อดึง/อัปเดตไฟล์จะซิงค์ข้อมูลขึ้น Cloud ให้โดยอัตโนมัติ · <strong>โหมดดูแผน:</strong> เก็บไว้ในแคชเครื่องเท่านั้น
+            </div>
+          </div>
+
+          <!-- Endpoint URL Input -->
+          <div style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 6px;">
+              <label for="input-sync-endpoint" style="font-size: 12px; font-weight: 700; color: var(--text-primary);">
+                🔗 Web App Sync API URL (Google Apps Script):
+              </label>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span id="badge-endpoint-conn-status" style="font-size: 10px; font-weight: 700; color: var(--text-secondary); background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 4px; font-family: monospace;">ยังไม่ได้ตั้งค่า</span>
+                <button type="button" id="btn-test-sync-endpoint" class="btn" title="ทดสอบการเชื่อมต่อกับ Google Apps Script Web App URL" style="padding: 2px 8px; font-size: 10.5px; border: 1px solid rgba(2, 132, 199, 0.4); border-radius: 4px; background: rgba(2, 132, 199, 0.1); color: #0284c7; font-weight: 600; cursor: pointer;">
+                  🔌 ทดสอบ API
+                </button>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <input type="url" id="input-sync-endpoint" placeholder="https://script.google.com/macros/s/.../exec" style="flex: 1; padding: 8px 12px; font-size: 11.5px; font-family: monospace; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.8); color: var(--text-primary);">
+              <button id="btn-save-sync-endpoint" class="btn btn-glowing" style="padding: 6px 14px; font-size: 11.5px; border-radius: 6px; white-space: nowrap;">
+                💾 บันทึก URL
+              </button>
+            </div>
+            <div style="font-size: 10.5px; color: var(--text-secondary); margin-top: 4px;">
+              * นำ Web App URL ที่ได้จากการ Deploy สคริปต์ในโฟลเดอร์ Google Drive มาวางที่นี่เพื่อให้ GitHub Pages อ่าน-เขียน Plan.json อัตโนมัติ
+            </div>
+          </div>
+
+          <!-- Action Buttons: ด้านซ้าย Cloud Save / ด้านขวา Local Save -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <button id="btn-modal-cloud-save" class="btn btn-glowing" style="padding: 12px; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(135deg, #0284c7, #00f2fe); border: none; color: #fff; border-radius: 8px; cursor: pointer; box-shadow: 0 0 14px rgba(0, 242, 254, 0.35);">
+              <span style="font-size: 16px;">☁️</span>
+              <span>Cloud Save</span>
+            </button>
+            <button id="btn-modal-local-save" class="btn" style="padding: 12px; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(34, 197, 94, 0.15); border: 1.5px solid #22c55e; color: #22c55e; border-radius: 8px; cursor: pointer;">
+              <span style="font-size: 16px;">💾</span>
+              <span>Local Save</span>
+            </button>
+          </div>
+
+          <!-- Secondary Actions: ด้านซ้าย Cloud Load / ด้านขวา Local Load -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <button id="btn-modal-cloud-pull" class="btn" style="padding: 8px 12px; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(2, 132, 199, 0.08); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 6px; cursor: pointer;">
+              <span>🔄 Cloud Load (ดึงจาก Cloud)</span>
+            </button>
+            <label class="btn" style="padding: 8px 12px; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 6px; cursor: pointer; text-align: center; margin: 0;">
+              <span>📂 Local Load (เปิด Plan.json)</span>
+              <input type="file" id="input-import-backup" accept=".json" style="display: none;">
+            </label>
+          </div>
+
+          <!-- Auto-Sync on Close/Open Callout -->
+          <div style="background: rgba(56, 189, 248, 0.08); border-left: 3px solid #38bdf8; border-radius: 4px; padding: 8px 12px; margin-bottom: 16px; font-size: 11px; color: var(--text-secondary);">
+            ⚡ <strong>Cloud Save & Load อัตโนมัติ:</strong> ซิงค์และบันทึกข้อมูล <strong>Plan.json</strong>, <strong>machine_settings.json</strong> (การตั้งค่าเครื่องจักร) และ <strong>completed_pds.json</strong> (รายการ PD ที่เสร็จแล้ว) ทั้งหมดพร้อมกันอัตโนมัติ
+          </div>
+
+          <!-- Guide & Code Snippet Accordion -->
+          <details style="border-top: 1px solid var(--border-glass); padding-top: 12px; font-size: 11.5px;">
+            <summary style="cursor: pointer; font-weight: 700; color: var(--accent-teal); user-select: none;">
+              ℹ️ วิธีติดตั้ง Google Apps Script สำหรับเชื่อมต่อโฟลเดอร์ Google Drive (คลิกเพื่อดู)
+            </summary>
+            <div style="margin-top: 10px; line-height: 1.6; color: var(--text-secondary);">
+              <ol style="padding-left: 18px; margin-bottom: 10px;">
+                <li>เปิดโฟลเดอร์ Google Drive: <a id="guide-drive-link" href="https://drive.google.com/drive/folders/1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA?lfhs=2" target="_blank" style="color: var(--accent-teal);">คลิกที่นี่</a></li>
+                <li>สร้างไฟล์ Google Apps Script ใหม่ (หรือเข้า <a href="https://script.google.com" target="_blank" style="color: var(--accent-teal);">script.google.com</a>)</li>
+                <li>นำโค้ดในกรอบด้านล่างไปวางแทนที่โค้ดเดิมทั้งหมด แล้วกดบันทึก</li>
+                <li>กด <strong>ทำให้ใช้งานได้ (Deploy)</strong> &gt; <strong>การทำให้ใช้งานได้ใหม่ (New deployment)</strong></li>
+                <li>เลือกประเภท <strong>เว็บแอป (Web app)</strong> โดยตั้งค่า:
+                  <ul>
+                    <li>ดำเนินการในฐานะ: <strong>ฉัน (Me)</strong></li>
+                    <li>ผู้ที่มีสิทธิ์เข้าถึง: <strong>ทุกคน (Anyone)</strong></li>
+                  </ul>
+                </li>
+                <li>คัดลอก Web App URL ที่ได้ มาวางในช่องด้านบน แล้วกดบันทึก URL</li>
+              </ol>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-weight: bold; color: var(--text-primary);">สคริปต์ Google Apps Script (Folder ID: <span id="guide-folder-id-label">1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA</span>):</span>
+                <button id="btn-copy-gas-code" class="btn btn-action-small" style="font-size: 10px; padding: 2px 8px; border-radius: 4px;">
+                  📋 คัดลอกโค้ดทั้งหมด
+                </button>
+              </div>
+              <pre id="gas-code-preview" style="background: rgba(0,0,0,0.06); padding: 10px; border-radius: 6px; font-size: 10px; font-family: monospace; max-height: 140px; overflow-y: auto; border: 1px solid var(--border-glass); white-space: pre-wrap;"></pre>
+          </details>
+        </div>
+      </div>
+
+      <!-- DWG PDF VIEWER WINDOW POPUP MODAL -->
+      <div id="dwg-pdf-modal" class="modal-overlay hidden" style="position: fixed; inset: 0; z-index: 9999; backdrop-filter: blur(4px); background: rgba(0, 0, 0, 0.65); display: none; align-items: center; justify-content: center; padding: 15px;">
+        <div id="dwg-pdf-window" class="modal-content card-glass" style="max-width: 95vw; width: 1250px; height: 90vh; display: flex; flex-direction: column; padding: 12px 16px; border-radius: 12px; background: var(--bg-card, #0f172a); border: 1px solid var(--border-glass, rgba(255,255,255,0.12)); box-shadow: 0 20px 50px rgba(0,0,0,0.85); transition: all 0.2s ease;">
+          
+          <!-- Window Title Bar / Header (Draggable) -->
+          <div id="dwg-pdf-modal-header" class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px; margin-bottom: 8px; flex-shrink: 0; cursor: grab; user-select: none;" title="คลิกค้างแล้วลากเพื่อย้ายหน้าต่าง (Drag to move)">
+            <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; min-width: 0; pointer-events: none;">
+              <span style="font-size: 20px; line-height: 1;">📐</span>
+              <div style="display: flex; flex-direction: column; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <h3 id="dwg-pdf-modal-title" style="font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--accent-teal); margin: 0; white-space: nowrap;">
+                    Drawing PDF Viewer
+                  </h3>
+                  <span id="dwg-pdf-modal-badge" style="font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 4px; background: rgba(0, 242, 254, 0.12); color: var(--accent-teal); border: 1px solid var(--accent-teal); font-family: monospace;">
+                    DWG
+                  </span>
+                  <span style="font-size: 12px; opacity: 0.7; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 2px;" title="คลิกลากเพื่อย้ายหน้าต่าง">
+                    ✥ <span style="font-size: 10px;">ลากขยับได้</span>
+                  </span>
+                </div>
+                <span id="dwg-pdf-modal-filename" style="font-size: 11px; color: var(--text-secondary); font-family: monospace; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;" title=""></span>
+              </div>
+            </div>
+
+            <!-- Window Action Controls -->
+            <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: 12px; pointer-events: auto;">
+              <a id="btn-dwg-pdf-open-external" href="#" target="_blank" class="btn" title="เปิดดูในแท็บใหม่ของเบราว์เซอร์" style="padding: 4px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); color: var(--text-primary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+                <span>↗️ เปิดแท็บใหม่</span>
+              </a>
+              <a id="btn-dwg-pdf-download" href="#" download class="btn" title="ดาวน์โหลดไฟล์ PDF เก็บไว้ในเครื่อง" style="padding: 4px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; background: rgba(0, 242, 254, 0.12); border: 1px solid var(--accent-teal); color: var(--accent-teal); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+                <span>💾 ดาวน์โหลด</span>
+              </a>
+              <button id="btn-dwg-pdf-fullscreen" type="button" class="btn" title="ขยายเต็มจอ / ปรับขนาดปกติ" style="padding: 4px 8px; font-size: 12px; font-weight: bold; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); color: var(--text-primary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">
+                ⛶
+              </button>
+              <button id="btn-close-dwg-pdf-modal" type="button" style="background: none; border: none; cursor: pointer; font-size: 22px; color: var(--text-secondary); line-height: 1; padding: 2px 6px; border-radius: 4px; transition: color 0.15s;" title="ปิดหน้าต่างนี้ (Esc)">
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <!-- Window Content: PDF Frame Container -->
+          <div style="flex: 1; position: relative; width: 100%; height: 100%; border-radius: 8px; overflow: hidden; background: #0f172a; border: 1px solid var(--border-glass); display: flex; flex-direction: column;">
+            
+            <!-- Loading Overlay -->
+            <div id="dwg-pdf-loading" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: rgba(15, 23, 42, 0.9); z-index: 5; transition: opacity 0.2s;">
+              <span style="font-size: 28px;">⏳</span>
+              <span style="font-size: 13px; color: var(--text-primary); font-weight: 600;">กำลังโหลดเอกสารแบบ Drawing PDF...</span>
+            </div>
+
+            <!-- PDF Viewer Iframe -->
+            <iframe id="dwg-pdf-iframe" src="" style="width: 100%; height: 100%; border: none; flex: 1; background: #ffffff;" allow="autoplay" allowfullscreen></iframe>
+          </div>
+
         </div>
       </div>
 
