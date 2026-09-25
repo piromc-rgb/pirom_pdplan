@@ -1,5 +1,5 @@
 import { getPriorityWeight } from './scheduler.js';
-import { getJobPriority, isJobPriorityVisible, isJobProjectVisible, isJobCustomerVisible, isJobPdRangeVisible } from './gantt.js';
+import { getJobPriority, isJobPriorityVisible, isJobProjectVisible, isJobCustomerVisible, isJobPdRangeVisible, isPdMatchingRange } from './gantt.js';
 
 function parseColorToHex(colorStr) {
   if (!colorStr) return '#0284c7';
@@ -1405,20 +1405,16 @@ export class ResourcesController {
     const enabledRanges = (this.state.activePdRanges || []).filter(r => r.enabled);
     if (enabledRanges.length === 0) return [];
 
-    const matches = (pd) => enabledRanges.some(range => {
-      if (range.start && !range.end) return pd === range.start;
-      if (range.start && range.end) return pd >= range.start && pd <= range.end;
-      return false;
-    });
+    const matches = (pd) => enabledRanges.some(range => isPdMatchingRange(pd, range));
 
     const pdIds = new Set();
     (this.state.scheduledJobs || []).forEach(job => {
-      const pd = String(job.woId || '').trim();
-      if (pd && matches(pd)) pdIds.add(pd);
+      const pd = String(job.woId || job.id || '').trim();
+      if (pd && matches(pd)) pdIds.add(job.woId || pd.split('-')[0]);
     });
     (this.state.workOrders || []).forEach(wo => {
       const pd = String(wo.id || '').trim();
-      if (pd && matches(pd)) pdIds.add(pd);
+      if (pd && matches(pd)) pdIds.add(pd.split('-')[0]);
     });
 
     return Array.from(pdIds);

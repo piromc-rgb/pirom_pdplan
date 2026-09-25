@@ -45,6 +45,9 @@ class CentralState {
     // PD IDs marked as favorite (starred) by the user
     this.favoritePDs = {};
 
+    // User notes / memos for PDs, stored keyed by PD ID (e.g. { "PD2605364": "ใช้กับ SD Telescopic Fork" })
+    this.pdMemos = {};
+
     // Step IDs (e.g. "PD2605309-30") manually removed from a PD's Routing Steps
     // table in the edit modal - same idea as completedPdHistory but at the single
     // step level. Excluded from Excel imports and filtered back out on every app
@@ -460,6 +463,7 @@ class CentralState {
 
   // Notify all subscribers
   notify() {
+    this._oeeCache = null;
     this.subscribers.forEach(callback => callback(this));
     
     // Debounced save to pd.md and plan.md
@@ -483,7 +487,7 @@ class CentralState {
   }
 
   // Set active time scale
-  setActiveScale(scale) {
+  setActiveScale(scale, shouldRecompute = true, silent = false) {
     this.activeScale = scale;
 
     // A double-click-expanded merge group only stays expanded "temporarily" - once
@@ -494,15 +498,17 @@ class CentralState {
     const now = new Date();
     const nowWorkingHour = this.dateToWorkingHour(now);
 
-    // Recalculate scheduledJobs to fit the new scale bounds if not in manual whiteboard mode
-    if (this.schedulingModel === 'infinite') {
-      this.scheduledJobs = Scheduler.applyBackwardsInfinite(this.scheduledJobs, scale);
-    } else if (this.schedulingModel === 'finite') {
-      this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, scale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem, {
-        planMaterials: this.planMaterials,
-        dwgToPdMap: this.dwgToPdMap,
-        assemblyLinks: this.assemblyLinks
-      });
+    // Recalculate scheduledJobs to fit the new scale bounds if requested and not in manual whiteboard mode
+    if (shouldRecompute) {
+      if (this.schedulingModel === 'infinite') {
+        this.scheduledJobs = Scheduler.applyBackwardsInfinite(this.scheduledJobs, scale);
+      } else if (this.schedulingModel === 'finite') {
+        this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, scale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem, {
+          planMaterials: this.planMaterials,
+          dwgToPdMap: this.dwgToPdMap,
+          assemblyLinks: this.assemblyLinks
+        });
+      }
     }
 
     const config = this.getScaleConfig(scale);
@@ -510,7 +516,9 @@ class CentralState {
     const snap = config.snapHours;
     this.timelineOffset = Math.round(targetOffset / snap) * snap;
 
-    this.notify();
+    if (!silent) {
+      this.notify();
+    }
   }
 
   // Re-runs the Forward Finite / Backward Infinite pass over the current board
@@ -534,7 +542,6 @@ class CentralState {
       });
     }
 
-    this.savePlanToFile();
     this.notify();
   }
 
@@ -550,9 +557,11 @@ class CentralState {
   }
 
   // Set timeline horizontal scroll offset
-  setTimelineOffset(offset) {
+  setTimelineOffset(offset, silent = false) {
     this.timelineOffset = offset;
-    this.notify();
+    if (!silent) {
+      this.notify();
+    }
   }
 
   // Reset timeline scroll offset to 0
@@ -1657,6 +1666,11 @@ class CentralState {
     const qty = parseInt(data.qty) || 1;
     const priority = data.priority !== undefined ? data.priority : 'Normal';
     const memo = data.memo !== undefined ? data.memo : '';
+    if (memo) {
+      this.pdMemos[woId] = memo;
+    } else if (data.memo === '') {
+      delete this.pdMemos[woId];
+    }
     const dueHour = data.dueHour !== undefined ? data.dueHour : null;
     const steps = Array.isArray(data.steps) ? data.steps : [];
 
@@ -1780,6 +1794,9 @@ class CentralState {
     this.saveStateToHistory();
     this.scheduledJobs = this.scheduledJobs.filter(j => j.woId !== woId && j.id !== woId);
     this.workOrders = this.workOrders.filter(wo => wo.id !== woId);
+    if (this.pdMemos && this.pdMemos[woId]) {
+      delete this.pdMemos[woId];
+    }
     if (this.assemblyLinks) {
       this.assemblyLinks = this.assemblyLinks.filter(link => {
         const fromWo = this.parseStepId(link.from).woId;
@@ -1815,6 +1832,13 @@ class CentralState {
 
   // Calculate machine utility load (mock OEE based on scheduled hours and machine work hours/day)
   getMachineOEE(machine) {
+    if (!this._oeeCache) {
+      this._oeeCache = new Map();
+    }
+    if (this._oeeCache.has(machine)) {
+      return this._oeeCache.get(machine);
+    }
+
     // Only count jobs currently visible on the board (respecting the Priority/Project
     // filters) - a job hidden by those filters shouldn't count toward this machine's load.
     const jobs = this.scheduledJobs.filter(j => j.machine === machine && isJobPriorityVisible(j, this) && isJobProjectVisible(j, this) && isJobPdRangeVisible(j, this));
@@ -1833,7 +1857,11 @@ class CentralState {
 
     const utilization = Math.round((totalHours / baseCapacity) * 100);
     
-    if (utilization === 0) return { oee: 0, util: 0, active: 'Idle' };
+    if (utilization === 0) {
+      const res = { oee: 0, util: 0, active: 'Idle' };
+      this._oeeCache.set(machine, res);
+      return res;
+    }
     
     const activeJob = jobs.find(j => j.status === 'Running');
     const isPaused = jobs.some(j => j.status === 'Paused');
@@ -1852,11 +1880,13 @@ class CentralState {
     }
 
     const oee = Math.round(utilization * 0.95);
-    return {
+    const result = {
       oee: Math.min(99, oee),
       util: utilization, // Allow exceeding 100% to represent overtime load visually
       active: status
     };
+    this._oeeCache.set(machine, result);
+    return result;
   }
 
   renumberWorkOrderSteps(woId) {
@@ -2094,6 +2124,7 @@ class CentralState {
         mats.forEach(item => {
           const matCode = String(item.mat || '').trim();
           if (!matCode) return;
+          if (matCode.length === 10 && /^\d+$/.test(matCode)) return;
 
           let childWoId = this.dwgToPdMap?.[matCode]?.pdId;
           if (!childWoId && keyToWoIdMap.has(matCode)) childWoId = keyToWoIdMap.get(matCode);
@@ -2103,11 +2134,14 @@ class CentralState {
             const childSteps = [...woJobsMap.get(childWoId)].sort((a, b) => (b.stepNum || 0) - (a.stepNum || 0));
             const childFinalStep = childSteps[0];
 
-            if (childFinalStep && parentWeldStep) {
-              const k = `${childFinalStep.id}->${parentWeldStep.id}`;
+            const specificParentStep = item.stepNum ? parentSteps.find(s => s.stepNum === item.stepNum) : null;
+            const targetParentStep = specificParentStep || parentWeldStep;
+
+            if (childFinalStep && targetParentStep) {
+              const k = `${childFinalStep.id}->${targetParentStep.id}`;
               if (!linkSet.has(k)) {
                 linkSet.add(k);
-                links.push({ from: childFinalStep.id, to: parentWeldStep.id });
+                links.push({ from: childFinalStep.id, to: targetParentStep.id });
               }
             }
           }
@@ -2273,25 +2307,6 @@ class CentralState {
   }
 
   buildPlanPayload() {
-    const formattedRows = this.scheduledJobs.map(job => {
-      const dStart = this.workingHourToDate(job.startHour);
-      const dEnd = this.workingHourToDate(job.startHour + job.estHours);
-      
-      const startStr = `${dStart.toLocaleDateString('en-GB')} ${dStart.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
-      const endStr = `${dEnd.toLocaleDateString('en-GB')} ${dEnd.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
-      
-      return {
-        id: job.id,
-        woId: job.woId || '',
-        customer: job.customer || '',
-        partName: job.partName || '',
-        machine: job.machine,
-        start: startStr,
-        end: endStr,
-        status: job.status
-      };
-    });
-    
     return {
       scheduledJobs: this.scheduledJobs,
       nests: this.nests,
@@ -2307,10 +2322,10 @@ class CentralState {
       groupSameItem: this.groupSameItem !== false,
       completedPdHistory: this.completedPdHistory || {},
       favoritePDs: this.favoritePDs || {},
+      pdMemos: this.pdMemos || {},
       removedStepHistory: this.removedStepHistory || {},
       planMaterials: this.planMaterials || {},
-      dwgToPdMap: this.dwgToPdMap || {},
-      formattedRows
+      dwgToPdMap: this.dwgToPdMap || {}
     };
   }
 
@@ -2342,6 +2357,7 @@ class CentralState {
         }
       }
       if (data.favoritePDs) this.favoritePDs = data.favoritePDs;
+      if (data.pdMemos) this.pdMemos = Object.assign({}, this.pdMemos || {}, data.pdMemos);
       if (data.removedStepHistory) this.removedStepHistory = data.removedStepHistory;
       if (data.planMaterials) this.planMaterials = data.planMaterials;
       if (data.dwgToPdMap) this.dwgToPdMap = data.dwgToPdMap;
@@ -2351,7 +2367,26 @@ class CentralState {
       this.workOrders.forEach(wo => {
         wo.steps = wo.steps.filter(step => !this.isStepIdentityRemoved(wo.id, step.machine, step.name));
       });
+
+      // Synchronize pdMemos bidirectionally across scheduledJobs and workOrders
+      this.scheduledJobs.forEach(j => {
+        if (j.woId && j.memo && !this.pdMemos[j.woId]) {
+          this.pdMemos[j.woId] = j.memo;
+        } else if (j.woId && this.pdMemos[j.woId]) {
+          j.memo = this.pdMemos[j.woId];
+        }
+      });
+      this.workOrders.forEach(wo => {
+        if (this.pdMemos[wo.id]) {
+          wo.memo = this.pdMemos[wo.id];
+        } else if (wo.memo) {
+          this.pdMemos[wo.id] = wo.memo;
+        }
+      });
       this.deduplicateAllWorkOrders();
+      if (this.planMaterials && Object.keys(this.planMaterials).length > 0) {
+        this.autoLinkAssemblies();
+      }
       this.notify();
     }
   }
@@ -2515,7 +2550,10 @@ class CentralState {
       this.storageSync.pushToCloud(payload);
     } else {
       try {
-        localStorage.setItem('pdplan_cached_plan', JSON.stringify(payload));
+        const payloadStr = JSON.stringify(payload);
+        if (payloadStr.length < 4 * 1024 * 1024) {
+          localStorage.setItem('pdplan_cached_plan', payloadStr);
+        }
       } catch (e) {}
     }
 

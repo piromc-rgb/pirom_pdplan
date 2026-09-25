@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 >nul
-title CHAKEN Planing Pro - PD Plan
+title CHAKEN Planing v1.0 - PD Plan
 cd /d "%~dp0"
 
 echo ======================================================================
-echo           Starting CHAKEN Planing Pro (PD Plan)
+echo           Starting CHAKEN Planing v1.0 (PD Plan)
 echo ======================================================================
 echo Web App URL: http://localhost:5173/pirom_pdplan/
 echo.

@@ -12,6 +12,9 @@
   --border-glass: rgba(0, 0, 0, 0.08);
   --border-focus: rgba(0, 122, 255, 0.4);
   
+  /* Layout Dimensions */
+  --sidebar-left-width: 280px;
+  
   /* Accent Colors */
   --accent-teal: #0284c7;     /* Scheduled - Sky 600 */
   --accent-green: #16a34a;    /* Running - Green 600 */
@@ -161,19 +164,38 @@ body {
   gap: 8px;
 }
 
+.brand-logo .brand-chaken,
 .brand-logo .brand-mie {
   font-family: var(--font-display);
   font-weight: 900;
-  font-size: 22px;
-  color: var(--accent-red);
-  letter-spacing: 1px;
+  font-size: 24px;
+  color: #d6534b;
+  letter-spacing: 0.8px;
+  line-height: 1;
 }
 
+.brand-logo .brand-planing,
 .brand-logo .brand-trak {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 20px;
+  font-size: 21px;
   color: var(--text-primary);
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+.brand-logo .brand-version {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(214, 83, 75, 0.1);
+  color: #d6534b;
+  border: 1px solid rgba(214, 83, 75, 0.35);
+  line-height: 1.2;
+  letter-spacing: 0.5px;
+  user-select: none;
 }
 
 .brand-logo .badge {
@@ -519,7 +541,7 @@ body.dark-theme .user-mode-item.item-plan.active {
 /* 2. LAYOUT GRID */
 .main-layout {
   display: grid;
-  grid-template-columns: 280px 1fr 280px;
+  grid-template-columns: var(--sidebar-left-width, 280px) 1fr 280px;
   gap: 15px;
   height: calc(100vh - 70px - 40px); /* 70px header, 40px kiosk closed title */
   padding: 15px;
@@ -546,6 +568,68 @@ body.dark-theme .user-mode-item.item-plan.active {
 /* LEFT SIDEBAR: PIPELINE */
 .sidebar-left {
   height: 100%;
+  position: relative;
+  overflow: visible !important;
+}
+
+/* Sidebar Left Resizer Splitter */
+.sidebar-left-resizer {
+  position: absolute;
+  top: 0;
+  right: -13px; /* Centered in the 15px gap between sidebar and board */
+  width: 11px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  touch-action: none;
+}
+
+.sidebar-left-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 3px;
+  background: transparent;
+  border-radius: 2px;
+  transition: background 0.15s ease;
+}
+
+.sidebar-left-resizer::after {
+  content: '';
+  width: 4px;
+  height: 44px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.45);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.15);
+  transition: height 0.2s ease, width 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sidebar-left-resizer:hover::before,
+.sidebar-left-resizer.resizing::before {
+  background: rgba(2, 132, 199, 0.15);
+}
+
+.sidebar-left-resizer:hover::after,
+.sidebar-left-resizer.resizing::after {
+  height: 72px;
+  width: 5px;
+  background: var(--accent-teal);
+  box-shadow: 0 0 10px rgba(2, 132, 199, 0.7);
+}
+
+body.sidebar-left-resizing {
+  user-select: none !important;
+  cursor: col-resize !important;
+}
+
+body.sidebar-left-resizing * {
+  cursor: col-resize !important;
 }
 
 .sidebar-header {
@@ -2016,7 +2100,7 @@ body.dark-theme .user-mode-item.item-plan.active {
 }
 
 .main-layout.hide-resources {
-  grid-template-columns: 280px 1fr !important;
+  grid-template-columns: var(--sidebar-left-width, 280px) 1fr !important;
 }
 .main-layout.hide-resources .sidebar-right {
   display: none !important;
@@ -3095,6 +3179,287 @@ body.dark-theme .pd-header-item {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* ==========================================================================
+   Classic Windows Explorer-style Assembly TreeView (Sidebar)
+   ========================================================================== */
+.treeview-container {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 11.5px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  user-select: none;
+}
+
+.treeview-item {
+  position: relative;
+}
+
+.treeview-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  min-height: 22px;
+}
+
+.treeview-row:hover {
+  background: rgba(0, 242, 254, 0.08);
+}
+
+.treeview-row.selected {
+  background: rgba(0, 242, 254, 0.16);
+  border-color: var(--accent-teal);
+  font-weight: 700;
+}
+
+.treeview-row.selected .treeview-pd-id {
+  color: var(--accent-teal);
+}
+
+.treeview-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--border-glass, #94a3b8);
+  background: var(--bg-card, #1e293b);
+  color: var(--text-primary, #e2e8f0);
+  font-family: monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 9.5px;
+  border-radius: 2px;
+  cursor: pointer;
+  margin-right: 3px;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  transition: all 0.1s;
+}
+
+.treeview-toggle:hover {
+  border-color: var(--accent-teal, #00f2fe);
+  color: var(--accent-teal, #00f2fe);
+}
+
+.treeview-toggle.empty {
+  border: none;
+  background: transparent;
+  cursor: default;
+  visibility: hidden;
+  box-shadow: none;
+}
+
+.treeview-icon {
+  font-size: 12px;
+  margin-right: 3px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.treeview-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treeview-pd-id {
+  font-weight: 700;
+  color: var(--accent-teal);
+}
+
+.treeview-desc {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
+.treeview-status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-left: 3px;
+}
+
+.treeview-status-dot.released {
+  background: #16a34a;
+  box-shadow: 0 0 4px #16a34a;
+}
+
+.treeview-status-dot.working {
+  background: #ca8a04;
+  box-shadow: 0 0 4px #ca8a04;
+}
+
+.treeview-status-dot.waiting {
+  background: #dc2626;
+  box-shadow: 0 0 4px #dc2626;
+}
+
+.treeview-children {
+  position: relative;
+  padding-left: 18px;
+  margin-left: 6px;
+  border-left: 1px dotted #94a3b8;
+}
+
+.treeview-children > .treeview-item::before {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: -18px;
+  width: 16px;
+  height: 0;
+  border-bottom: 1px dotted #94a3b8;
+}
+
+.treeview-children > .treeview-item:last-child::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 0;
+  left: -19px;
+  width: 2px;
+  background: var(--bg-card, var(--bg-dark, #0f172a));
+}
+
+/* ==========================================================================
+   Assembly Parts Tree Diagram - Print Styles
+   Prints Tree Diagram matching screenshot format with Legend in top-left, fitted to page
+   ========================================================================== */
+@media print {
+  @page {
+    size: landscape;
+    margin: 5mm 6mm;
+  }
+
+  body.printing-assembly-tree {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    overflow: hidden !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Force exact colors for all cards, borders, badges, SVG paths */
+  body.printing-assembly-tree * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide everything outside of the assembly tree container, including the print header banner */
+  body.printing-assembly-tree .app-header,
+  body.printing-assembly-tree .app-nav,
+  body.printing-assembly-tree .sidebar-left,
+  body.printing-assembly-tree .sidebar-right,
+  body.printing-assembly-tree .sidebar,
+  body.printing-assembly-tree .sidebar-container,
+  body.printing-assembly-tree .gantt-header,
+  body.printing-assembly-tree .gantt-board-wrapper,
+  body.printing-assembly-tree .gantt-board,
+  body.printing-assembly-tree .gantt-timeline-ruler,
+  body.printing-assembly-tree .timeline-nav-container,
+  body.printing-assembly-tree .timeline-nav-controls,
+  body.printing-assembly-tree .gantt-legend,
+  body.printing-assembly-tree .assembly-tree-toolbar,
+  body.printing-assembly-tree #assembly-tree-print-header,
+  body.printing-assembly-tree .modal-backdrop,
+  body.printing-assembly-tree .sync-toast,
+  body.printing-assembly-tree #board-actions-dropdown,
+  body.printing-assembly-tree .floating-action-btn,
+  body.printing-assembly-tree .btn-action-small {
+    display: none !important;
+  }
+
+  body.printing-assembly-tree .app-container,
+  body.printing-assembly-tree .app-main,
+  body.printing-assembly-tree .gantt-container {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  body.printing-assembly-tree #assembly-tree-view-wrapper {
+    display: block !important;
+    position: relative !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: #ffffff !important;
+    border: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  body.printing-assembly-tree #assembly-tree-canvas-container {
+    display: block !important;
+    position: relative !important;
+    width: 100% !important;
+    height: 680px !important;
+    max-height: 680px !important;
+    overflow: hidden !important;
+    background: #ffffff !important;
+    page-break-inside: avoid !important;
+    page-break-after: avoid !important;
+    border: none !important;
+    box-sizing: border-box !important;
+  }
+
+  body.printing-assembly-tree #assembly-tree-legend-container {
+    display: flex !important;
+    position: absolute !important;
+    top: 14px !important;
+    left: 14px !important;
+    z-index: 50 !important;
+    pointer-events: none !important;
+  }
+
+  body.printing-assembly-tree #assembly-tree-legend-container > div,
+  body.printing-assembly-tree #assembly-tree-header-box {
+    box-shadow: none !important;
+    border: 1.5px solid #1e293b !important;
+    background: #ffffff !important;
+  }
+
+  body.printing-assembly-tree #assembly-tree-zoom-plane {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    overflow: visible !important;
+    transform: translate(var(--tree-print-pan-x, 0px), var(--tree-print-pan-y, 0px)) scale(var(--tree-print-scale, 1)) !important;
+    transform-origin: 0 0 !important;
+  }
+
+  body.printing-assembly-tree #assembly-tree-svg,
+  body.printing-assembly-tree #assembly-tree-nodes-container {
+    overflow: visible !important;
+  }
 }
 
 

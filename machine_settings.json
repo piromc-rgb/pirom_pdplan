@@ -1,6 +1,15 @@
 {
-  "updatedAt": "2026-09-22T15:31:20.523Z",
+  "updatedAt": "2026-09-24T14:16:30.497Z",
   "workCenters": {
+    "DEA028": {
+      "capacity": 1,
+      "workHoursPerDay": 8,
+      "color": "var(--accent-orange)",
+      "name": "CNC CL-32",
+      "altMachines": "",
+      "transferMinutes": 10,
+      "leadTimeDays": 0
+    },
     "DEA012": {
       "capacity": 1,
       "workHoursPerDay": 8,
@@ -33,7 +42,7 @@
       "workHoursPerDay": 10,
       "color": "var(--accent-red)",
       "name": "CNC ST30",
-      "altMachines": "DEA021",
+      "altMachines": "DEA028",
       "transferMinutes": 10,
       "leadTimeDays": 0
     },
@@ -453,6 +462,7 @@
     }
   },
   "workCenterOrder": [
+    "DEA028",
     "DEA012",
     "DEA016",
     "DEA021",

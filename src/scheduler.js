@@ -141,43 +141,122 @@ export class Scheduler {
     const allWoIds = options.distinctWoIds || [];
 
     // 1. Dash-suffix hierarchy (child.woId startsWith parent.woId + '-')
-    allWoIds.forEach(id => {
-      if (id !== parentWoId && id.startsWith(parentWoId + '-')) {
-        children.add(id);
+    if (allWoIds && allWoIds.length > 0) {
+      if (!options._prefixChildrenMap) {
+        const pMap = new Map();
+        for (let i = 0; i < allWoIds.length; i++) {
+          const id = allWoIds[i];
+          let idx = id.indexOf('-');
+          while (idx !== -1) {
+            const parent = id.substring(0, idx);
+            let list = pMap.get(parent);
+            if (!list) {
+              list = [];
+              pMap.set(parent, list);
+            }
+            list.push(id);
+            idx = id.indexOf('-', idx + 1);
+          }
+        }
+        options._prefixChildrenMap = pMap;
       }
-    });
+      const list = options._prefixChildrenMap.get(parentWoId);
+      if (list) {
+        for (let i = 0; i < list.length; i++) children.add(list[i]);
+      }
+    }
 
     // 2. Assembly links (link.from belongs to child PD, link.to belongs to parent PD)
-    assemblyLinks.forEach(link => {
-      const fromWo = (link.from || '').split('-')[0];
-      const toWo = (link.to || '').split('-')[0];
-      if (toWo === parentWoId && fromWo && fromWo !== parentWoId) {
-        children.add(fromWo);
+    if (assemblyLinks && assemblyLinks.length > 0) {
+      if (!options._linkChildrenMap) {
+        const lMap = new Map();
+        for (let i = 0; i < assemblyLinks.length; i++) {
+          const link = assemblyLinks[i];
+          const fromWo = (link.from || '').split('-')[0];
+          const toWo = (link.to || '').split('-')[0];
+          if (toWo && fromWo && toWo !== fromWo) {
+            let list = lMap.get(toWo);
+            if (!list) {
+              list = [];
+              lMap.set(toWo, list);
+            }
+            list.push(fromWo);
+          }
+        }
+        options._linkChildrenMap = lMap;
       }
-    });
+      const list = options._linkChildrenMap.get(parentWoId);
+      if (list) {
+        for (let i = 0; i < list.length; i++) children.add(list[i]);
+      }
+    }
 
     // 3. Materials / Child component PDs from sheet Plan + Mat (planMaterials)
     const mats = planMaterials[parentWoId] || [];
-    mats.forEach(item => {
-      const matCode = String(item.mat || '').trim();
-      if (!matCode) return;
-      if (dwgToPdMap[matCode]?.pdId) {
-        const cId = dwgToPdMap[matCode].pdId;
-        if (cId !== parentWoId) children.add(cId);
+    if (mats.length > 0) {
+      if (options.jobs && !options._dwgJobMap) {
+        const dMap = new Map();
+        for (let i = 0; i < options.jobs.length; i++) {
+          const j = options.jobs[i];
+          if (j.woId) {
+            if (j.dwgNo && !dMap.has(j.dwgNo.trim())) {
+              dMap.set(j.dwgNo.trim(), j.woId);
+            }
+            if (!dMap.has(j.woId)) {
+              dMap.set(j.woId, j.woId);
+            }
+          }
+        }
+        options._dwgJobMap = dMap;
       }
-      if (options.jobs) {
-        const match = options.jobs.find(j => (j.dwgNo && j.dwgNo.trim() === matCode) || j.woId === matCode);
-        if (match && match.woId && match.woId !== parentWoId) {
-          children.add(match.woId);
+
+      if (options.allWOs && !options._dwgWoMap) {
+        const wMap = new Map();
+        for (let i = 0; i < options.allWOs.length; i++) {
+          const w = options.allWOs[i];
+          if (w.id) {
+            if (w.dwgNo && !wMap.has(w.dwgNo.trim())) {
+              wMap.set(w.dwgNo.trim(), w.id);
+            }
+            if (!wMap.has(w.id)) {
+              wMap.set(w.id, w.id);
+            }
+          }
+        }
+        options._dwgWoMap = wMap;
+      }
+
+      for (let i = 0; i < mats.length; i++) {
+        const matCode = String(mats[i].mat || '').trim();
+        if (!matCode) continue;
+        if (dwgToPdMap[matCode]?.pdId) {
+          const cId = dwgToPdMap[matCode].pdId;
+          if (cId !== parentWoId) children.add(cId);
+        }
+        if (options._dwgJobMap) {
+          const matchWoId = options._dwgJobMap.get(matCode);
+          if (matchWoId && matchWoId !== parentWoId) {
+            children.add(matchWoId);
+          }
+        } else if (options.jobs) {
+          const match = options.jobs.find(j => (j.dwgNo && j.dwgNo.trim() === matCode) || j.woId === matCode);
+          if (match && match.woId && match.woId !== parentWoId) {
+            children.add(match.woId);
+          }
+        }
+        if (options._dwgWoMap) {
+          const matchId = options._dwgWoMap.get(matCode);
+          if (matchId && matchId !== parentWoId) {
+            children.add(matchId);
+          }
+        } else if (options.allWOs) {
+          const match = options.allWOs.find(w => (w.dwgNo && w.dwgNo.trim() === matCode) || w.id === matCode);
+          if (match && match.id && match.id !== parentWoId) {
+            children.add(match.id);
+          }
         }
       }
-      if (options.allWOs) {
-        const match = options.allWOs.find(w => (w.dwgNo && w.dwgNo.trim() === matCode) || w.id === matCode);
-        if (match && match.id && match.id !== parentWoId) {
-          children.add(match.id);
-        }
-      }
-    });
+    }
 
     return Array.from(children);
   }
@@ -295,39 +374,144 @@ export class Scheduler {
       ...jobs.map(j => j.woId).filter(Boolean),
       ...existingScheduledJobs.map(j => j.woId).filter(Boolean)
     ])];
-    const childrenOf = new Map(allDistinctWoIds.map(id => [id, []]));
-    allDistinctWoIds.forEach(parentId => {
-      const kids = Scheduler.getChildWoIds(parentId, {
-        planMaterials: options.planMaterials,
-        dwgToPdMap: options.dwgToPdMap,
-        assemblyLinks: options.assemblyLinks,
-        distinctWoIds: allDistinctWoIds,
-        jobs: [...existingScheduledJobs, ...jobs]
-      });
-      childrenOf.set(parentId, kids);
+    const allCombinedJobs = [...existingScheduledJobs, ...jobs];
+
+    const prefixChildren = new Map();
+    allDistinctWoIds.forEach(id => {
+      let idx = id.indexOf('-');
+      while (idx !== -1) {
+        const parent = id.substring(0, idx);
+        let list = prefixChildren.get(parent);
+        if (!list) {
+          list = [];
+          prefixChildren.set(parent, list);
+        }
+        list.push(id);
+        idx = id.indexOf('-', idx + 1);
+      }
     });
 
-    // Remaining (not-yet-scheduled) steps per WO - small arrays (routing steps per WO)
+    const linkChildren = new Map();
+    (options.assemblyLinks || []).forEach(link => {
+      const fromWo = (link.from || '').split('-')[0];
+      const toWo = (link.to || '').split('-')[0];
+      if (toWo && fromWo && toWo !== fromWo) {
+        let list = linkChildren.get(toWo);
+        if (!list) {
+          list = [];
+          linkChildren.set(toWo, list);
+        }
+        list.push(fromWo);
+      }
+    });
+
+    const dwgMap = new Map();
+    const woMap = new Map();
+    for (let i = 0; i < allCombinedJobs.length; i++) {
+      const j = allCombinedJobs[i];
+      if (j.woId) {
+        if (j.dwgNo) {
+          const d = j.dwgNo.trim();
+          if (!dwgMap.has(d)) dwgMap.set(d, j.woId);
+        }
+        if (!woMap.has(j.woId)) woMap.set(j.woId, j.woId);
+      }
+    }
+
+    const planMats = options.planMaterials || {};
+    const dwgMapObj = options.dwgToPdMap || {};
+    const childrenOf = new Map();
+    for (let pIdx = 0; pIdx < allDistinctWoIds.length; pIdx++) {
+      const parentId = allDistinctWoIds[pIdx];
+      const children = new Set();
+      const pKids = prefixChildren.get(parentId);
+      if (pKids) {
+        for (let i = 0; i < pKids.length; i++) children.add(pKids[i]);
+      }
+      const lKids = linkChildren.get(parentId);
+      if (lKids) {
+        for (let i = 0; i < lKids.length; i++) children.add(lKids[i]);
+      }
+      const mats = planMats[parentId];
+      if (mats) {
+        for (let i = 0; i < mats.length; i++) {
+          const matCode = String(mats[i].mat || '').trim();
+          if (!matCode) continue;
+          const mapped = dwgMapObj[matCode]?.pdId;
+          if (mapped && mapped !== parentId) children.add(mapped);
+          const matchWo = dwgMap.get(matCode) || woMap.get(matCode);
+          if (matchWo && matchWo !== parentId) children.add(matchWo);
+        }
+      }
+      childrenOf.set(parentId, Array.from(children));
+    }
+
+    // Remaining (not-yet-scheduled) steps per WO - sorted ascending by stepNum
     const remainingStepsByWo = new Map();
     jobs.forEach(job => {
       if (!job.woId) return;
-      if (!remainingStepsByWo.has(job.woId)) remainingStepsByWo.set(job.woId, []);
-      remainingStepsByWo.get(job.woId).push(job);
+      let arr = remainingStepsByWo.get(job.woId);
+      if (!arr) {
+        arr = [];
+        remainingStepsByWo.set(job.woId, arr);
+      }
+      arr.push(job);
     });
+    remainingStepsByWo.forEach(arr => arr.sort((a, b) => a.stepNum - b.stepNum));
+
+    // Inverted index child -> parents for O(1) unscheduled child checks
+    const parentsOfChild = new Map();
+    childrenOf.forEach((kids, parentId) => {
+      kids.forEach(cid => {
+        let plist = parentsOfChild.get(cid);
+        if (!plist) {
+          plist = [];
+          parentsOfChild.set(cid, plist);
+        }
+        plist.push(parentId);
+      });
+    });
+
+    const unscheduledChildCount = new Map();
+    allDistinctWoIds.forEach(parentId => {
+      const kids = childrenOf.get(parentId);
+      if (!kids || kids.length === 0) {
+        unscheduledChildCount.set(parentId, 0);
+        return;
+      }
+      let count = 0;
+      for (let k = 0; k < kids.length; k++) {
+        const arr = remainingStepsByWo.get(kids[k]);
+        if (arr && arr.length > 0) count++;
+      }
+      unscheduledChildCount.set(parentId, count);
+    });
+
     const removeFromWoRemaining = (job) => {
       if (!job.woId) return;
       const arr = remainingStepsByWo.get(job.woId);
       if (!arr) return;
-      const idx = arr.indexOf(job);
-      if (idx !== -1) arr.splice(idx, 1);
+      if (arr[0] === job) {
+        arr.shift();
+      } else {
+        const idx = arr.indexOf(job);
+        if (idx !== -1) arr.splice(idx, 1);
+      }
+      if (arr.length === 0) {
+        // Child WO has no more remaining steps! Update parents
+        const parents = parentsOfChild.get(job.woId);
+        if (parents) {
+          for (let p = 0; p < parents.length; p++) {
+            const pid = parents[p];
+            const c = unscheduledChildCount.get(pid);
+            if (c > 0) unscheduledChildCount.set(pid, c - 1);
+          }
+        }
+      }
     };
+
     const hasUnscheduledChildSteps = (parentWoId) => {
-      const kids = childrenOf.get(parentWoId);
-      if (!kids || kids.length === 0) return false;
-      return kids.some(cid => {
-        const arr = remainingStepsByWo.get(cid);
-        return arr && arr.length > 0;
-      });
+      return (unscheduledChildCount.get(parentWoId) || 0) > 0;
     };
 
     // Unscheduled jobs bucketed per eligible machine (a job can sit in multiple buckets via altCandidates)
@@ -370,7 +554,7 @@ export class Scheduler {
 
       const candidateStats = candidates.map(job => {
         const remArr = remainingStepsByWo.get(job.woId);
-        const priorUnscheduled = remArr ? remArr.some(s => s.stepNum < job.stepNum) : false;
+        const priorUnscheduled = (remArr && remArr.length > 0) ? (remArr[0].stepNum < job.stepNum) : false;
 
         let readyTime = t;
         if (priorUnscheduled) {
@@ -1042,6 +1226,7 @@ export class Scheduler {
           partName: wo.partName,
           qty: wo.qty,
           priority: wo.priority,
+          memo: wo.memo || (this.state?.pdMemos ? this.state.pdMemos[wo.id] : '') || '',
           stepNum: step.stepNum,
           stepName: step.name || step.stepName,
           machine: bestMachine,

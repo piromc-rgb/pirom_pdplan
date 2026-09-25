@@ -4,18 +4,32 @@ import zipfile
 import json
 import xml.etree.ElementTree as ET
 
-def sync_plan_materials():
+def sync_plan_materials(target_filename="LN Status Overview.xlsx"):
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    gdrive_path = "/Users/pirom/Library/CloudStorage/GoogleDrive-pirom.c@gmail.com/My Drive/staus overview/LN Status Overview.xlsx"
-    local_xlsx = os.path.join(base_dir, "LN Status Overview.xlsx")
+    gdrive_dir = "/Users/pirom/Library/CloudStorage/GoogleDrive-pirom.c@gmail.com/My Drive/staus overview"
+    
+    gdrive_path = os.path.join(gdrive_dir, target_filename)
+    if not os.path.exists(gdrive_path):
+        fallback_g = os.path.join(gdrive_dir, "LN Status Overview.xlsx")
+        if os.path.exists(fallback_g):
+            gdrive_path = fallback_g
+
+    local_xlsx = os.path.join(base_dir, target_filename)
+    if not os.path.exists(local_xlsx):
+        fallback_l = os.path.join(base_dir, "LN Status Overview.xlsx")
+        if os.path.exists(fallback_l):
+            local_xlsx = fallback_l
+
     cache_json = os.path.join(base_dir, "plan_materials_cache.json")
 
     # If Google Drive file exists and is newer or local is missing, copy it over
     if os.path.exists(gdrive_path):
         try:
-            if not os.path.exists(local_xlsx) or os.path.getmtime(gdrive_path) > os.path.getmtime(local_xlsx):
+            target_local = os.path.join(base_dir, os.path.basename(gdrive_path))
+            if not os.path.exists(target_local) or os.path.getmtime(gdrive_path) > os.path.getmtime(target_local):
                 import shutil
-                shutil.copy2(gdrive_path, local_xlsx)
+                shutil.copy2(gdrive_path, target_local)
+                local_xlsx = target_local
                 print(f"Updated {local_xlsx} from Google Drive")
         except Exception as e:
             print(f"Warning: could not sync from Google Drive: {e}")
@@ -188,7 +202,35 @@ def sync_plan_materials():
         with open(cache_json, "w", encoding="utf-8") as out:
             json.dump(output_obj, out, ensure_ascii=False)
         print(f"Successfully generated {cache_json} with {len(plan_materials)} PDs and {len(dwg_to_pd_map)} DWGs.")
+
+        public_cache = os.path.join(base_dir, "public", "plan_materials_cache.json")
+        try:
+            import shutil
+            shutil.copy2(cache_json, public_cache)
+            print(f"Copied cache to {public_cache}")
+        except Exception as e:
+            print(f"Warning: could not copy to public: {e}")
+
+        dist_cache = os.path.join(base_dir, "dist", "plan_materials_cache.json")
+        if os.path.exists(os.path.join(base_dir, "dist")):
+            try:
+                import shutil
+                shutil.copy2(cache_json, dist_cache)
+                print(f"Copied cache to {dist_cache}")
+            except Exception as e:
+                print(f"Warning: could not copy to dist: {e}")
+
+        if os.path.exists(gdrive_dir):
+            try:
+                import shutil
+                gdrive_cache = os.path.join(gdrive_dir, "plan_materials_cache.json")
+                shutil.copy2(cache_json, gdrive_cache)
+                print(f"Copied cache to Google Drive: {gdrive_cache}")
+            except Exception as e:
+                print(f"Warning: could not copy to Google Drive: {e}")
+
         return True
 
 if __name__ == "__main__":
-    sync_plan_materials()
+    fn = sys.argv[1] if len(sys.argv) > 1 else "LN Status Overview.xlsx"
+    sync_plan_materials(fn)

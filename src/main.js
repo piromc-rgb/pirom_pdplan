@@ -105,6 +105,7 @@ class App {
     this.initWorkCenterSettings();
     this.initCompletedPdList();
     this.initGanttLabelColumnResize();
+    this.initSidebarLeftResize();
 
     // Default Gantt view: Time Scale Fit (start day left-aligned)
     if (state.scheduledJobs && state.scheduledJobs.length > 0) {
@@ -118,7 +119,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '260811';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -146,6 +147,8 @@ class App {
     this.kiosk = new KioskController(state);
     this.dailySchedule = new DailyScheduleController(state);
     this.assemblyTree = new AssemblyTreeController(state, this.gantt);
+    state.assemblyTree = this.assemblyTree;
+    window.assemblyTree = this.assemblyTree;
     this.continuityAnalysis = new ContinuityAnalysisController(state);
     this.qcCheck = new QcCheckController(state);
     this.storageSync = new StorageSyncManager(state);
@@ -505,6 +508,91 @@ class App {
     });
   }
 
+  initSidebarLeftResize() {
+    const resizer = document.getElementById('sidebar-left-resizer');
+    const sidebarEl = document.querySelector('.sidebar-left');
+    if (!resizer || !sidebarEl) return;
+
+    const STORAGE_KEY = 'chaken_sidebar_left_width';
+    const MIN_WIDTH = 220;
+
+    const getMaxWidth = () => Math.min(850, Math.floor(window.innerWidth * 0.65));
+
+    const applyWidth = (px) => {
+      document.documentElement.style.setProperty('--sidebar-left-width', `${px}px`);
+    };
+
+    const savedWidth = parseInt(localStorage.getItem(STORAGE_KEY), 10);
+    if (savedWidth && savedWidth >= MIN_WIDTH && savedWidth <= getMaxWidth()) {
+      applyWidth(savedWidth);
+    }
+
+    let startX = 0;
+    let startWidth = 0;
+    let rafId = null;
+
+    const onMouseMove = (e) => {
+      const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
+      const maxWidth = getMaxWidth();
+      const newWidth = Math.min(maxWidth, Math.max(MIN_WIDTH, startWidth + (clientX - startX)));
+      applyWidth(newWidth);
+
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          this.gantt?.drawDependencyLines?.();
+          rafId = null;
+        });
+      }
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('touchmove', onMouseMove);
+      document.removeEventListener('touchend', onMouseUp);
+      resizer.classList.remove('resizing');
+      document.body.classList.remove('sidebar-left-resizing');
+
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      this.gantt?.drawDependencyLines?.();
+      window.dispatchEvent(new Event('resize'));
+
+      const finalWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-left-width'), 10);
+      if (finalWidth) {
+        localStorage.setItem(STORAGE_KEY, finalWidth);
+      }
+    };
+
+    const onStartDrag = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      startX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
+      startWidth = sidebarEl.getBoundingClientRect().width;
+      resizer.classList.add('resizing');
+      document.body.classList.add('sidebar-left-resizing');
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+      document.addEventListener('touchmove', onMouseMove, { passive: false });
+      document.addEventListener('touchend', onMouseUp);
+    };
+
+    resizer.addEventListener('mousedown', onStartDrag);
+    resizer.addEventListener('touchstart', onStartDrag, { passive: false });
+
+    // Double-click resets to default width (280px)
+    resizer.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      applyWidth(280);
+      localStorage.setItem(STORAGE_KEY, 280);
+      this.gantt?.drawDependencyLines?.();
+      window.dispatchEvent(new Event('resize'));
+    });
+  }
+
   initCompletedPdList() {
     const modal = document.getElementById('completed-pd-list-modal');
     const btnOpen = document.getElementById('btn-view-completed-pd');
@@ -555,19 +643,13 @@ class App {
   initGlobalEvents() {
     // 1. Scheduling Model Selector
     const modelSelect = document.getElementById('model-select');
-    modelSelect.addEventListener('change', (e) => {
-      const selectedModel = e.target.value;
-      state.setSchedulingModel(selectedModel);
-      
-      if (selectedModel === 'infinite') {
-        state.scheduledJobs = Scheduler.applyBackwardsInfinite(state.scheduledJobs, state.activeScale);
-        state.notify();
-      } else if (selectedModel === 'finite') {
-        const nowWorkingHour = state.dateToWorkingHour(new Date());
-        state.scheduledJobs = Scheduler.applyForwardsFinite(state.scheduledJobs, state.activeScale, nowWorkingHour, state.workCenters, state.allowMachineOffload, state.groupSameItem);
-        state.notify();
-      }
-    });
+    if (modelSelect) {
+      modelSelect.addEventListener('change', (e) => {
+        const selectedModel = e.target.value;
+        state.schedulingModel = selectedModel;
+        state.recomputeSchedule();
+      });
+    }
 
     // 2. AI Optimize (APS) Button
     const btnAIOptimize = document.getElementById('btn-ai-optimize');
@@ -583,9 +665,35 @@ class App {
     const btnReschedule = document.getElementById('btn-reschedule');
     if (btnReschedule) {
       btnReschedule.addEventListener('click', () => {
-        if (confirm('คำนวณแผนงานทั้งหมดใหม่ตาม Scheduling Model ปัจจุบันใช่หรือไม่?\n(ตำแหน่งงานที่ยังไม่ Completed ทั้งกระดานอาจเปลี่ยนแปลง)')) {
-          state.recomputeSchedule();
+        if (!confirm('คำนวณแผนงานทั้งหมดใหม่ตาม Scheduling Model ปัจจุบันใช่หรือไม่?\n(ตำแหน่งงานที่ยังไม่ Completed ทั้งกระดานอาจเปลี่ยนแปลง)')) {
+          return;
         }
+
+        const origHtml = btnReschedule.innerHTML;
+        btnReschedule.disabled = true;
+        btnReschedule.style.opacity = '0.75';
+        btnReschedule.style.pointerEvents = 'none';
+        btnReschedule.innerHTML = `
+          <span class="spin" style="margin-right: 4px; display: inline-block;">⏳</span>
+          กำลังคำนวณ...
+        `;
+
+        setTimeout(() => {
+          try {
+            state.recomputeSchedule();
+            if (this.gantt && typeof this.gantt.showToast === 'function') {
+              this.gantt.showToast('✓ คำนวณแผนงานทั้งหมดใหม่เรียบร้อยแล้ว');
+            }
+          } catch (err) {
+            console.error('Error during reschedule:', err);
+            alert('เกิดข้อผิดพลาดในการคำนวณแผนงาน: ' + (err.message || err));
+          } finally {
+            btnReschedule.disabled = false;
+            btnReschedule.style.opacity = '';
+            btnReschedule.style.pointerEvents = '';
+            btnReschedule.innerHTML = origHtml;
+          }
+        }, 50);
       });
     }
 
@@ -649,14 +757,17 @@ class App {
     const renderAssemblySetList = (query) => {
       if (!assemblySetListEl || !this.assemblyTree) return;
       const all = this.assemblyTree.getAllAssemblies();
-      const matches = all.filter(a => matchesAssemblyQuery(a.id, a.partName, query));
+      const matches = all.filter(a => matchesAssemblyQuery(a.id, a.partName, query, a.dwgNo));
 
       if (matches.length === 0) {
         assemblySetListEl.innerHTML = '<div style="padding: 20px 10px; text-align: center; font-size: 11px; color: var(--text-secondary);">ไม่พบ Assembly Set ที่ตรงกับคำค้นหา</div>';
         return;
       }
 
-      assemblySetListEl.innerHTML = matches.map(a => {
+      const maxDisplay = 60;
+      const displayMatches = matches.slice(0, maxDisplay);
+
+      let itemsHtml = displayMatches.map(a => {
         // "X/Y" = how many of this assembly's sub-PDs have actually started work
         // (Running/Setup/Paused/Completed) out of all its sub-PDs - PDs still just
         // waiting in the backlog or scheduled-but-not-started don't count towards X.
@@ -670,13 +781,26 @@ class App {
         return `
         <div class="assembly-set-list-item" data-wo-id="${a.id}" style="padding: 8px 10px; margin-bottom: 6px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.03); cursor: pointer; transition: background 0.2s;">
           <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="font-weight: bold; font-size: 11.5px; color: var(--accent-teal); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${a.id}</div>
+            <div style="display: flex; align-items: center; gap: 5px; overflow: hidden;">
+              <div style="font-weight: bold; font-size: 11.5px; color: var(--accent-teal); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${a.id}</div>
+              ${a.dwgNo ? `<span style="font-size: 9.5px; color: var(--text-secondary); font-family: monospace; white-space: nowrap;">(${a.dwgNo})</span>` : ''}
+            </div>
             ${progressBadge}
           </div>
           <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${a.partName}">${a.partName}</div>
         </div>
       `;
       }).join('');
+
+      if (matches.length > maxDisplay) {
+        itemsHtml += `
+          <div style="padding: 10px 8px; text-align: center; font-size: 10.5px; color: var(--text-secondary); background: rgba(255,255,255,0.02); border-radius: 6px; margin-top: 4px; border: 1px dashed var(--border-glass);">
+            + แสดง 60 จากทั้งหมด ${matches.length.toLocaleString()} รายการ<br><span style="font-size: 9.5px; opacity: 0.8;">(พิมพ์ในช่องค้นหาเพื่อเจาะจง)</span>
+          </div>
+        `;
+      }
+
+      assemblySetListEl.innerHTML = itemsHtml;
 
       assemblySetListEl.querySelectorAll('.assembly-set-list-item').forEach(item => {
         item.addEventListener('mouseenter', () => { item.style.background = 'rgba(0, 242, 254, 0.08)'; });
@@ -734,6 +858,7 @@ class App {
       // Force redraw Gantt to resize cards to the newly available planning board width
       this.gantt.render();
     };
+    this.applyLeftSidebarMode = applyLeftSidebarMode;
 
     // Resources (right sidebar) is a plain independent show/hide toggle - it does
     // not touch the left sidebar's Backlog/Assembly mode at all.
@@ -2311,16 +2436,27 @@ class App {
           }
         });
 
+        // 1. Build fast lookup sets O(1)
+        const scheduledWoIds = new Set();
+        const nestedWoIds = new Set();
+        optimized.forEach(o => {
+          if (o.woId) scheduledWoIds.add(o.woId);
+          scheduledWoIds.add(o.id);
+          if (o.isNest && state.nests[o.id]?.jobIds) {
+            state.nests[o.id].jobIds.forEach(id => nestedWoIds.add(id));
+          }
+        });
+        const selectedWOSet = new Set(selectedWOIds);
+
         // Remove jobs from backlog that are now scheduled (only if they were selected!)
         state.workOrders = state.workOrders.filter(wo => {
-          const isScheduledDirect = optimized.some(o => o.woId === wo.id || o.id === wo.id);
-          const isScheduledNested = optimized.some(o => o.isNest && state.nests[o.id]?.jobIds.includes(wo.id));
-          const wasSelected = selectedWOIds.includes(wo.id);
-          return !(wasSelected && (isScheduledDirect || isScheduledNested));
+          if (!selectedWOSet.has(wo.id)) return true;
+          return !(scheduledWoIds.has(wo.id) || nestedWoIds.has(wo.id));
         });
 
         // If updateTargets is true, update dueHour of late jobs (only those originally on board)
-        if (updateTargets) {
+        if (updateTargets && lateJobsOnBoard.length > 0) {
+          const lateTargetMap = new Map();
           lateJobsOnBoard.forEach(job => {
             const finish = job.startHour + job.estHours;
             const targetWOId = job.woId || job.id;
@@ -2328,25 +2464,28 @@ class App {
             const dFinish = state.workingHourToDate(finish);
             const nextDay = new Date(dFinish.getFullYear(), dFinish.getMonth(), dFinish.getDate() + 1, 17, 0, 0);
             const newDueHour = state.dateToWorkingHour(nextDay);
+            lateTargetMap.set(targetWOId, newDueHour);
+          });
 
-            // 1. Update in backlog workOrders
-            const wo = state.workOrders.find(w => w.id === targetWOId);
-            if (wo) {
+          // 1. Update in backlog workOrders
+          state.workOrders.forEach(wo => {
+            if (lateTargetMap.has(wo.id)) {
               if (wo.originalDueHour === undefined) {
                 wo.originalDueHour = wo.dueHour;
               }
-              wo.dueHour = newDueHour;
+              wo.dueHour = lateTargetMap.get(wo.id);
             }
-            
-            // 2. Update in optimized array directly so it is not overwritten!
-            optimized.forEach(oj => {
-              if (oj.woId === targetWOId || oj.id === targetWOId) {
-                if (oj.originalDueHour === undefined) {
-                  oj.originalDueHour = oj.dueHour;
-                }
-                oj.dueHour = newDueHour;
+          });
+          
+          // 2. Update in optimized array directly so it is not overwritten!
+          optimized.forEach(oj => {
+            const tId = oj.woId || oj.id;
+            if (lateTargetMap.has(tId)) {
+              if (oj.originalDueHour === undefined) {
+                oj.originalDueHour = oj.dueHour;
               }
-            });
+              oj.dueHour = lateTargetMap.get(tId);
+            }
           });
         }
 
@@ -2360,14 +2499,14 @@ class App {
           state.schedulingModel = 'finite';
         }
 
+        // Adjust Gantt chart view to Fit all optimized tasks WITHOUT recomputing finite schedule
+        if (this.gantt && optimized.length > 0) {
+          this.gantt.fitTasks(optimized, false); // shouldRecompute = false
+        }
+
         // Save plan to file so the new start dates and assignments persist!
         state.savePlanToFile();
         state.saveWorkOrdersToFile();
-
-        // Adjust Gantt chart view to Fit all optimized tasks
-        if (this.gantt && optimized.length > 0) {
-          this.gantt.fitTasks(optimized);
-        }
 
         state.notify();
       };
@@ -2598,16 +2737,76 @@ class App {
       modal.remove();
     });
 
-    modal.querySelector('#btn-confirm-apply-ai').addEventListener('click', () => {
-      modal.remove();
-      
-      // 1. Apply schedule to board immediately
-      try {
-        applySchedule(lateJobsOnBoard.length > 0);
-      } catch (err) {
-        console.error('Error applying AI schedule:', err);
-      }
+    modal.querySelector('#btn-confirm-apply-ai').addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = '⏳ กำลังบันทึกแผน...';
+      btn.style.opacity = '0.7';
+
+      setTimeout(() => {
+        modal.remove();
+        // 1. Apply schedule to board immediately
+        try {
+          applySchedule(lateJobsOnBoard.length > 0);
+        } catch (err) {
+          console.error('Error applying AI schedule:', err);
+        }
+      }, 30);
     });
+  }
+
+  setLeftSidebarAssemblyMode(isAssembly) {
+    const backlogHeaderTitle = document.getElementById('backlog-header-title');
+    const btnAddPd = document.getElementById('btn-add-pd');
+    const btnImportExcel = document.getElementById('btn-import-excel');
+    const btnViewCompletedPd = document.getElementById('btn-view-completed-pd');
+    const sidebarFooter = document.querySelector('.sidebar-left .sidebar-footer');
+    const backlogTabContent = document.getElementById('backlog-tab-content');
+    const assemblyListTabContent = document.getElementById('assembly-list-tab-content');
+    const assemblyTreeSidebarTab = document.getElementById('assembly-tree-sidebar-tab');
+    const mainLayout = document.querySelector('.main-layout');
+
+    if (isAssembly) {
+      if (backlogHeaderTitle) backlogHeaderTitle.textContent = '🌿 โครงสร้างชุดประกอบ (TREE)';
+      if (btnAddPd) btnAddPd.style.display = 'none';
+      if (btnImportExcel) btnImportExcel.style.display = 'none';
+      if (btnViewCompletedPd) btnViewCompletedPd.style.display = 'none';
+      if (sidebarFooter) sidebarFooter.style.display = 'none';
+      if (backlogTabContent) {
+        backlogTabContent.classList.add('hidden');
+        backlogTabContent.style.display = 'none';
+      }
+      if (assemblyListTabContent) {
+        assemblyListTabContent.classList.add('hidden');
+        assemblyListTabContent.style.display = 'none';
+      }
+      if (assemblyTreeSidebarTab) {
+        assemblyTreeSidebarTab.classList.remove('hidden');
+        assemblyTreeSidebarTab.style.display = 'flex';
+      }
+      // Ensure left sidebar is expanded so user sees the tree view immediately
+      if (mainLayout && mainLayout.classList.contains('hide-backlog')) {
+        mainLayout.classList.remove('hide-backlog');
+      }
+    } else {
+      if (assemblyTreeSidebarTab) {
+        assemblyTreeSidebarTab.classList.add('hidden');
+        assemblyTreeSidebarTab.style.display = 'none';
+      }
+      if (sidebarFooter) sidebarFooter.style.display = '';
+      if (typeof this.applyLeftSidebarMode === 'function') {
+        this.applyLeftSidebarMode();
+      } else {
+        if (backlogHeaderTitle) backlogHeaderTitle.textContent = `PD BACKLOG (${state.workOrders.length})`;
+        if (btnAddPd) btnAddPd.style.display = '';
+        if (btnImportExcel) btnImportExcel.style.display = '';
+        if (btnViewCompletedPd) btnViewCompletedPd.style.display = '';
+        if (backlogTabContent) {
+          backlogTabContent.classList.remove('hidden');
+          backlogTabContent.style.display = 'flex';
+        }
+      }
+    }
   }
 
   renderAll() {
@@ -2615,8 +2814,10 @@ class App {
     
     if (state.ganttMode === 'assembly') {
       if (this.assemblyTree) this.assemblyTree.show();
+      this.setLeftSidebarAssemblyMode(true);
     } else {
       if (this.assemblyTree) this.assemblyTree.hide();
+      this.setLeftSidebarAssemblyMode(false);
       this.gantt.render();
     }
 
@@ -3356,7 +3557,7 @@ class App {
           </table>
           <div class="footer-info">
             <div>พิมพ์เมื่อ: ${new Date().toLocaleString('th-TH')}</div>
-            <div>CHAKEN Planing Pro - APS Scheduling</div>
+            <div>CHAKEN Planing v1.0 - APS Scheduling</div>
           </div>
           <script>
             window.onload = function() {

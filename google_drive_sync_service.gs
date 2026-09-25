@@ -1,6 +1,6 @@
 /**
  * ==============================================================================
- * CHAKEN Planing Pro - Google Drive Cloud Sync Service (Google Apps Script)
+ * CHAKEN Planing v1.0 - Google Drive Cloud Sync Service (Google Apps Script)
  * ==============================================================================
  * 
  * วัตถุประสงค์:
@@ -32,6 +32,7 @@
 
 // โฟลเดอร์เป้าหมายใน Google Drive
 const TARGET_FOLDER_ID = '1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA';
+const TARGET_DWG_FOLDER_ID = '17w0vlhgTfMW18p2H0LRq2aB1fOSHEdvg';
 const TARGET_FILE_NAME = 'Plan.json';
 const MACHINE_SETTINGS_FILE_NAME = 'machine_settings.json';
 const COMPLETED_PDS_FILE_NAME = 'completed_pds.json';
@@ -73,18 +74,28 @@ function doGet(e) {
   try {
     const folder = DriveApp.getFolderById(TARGET_FOLDER_ID);
 
-    // 1. ดึงไฟล์ LN Status Overview (Excel)
+    // 1. ดึงไฟล์ Status Overview (Excel)
     if (e && e.parameter && (e.parameter.action === 'status-overview' || e.parameter.file === 'status-overview')) {
+      const targetName = e.parameter.filename ? e.parameter.filename.trim() : '';
       const allFiles = folder.getFiles();
       let overviewFile = null;
+      let fallbackFile = null;
       while (allFiles.hasNext()) {
         const f = allFiles.next();
         const fname = f.getName();
-        if (fname.includes('LN Status Overview') || fname.includes('Status Overview')) {
+        if (targetName && (fname === targetName || fname.toLowerCase() === targetName.toLowerCase())) {
           overviewFile = f;
           break;
         }
+        if (targetName && fname.toLowerCase().includes(targetName.toLowerCase())) {
+          overviewFile = f;
+          break;
+        }
+        if (fname.includes('LN Status Overview') || fname.includes('Status Overview')) {
+          fallbackFile = f;
+        }
       }
+      overviewFile = overviewFile || fallbackFile;
       if (overviewFile) {
         const b64 = Utilities.base64Encode(overviewFile.getBlob().getBytes());
         return ContentService.createTextOutput(JSON.stringify({
@@ -101,7 +112,19 @@ function doGet(e) {
       }
     }
 
-    // 2. ดึงไฟล์ machine_settings.json โดยตรง (ถ้ามี parameter action=machine-settings)
+    // 2. ดึงไฟล์ plan_materials_cache.json (Plan + Mat) จาก Google Drive
+    if (e && e.parameter && (e.parameter.action === 'plan-materials' || e.parameter.file === 'plan-materials')) {
+      const pmData = readJsonFile(folder, 'plan_materials_cache.json');
+      if (pmData) {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: 'success',
+          fileName: 'plan_materials_cache.json',
+          data: pmData
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
+    // 3. ดึงไฟล์ machine_settings.json โดยตรง (ถ้ามี parameter action=machine-settings)
     if (e && e.parameter && (e.parameter.action === 'machine-settings' || e.parameter.file === 'machine-settings')) {
       const msData = readJsonFile(folder, MACHINE_SETTINGS_FILE_NAME);
       return ContentService.createTextOutput(JSON.stringify({
@@ -109,6 +132,169 @@ function doGet(e) {
         fileName: MACHINE_SETTINGS_FILE_NAME,
         data: msData || {}
       })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 3.5 ตรวจสอบสถานะไฟล์ทั้งหมดและโฟลเดอร์ DWG บน Google Drive Cloud โดยตรง (สำหรับเครื่องที่ไม่มี Drive G:)
+    if (e && e.parameter && e.parameter.action === 'check-cloud-status') {
+      const statusFn = (e.parameter.statusFilename || 'LN Status Overview.xlsx').trim();
+      const customDwgFolderId = (e.parameter.dwgFolderId && String(e.parameter.dwgFolderId).trim()) || TARGET_DWG_FOLDER_ID;
+      const inspectDriveFile = (fname, fallbackSubstr) => {
+        const iter = folder.getFilesByName(fname);
+        let f = iter.hasNext() ? iter.next() : null;
+        if (!f && fallbackSubstr) {
+          const all = folder.getFiles();
+          while (all.hasNext()) {
+            const cand = all.next();
+            if (cand.getName().toLowerCase().includes(fallbackSubstr.toLowerCase())) {
+              f = cand;
+              break;
+            }
+          }
+        }
+        if (!f) return { exists: false };
+        const sz = f.getSize();
+        return {
+          exists: true,
+          name: f.getName(),
+          fileId: f.getId(),
+          sizeBytes: sz,
+          sizeKB: +(sz / 1024).toFixed(1),
+          sizeMB: +(sz / (1024 * 1024)).toFixed(2),
+          updatedAt: f.getLastUpdated().toISOString()
+        };
+      };
+      let dwgInfo = { exists: false, folderId: customDwgFolderId, subfolders: [] };
+      try {
+        const df = DriveApp.getFolderById(customDwgFolderId);
+        if (df) {
+          const subs = [];
+          const subIter = df.getFolders();
+          while (subIter.hasNext()) subs.push(subIter.next().getName());
+          dwgInfo = { exists: true, folderId: df.getId(), folderName: df.getName(), subfolders: subs };
+        }
+      } catch (err) {}
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'success',
+        source: 'google_drive_cloud',
+        folderId: TARGET_FOLDER_ID,
+        folderName: folder.getName(),
+        files: {
+          planJson: inspectDriveFile(TARGET_FILE_NAME),
+          machineSettings: inspectDriveFile(MACHINE_SETTINGS_FILE_NAME),
+          completedPds: inspectDriveFile(COMPLETED_PDS_FILE_NAME),
+          statusOverview: inspectDriveFile(statusFn, 'Status Overview'),
+          planMaterialsCache: inspectDriveFile('plan_materials_cache.json')
+        },
+        dwgFolder: dwgInfo
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 4. ค้นหาไฟล์ PDF ของ Dwg No ในโฟลเดอร์ dwg และโฟลเดอร์ย่อยทั้งหมด
+    if (e && e.parameter && (e.parameter.action === 'find-dwg-pdf' || e.parameter.action === 'dwg-pdf')) {
+      const dwgNo = e.parameter.dwgNo ? e.parameter.dwgNo.trim() : '';
+      const customDwgFolderId = (e.parameter.dwgFolderId && String(e.parameter.dwgFolderId).trim()) || TARGET_DWG_FOLDER_ID;
+      if (!dwgNo) {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: 'error',
+          message: 'ไม่ได้ระบุรหัสแบบ (Dwg No)'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+
+      const cleanKey = dwgNo.replace(/[-_\s.]/g, '').toUpperCase();
+      let matchedFile = null;
+
+      const visitedFolders = {};
+      function searchFolder(f) {
+        if (matchedFile || !f) return;
+        const fid = f.getId();
+        if (visitedFolders[fid]) return;
+        visitedFolders[fid] = true;
+        const files = f.getFiles();
+        while (files.hasNext()) {
+          const file = files.next();
+          const name = file.getName();
+          if (name.toLowerCase().endsWith('.pdf')) {
+            const cleanName = name.replace(/[-_\s.]/g, '').toUpperCase();
+            if (cleanName.includes(cleanKey)) {
+              matchedFile = file;
+              return;
+            }
+          }
+        }
+        const subs = f.getFolders();
+        while (subs.hasNext()) {
+          searchFolder(subs.next());
+          if (matchedFile) return;
+        }
+      }
+
+      // 1. ค้นหาในโฟลเดอร์ DWG ที่ตั้งค่าไว้ (customDwgFolderId หรือ TARGET_DWG_FOLDER_ID) ก่อน
+      try {
+        const directDwgFolder = DriveApp.getFolderById(customDwgFolderId);
+        if (directDwgFolder) searchFolder(directDwgFolder);
+      } catch (err) {}
+
+      if (!matchedFile && customDwgFolderId !== TARGET_DWG_FOLDER_ID) {
+        try {
+          const defaultDwgFolder = DriveApp.getFolderById(TARGET_DWG_FOLDER_ID);
+          if (defaultDwgFolder) searchFolder(defaultDwgFolder);
+        } catch (err) {}
+      }
+
+      // 2. ค้นหาในโฟลเดอร์ย่อย dwg ของ root folder
+      if (!matchedFile) {
+        try {
+          const allSubFolders = folder.getFolders();
+          while (allSubFolders.hasNext()) {
+            const sf = allSubFolders.next();
+            const sName = sf.getName().toLowerCase();
+            if (sName === 'dwg' || sName.includes('dwg')) {
+              searchFolder(sf);
+              if (matchedFile) break;
+            }
+          }
+        } catch (err) {}
+      }
+
+      // 3. ค้นหาใน root folder เอง
+      if (!matchedFile) {
+        searchFolder(folder);
+      }
+
+      // 4. ถ้ายังไม่พบ ให้ค้นหาไฟล์ PDF ทั่วทั้ง Google Drive ด้วย DriveApp searchFiles
+      if (!matchedFile) {
+        try {
+          const prefix = cleanKey.length >= 7 ? cleanKey.slice(0, 7) : cleanKey;
+          const searchIter = DriveApp.searchFiles("mimeType = 'application/pdf' and trashed = false and title contains '" + prefix + "'");
+          while (searchIter.hasNext()) {
+            const f = searchIter.next();
+            const cleanName = f.getName().replace(/[-_\s.]/g, '').toUpperCase();
+            if (cleanName.includes(cleanKey)) {
+              matchedFile = f;
+              break;
+            }
+          }
+        } catch (err) {}
+      }
+
+      if (matchedFile) {
+        const fId = matchedFile.getId();
+        return ContentService.createTextOutput(JSON.stringify({
+          status: 'success',
+          fileId: fId,
+          fileName: matchedFile.getName(),
+          filename: matchedFile.getName(),
+          fileUrl: matchedFile.getUrl(),
+          previewUrl: 'https://drive.google.com/file/d/' + fId + '/preview',
+          viewUrl: 'https://drive.google.com/file/d/' + fId + '/view?usp=drivesdk',
+          downloadUrl: 'https://drive.google.com/uc?export=download&id=' + fId
+        })).setMimeType(ContentService.MimeType.JSON);
+      } else {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: 'not_found',
+          message: 'ไม่พบ file แบบ'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
     }
 
     // 3. ดึงข้อมูลรวม (Plan.json รวมกับ machine_settings.json และ completed_pds.json)

@@ -291,6 +291,18 @@ export class WorkflowController {
         return (a.dueHour || 999999) - (b.dueHour || 999999);
       });
 
+      const parentWoIdsNumericSet = new Set();
+      this.state.workOrders.forEach(w => {
+        const m = w.id.match(/^(.*)-(\d+)$/);
+        if (m) parentWoIdsNumericSet.add(m[1]);
+      });
+      (this.state.scheduledJobs || []).forEach(j => {
+        if (j.woId) {
+          const m = j.woId.match(/^(.*)-(\d+)$/);
+          if (m) parentWoIdsNumericSet.add(m[1]);
+        }
+      });
+
       sortedWOs.forEach(wo => {
         const backlogCard = document.createElement('div');
         backlogCard.className = 'backlog-card';
@@ -312,14 +324,7 @@ export class WorkflowController {
 
         const childMatch = wo.id.match(/^(.*)-(\d+)$/);
         const isChild = !!childMatch;
-        const allWoIds = new Set([
-          ...this.state.workOrders.map(w => w.id),
-          ...this.state.scheduledJobs.map(j => j.woId).filter(Boolean)
-        ]);
-        const isParent = Array.from(allWoIds).some(id => {
-          const match = id.match(/^(.*)-(\d+)$/);
-          return match && match[1] === wo.id;
-        });
+        const isParent = parentWoIdsNumericSet.has(wo.id);
 
         let indicatorHtml = '';
         if (isParent) {
@@ -659,6 +664,7 @@ export class WorkflowController {
           partName: wo.partName,
           qty: wo.qty,
           priority: wo.priority,
+          memo: wo.memo || (this.state?.pdMemos ? this.state.pdMemos[wo.id] : '') || '',
           stepNum: step.stepNum,
           stepName: step.name,
           machine: step.machine,
@@ -694,6 +700,7 @@ export class WorkflowController {
           partName: wo.partName,
           qty: wo.qty,
           priority: wo.priority,
+          memo: wo.memo || (this.state?.pdMemos ? this.state.pdMemos[wo.id] : '') || '',
           stepNum: step.stepNum,
           stepName: step.name,
           machine: step.machine,
@@ -949,7 +956,10 @@ export class WorkflowController {
       const fileInput = document.getElementById('new-pd-excel-file');
       if (fileInput) fileInput.value = '';
       const customFileName = document.getElementById('custom-file-name');
-      if (customFileName) customFileName.textContent = 'No file chosen';
+      const defaultFilename = this.state.storageSync 
+        ? this.state.storageSync.getStatusOverviewFilename() 
+        : 'LN Status Overview.xlsx';
+      if (customFileName) customFileName.textContent = defaultFilename;
       const rangeInput = document.getElementById('new-pd-excel-range');
       if (rangeInput) rangeInput.value = '';
       const priorityInput = document.getElementById('new-pd-excel-priority');
@@ -971,22 +981,25 @@ export class WorkflowController {
       
       const checkAvailableFile = async () => {
         if (this.state.storageSync) {
-          const overview = await this.state.storageSync.fetchStatusOverview();
+          const overview = await this.state.storageSync.fetchStatusOverview({ silent: true });
           if (overview && overview.filename) {
             if (customFileName) customFileName.textContent = overview.filename;
-            hintEl.innerHTML = `📄 ตรวจพบไฟล์เริ่มต้น: <strong>${overview.filename}</strong> (Sheet "data") - ระบบจะดึงไฟล์นี้อัตโนมัติ`;
+            const cacheNotice = overview.fromCache 
+              ? '<span style="color: var(--accent-teal); font-weight: 600;">⚡ [โหลดทันทีจาก Local Cache]</span>' 
+              : '<span style="color: #38bdf8; font-weight: 600;">☁️ [ดึงจาก Cloud/Server]</span>';
+            hintEl.innerHTML = `📄 ตรวจพบไฟล์: <strong>${overview.filename}</strong> ${cacheNotice} - ระบบจะดึงไฟล์นี้อัตโนมัติ`;
             return;
           }
         }
         this.loadExcelFileFromDB().then(data => {
           if (data && data.filename) {
             if (customFileName) customFileName.textContent = data.filename;
-            hintEl.innerHTML = `ไฟล์ล่าสุดที่เคยใช้: <strong>${data.filename}</strong> (ระบบจะดึงไฟล์นี้อัตโนมัติหากไม่เลือกไฟล์ใหม่)`;
+            hintEl.innerHTML = `ไฟล์ล่าสุดที่เคยใช้: <strong>${data.filename}</strong> <span style="color: var(--accent-teal); font-weight: 600;">⚡ [แคชในเครื่อง]</span> (ระบบจะดึงไฟล์นี้อัตโนมัติหากไม่เลือกไฟล์ใหม่)`;
           } else {
-            hintEl.innerHTML = `💡 แนะนำ: วางไฟล์ <strong>LN Status Overview.xls</strong> (Sheet "data")`;
+            hintEl.innerHTML = `💡 ไฟล์เริ่มต้น: <strong>${defaultFilename}</strong> (Sheet "data" & "Plan + Mat")`;
           }
         }).catch(() => {
-          hintEl.innerHTML = `💡 แนะนำ: เลือกไฟล์ <strong>LN Status Overview.xls</strong> (Sheet "data")`;
+          hintEl.innerHTML = `💡 ไฟล์เริ่มต้น: <strong>${defaultFilename}</strong> (Sheet "data" & "Plan + Mat")`;
         });
       };
       checkAvailableFile();
@@ -1256,7 +1269,9 @@ export class WorkflowController {
           const rawRow = raw2D[i];
           if (!rawRow || rawRow.length === 0) continue;
           const dwg = String(rawRow[col.dwg] || '').trim();
-          const pdId = String(rawRow[col.pd] || '').trim();
+          const rawPd = String(rawRow[col.pd] || '').trim();
+          const pdMatch = rawPd.match(/^PD\d+[A-Z]?/i);
+          const pdId = pdMatch ? pdMatch[0].toUpperCase() : rawPd;
           if (!dwg || !pdId) continue;
           const opNum = parseInt(rawRow[col.step]) || 10;
           const opStatus = String(rawRow[col.opStatus] || '').trim();
@@ -1342,21 +1357,21 @@ export class WorkflowController {
           let partName = '';
 
           if (/^PD\d+/i.test(colG)) {
-            pdId = colG;
+            pdId = colG.match(/^PD\d+[A-Z]?/i)?.[0]?.toUpperCase() || colG;
             dwgNo = colK;
             partName = colL;
           } else if (/^PD\d+/i.test(colK)) {
-            pdId = colK;
+            pdId = colK.match(/^PD\d+[A-Z]?/i)?.[0]?.toUpperCase() || colK;
             dwgNo = colL;
             partName = colG;
           } else {
-            const matchA = String(rawRow[0] || '').match(/^PD\d+/i);
+            const matchA = String(rawRow[0] || '').match(/^PD\d+[A-Z]?/i);
             if (matchA) {
-              pdId = matchA[0];
+              pdId = matchA[0].toUpperCase();
               dwgNo = colK;
               partName = colL || colG;
             } else if (colG) {
-              pdId = colG;
+              pdId = colG.match(/^PD\d+[A-Z]?/i)?.[0]?.toUpperCase() || colG;
               dwgNo = colK;
               partName = colL;
             }
@@ -1561,6 +1576,15 @@ export class WorkflowController {
           inferredCompletedIds,
           stepsCompletedReport
         });
+
+        // ตรวจสอบโหมดผู้ใช้งาน: ถ้าอยู่ในโหมดวางแผน ค่อย Up ข้อมูลเก็บไว้ใน cloud
+        const isPlanMode = this.state.storageSync ? this.state.storageSync.getUserMode() === 'plan' : false;
+        if (isPlanMode) {
+          this.state.storageSync?.pushToCloud(this.state.buildPlanPayload(), true);
+          this.state.storageSync?.showToast(`☁️ [โหมดวางแผน] อัปเดตแผนงานและข้อมูลนำเข้าจาก ${filename} ขึ้น Cloud สำเร็จ`, 'success');
+        } else {
+          this.state.storageSync?.showToast(`💾 [โหมดดูแผน] บันทึกข้อมูลนำเข้าจาก ${filename} ลงแคชเครื่อง (Local) เรียบร้อย (ไม่อัปโหลดขึ้น Cloud)`, 'info');
+        }
       } catch (err) {
         console.error(err);
         alert('เกิดข้อผิดพลาดในการนำเข้าไฟล์ Excel: ' + err.message);
@@ -1569,9 +1593,16 @@ export class WorkflowController {
 
     if (fileInput.files && fileInput.files.length > 0) {
       const file = fileInput.files[0];
+      if (this.state.storageSync) {
+        this.state.storageSync.setStatusOverviewFilename(file.name);
+      }
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         const buffer = e.target.result;
+        // บันทึกลง Local Cache ทันที เพื่อความรวดเร็ว
+        if (this.state.storageSync) {
+          await this.state.storageSync.saveOverviewToCache(file.name, buffer);
+        }
         this.saveExcelToDB(file.name, buffer)
           .then(() => {
             parseAndLoad(buffer, file.name);
@@ -1583,6 +1614,10 @@ export class WorkflowController {
       };
       reader.readAsArrayBuffer(file);
     } else {
+      const defaultFilename = this.state.storageSync 
+        ? this.state.storageSync.getStatusOverviewFilename() 
+        : 'LN Status Overview.xlsx';
+
       const tryFetchOverview = async () => {
         if (this.state.storageSync) {
           const overview = await this.state.storageSync.fetchStatusOverview();
@@ -1600,11 +1635,11 @@ export class WorkflowController {
           if (data && data.arrayBuffer && data.filename) {
             parseAndLoad(data.arrayBuffer, data.filename);
           } else {
-            alert('กรุณาเลือกไฟล์ LN Status Overview.xls (หรือวางไฟล์ไว้ในระบบ)');
+            alert(`กรุณาเลือกไฟล์ ${defaultFilename} (หรือวางไฟล์ไว้ในระบบ)`);
           }
         }).catch(err => {
           console.warn('Failed to load excel from IndexedDB:', err);
-          alert('กรุณาเลือกไฟล์ LN Status Overview.xls (หรือวางไฟล์ไว้ในระบบ)');
+          alert(`กรุณาเลือกไฟล์ ${defaultFilename} (หรือวางไฟล์ไว้ในระบบ)`);
         });
       });
     }
@@ -1650,7 +1685,9 @@ export class WorkflowController {
     for (let i = 1; i < matRaw2D.length; i++) {
       const row = matRaw2D[i];
       if (!row || row.length === 0) continue;
-      const pdId = String(row[col.pd] || '').trim();
+      const rawPd = String(row[col.pd] || '').trim();
+      const pdMatch = rawPd.match(/^PD\d+[A-Z]?/i);
+      const pdId = pdMatch ? pdMatch[0].toUpperCase() : rawPd;
       const mat = String(row[col.mat] || '').trim();
       if (!pdId || !mat) continue;
 

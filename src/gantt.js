@@ -144,12 +144,53 @@ export function isJobCustomerVisible(job, state) {
   return true;
 }
 
+export function parsePdNumeric(str) {
+  if (!str) return null;
+  const match = String(str).match(/\d+/);
+  return match ? parseInt(match[0], 10) : null;
+}
+
+export function isPdMatchingRange(pdStr, range) {
+  if (!pdStr || !range) return false;
+  
+  // Extract base PD (e.g. "PD2609388-10" -> "PD2609388")
+  const cleanPd = String(pdStr).trim().split('-')[0];
+  const pdNum = parsePdNumeric(cleanPd);
+  
+  const startClean = String(range.start || '').trim().split('-')[0];
+  const startNum = parsePdNumeric(startClean);
+  
+  if (!range.end) {
+    if (pdNum !== null && startNum !== null) {
+      return pdNum === startNum;
+    }
+    return cleanPd.toUpperCase() === startClean.toUpperCase();
+  }
+  
+  const endClean = String(range.end || '').trim().split('-')[0];
+  const endNum = parsePdNumeric(endClean);
+  
+  if (pdNum !== null && startNum !== null && endNum !== null) {
+    const min = Math.min(startNum, endNum);
+    const max = Math.max(startNum, endNum);
+    return pdNum >= min && pdNum <= max;
+  }
+  
+  // Fallback to normalized string comparison
+  const sUpper = startClean.toUpperCase();
+  const eUpper = endClean.toUpperCase();
+  const cUpper = cleanPd.toUpperCase();
+  const minStr = sUpper < eUpper ? sUpper : eUpper;
+  const maxStr = sUpper < eUpper ? eUpper : sUpper;
+  return cUpper >= minStr && cUpper <= maxStr;
+}
+
 export function isJobPdRangeVisible(job, state) {
   if (!state || !state.activePdRanges || state.activePdRanges.length === 0) return true;
   
   // Get PD number (woId or id)
   const pd = String(job.woId || job.id || '').trim();
-  if (!pd) return true; // If no PD number, let it show (or hide? let's show)
+  if (!pd) return true; // If no PD number, let it show
   
   // If there are ranges, check if it falls in ANY active range
   let hasActiveRanges = false;
@@ -157,13 +198,7 @@ export function isJobPdRangeVisible(job, state) {
     if (!range.enabled) continue;
     hasActiveRanges = true;
     
-    // Check range boundaries (string comparison works for same length formatted strings like PD260000)
-    // If range is a single value
-    if (range.start && !range.end) {
-      if (pd === range.start) return true;
-    } else if (range.start && range.end) {
-      if (pd >= range.start && pd <= range.end) return true;
-    }
+    if (isPdMatchingRange(pd, range)) return true;
   }
   
   // If there were active ranges but we didn't match any, hide it.
@@ -683,13 +718,17 @@ export class GanttController {
     // Two variants matching the two scopes the original per-row code used:
     // "All" = across backlog + scheduled (allWoIdsSet); "Scheduled" = scheduled jobs only.
     const buildChildrenMap = (idsArr) => {
+      const idSet = new Set(idsArr);
       const map = new Map(idsArr.map(id => [id, []]));
       idsArr.forEach(childId => {
-        idsArr.forEach(parentId => {
-          if (parentId !== childId && childId.startsWith(parentId + '-')) {
-            map.get(parentId).push(childId);
+        let idx = childId.indexOf('-');
+        while (idx !== -1) {
+          const prefix = childId.substring(0, idx);
+          if (idSet.has(prefix)) {
+            map.get(prefix).push(childId);
           }
-        });
+          idx = childId.indexOf('-', idx + 1);
+        }
       });
       // Include cross-PD assembly links
       (this.state.assemblyLinks || []).forEach(l => {
@@ -701,15 +740,18 @@ export class GanttController {
         }
       });
       // Include child component PDs from planMaterials (welding assemblies)
-      if (this.state.planMaterials) {
+      if (this.state.planMaterials && this.state.dwgToPdMap) {
         idsArr.forEach(parentId => {
-          const mats = this.state.planMaterials[parentId] || [];
+          const mats = this.state.planMaterials[parentId];
+          if (!mats || mats.length === 0) return;
+          const list = map.get(parentId);
+          const listSet = new Set(list);
           mats.forEach(item => {
             const matCode = String(item.mat || '').trim();
-            const childWoId = this.state.dwgToPdMap?.[matCode]?.pdId;
-            if (childWoId && childWoId !== parentId && map.has(parentId)) {
-              const list = map.get(parentId);
-              if (!list.includes(childWoId)) list.push(childWoId);
+            const childWoId = this.state.dwgToPdMap[matCode]?.pdId;
+            if (childWoId && childWoId !== parentId && map.has(parentId) && !listSet.has(childWoId)) {
+              list.push(childWoId);
+              listSet.add(childWoId);
             }
           });
         });
@@ -2398,8 +2440,15 @@ export class GanttController {
     // read; interleaving reads and writes per-line (the old code) forced one
     // reflow per line, which was the dominant cost past ~1000 cards/lines.
     const rectCache = new Map();
-    cards.forEach(card => rectCache.set(card, card.getBoundingClientRect()));
-    const getCardRect = (card) => rectCache.get(card) || card.getBoundingClientRect();
+    const getCardRect = (card) => {
+      let r = rectCache.get(card);
+      if (!r) {
+        r = card.getBoundingClientRect();
+        rectCache.set(card, r);
+      }
+      return r;
+    };
+    const pathFragment = document.createDocumentFragment();
 
     // Group jobs by woId
     const woGroups = {};
@@ -2458,7 +2507,7 @@ export class GanttController {
             path.classList.add('error');
           }
 
-          svg.appendChild(path);
+          pathFragment.appendChild(path);
         }
       }
     });
@@ -2523,7 +2572,7 @@ export class GanttController {
             path.classList.add('error');
           }
 
-          svg.appendChild(path);
+          pathFragment.appendChild(path);
         }
       });
     });
@@ -2576,10 +2625,12 @@ export class GanttController {
             path.classList.add('error');
           }
           
-          svg.appendChild(path);
+          pathFragment.appendChild(path);
         }
       });
     }
+
+    svg.appendChild(pathFragment);
     } // end showDependencyLines block
 
     // Draw vertical indicator lines (Start Date, Today/Now, and Latest Finish Date)
@@ -2901,7 +2952,22 @@ export class GanttController {
     const links = this.state.assemblyLinks || [];
     const linkedFromIds = links.filter(l => l.to.startsWith(woId + '-')).map(l => this.state.parseStepId(l.from).woId);
     
-    const childWoIds = Array.from(allWoIds).filter(id => id && id !== woId && (id.startsWith(woId + '-') || linkedFromIds.includes(id)));
+    // Also include child PDs from planMaterials & dwgToPdMap
+    const matChildIds = [];
+    if (this.state.planMaterials && this.state.planMaterials[woId]) {
+      this.state.planMaterials[woId].forEach(item => {
+        const matCode = String(item.mat || '').trim();
+        const childId = this.state.dwgToPdMap?.[matCode]?.pdId;
+        if (childId && childId !== woId && !matChildIds.includes(childId)) {
+          matChildIds.push(childId);
+        }
+      });
+    }
+
+    const childWoIds = Array.from(allWoIds).filter(id => id && id !== woId && (id.startsWith(woId + '-') || linkedFromIds.includes(id) || matChildIds.includes(id)));
+    matChildIds.forEach(id => {
+      if (!childWoIds.includes(id)) childWoIds.push(id);
+    });
     
     // Sort childWoIds hierarchically
     childWoIds.sort((a, b) => {
@@ -2950,17 +3016,28 @@ export class GanttController {
 
         const cJobs = this.state.scheduledJobs.filter(j => j.woId === cWoId);
         const cBacklog = this.state.workOrders.find(wo => wo.id === cWoId);
-        const cPartName = cJobs[0]?.partName || cBacklog?.partName || 'Unknown';
+        let cPartName = cJobs[0]?.partName || cBacklog?.partName;
+        const dwgEntry = this.state.dwgToPdMap ? Object.entries(this.state.dwgToPdMap).find(([k, v]) => v.pdId === cWoId) : null;
+        if (!cPartName && dwgEntry && dwgEntry[1]?.partName) cPartName = dwgEntry[1].partName;
+        if (!cPartName && this.state.planMaterials) {
+          for (const mats of Object.values(this.state.planMaterials)) {
+            const m = mats.find(x => x.matDesc && (x.mat === dwgEntry?.[0] || x.mat === cWoId));
+            if (m) { cPartName = m.matDesc; break; }
+          }
+        }
+        if (!cPartName) cPartName = 'Unknown';
         
         const totalSteps = cJobs.length + (cBacklog ? cBacklog.steps.length : 0);
         const completedSteps = cJobs.filter(j => j.status === 'Completed').length;
-        const isComplete = totalSteps > 0 && completedSteps === totalSteps;
         const isRunning = cJobs.some(j => j.status === 'Running' || j.status === 'Setup');
+        const isComplete = totalSteps > 0 && completedSteps === totalSteps;
+        const isCompletedHistory = typeof this.state.isPdInCompletedHistory === 'function' ? this.state.isPdInCompletedHistory(cWoId) : false;
+        const orderStatusStr = String(dwgEntry?.[1]?.orderStatus || '').toLowerCase();
         
         let statusBadge = '';
-        if (isComplete) {
-          statusBadge = '<span style="color: #22c55e; font-weight: bold; font-size: 11px;">✅ ผลิตเสร็จ 100%</span>';
-        } else if (isRunning) {
+        if (isComplete || isCompletedHistory || orderStatusStr === 'released' || orderStatusStr === 'closed') {
+          statusBadge = '<span style="color: #22c55e; font-weight: bold; font-size: 11px;">✅ ผลิตเสร็จ / Released</span>';
+        } else if (isRunning || completedSteps > 0 || orderStatusStr === 'active' || orderStatusStr === 'running') {
           statusBadge = '<span style="color: #eab308; font-weight: bold; font-size: 11px;">⚡ กำลังผลิต</span>';
         } else {
           statusBadge = `<span style="color: var(--accent-teal); font-size: 11px;">⏳ รอคิว (${completedSteps}/${totalSteps} ขั้นตอน)</span>`;
@@ -3234,7 +3311,7 @@ export class GanttController {
     setTimeout(() => input.focus(), 50);
   }
 
-  fitTasks(jobs) {
+  fitTasks(jobs, shouldRecompute = false) {
     if (!jobs || jobs.length === 0) return;
 
     const minStart = Math.min(...jobs.map(j => j.startHour));
@@ -3271,8 +3348,9 @@ export class GanttController {
     const startDayOffset = Math.floor(minStart / 8.0) * 8.0;
     const targetOffset = startDayOffset - leftMarginHours;
 
-    this.state.setActiveScale(targetScale);
-    this.state.setTimelineOffset(targetOffset);
+    // Use silent scale update to avoid triggering recompute & duplicate render
+    this.state.setActiveScale(targetScale, shouldRecompute, true);
+    this.state.setTimelineOffset(targetOffset, false);
   }
 
   showWorkCenterPlanModal(machineName) {
@@ -3506,7 +3584,7 @@ export class GanttController {
     const partName = backlogWO?.partName || firstSource?.partName || '';
     const qty = backlogWO?.qty || firstSource?.qty || 100;
     const priority = backlogWO?.priority || firstSource?.priority || 'Normal';
-    const memo = backlogWO?.memo || firstSource?.memo || '';
+    const memo = this.state.pdMemos?.[woId] || backlogWO?.memo || firstSource?.memo || '';
     const dueHour = backlogWO?.dueHour !== undefined ? backlogWO.dueHour : (firstSource?.dueHour !== undefined ? firstSource.dueHour : null);
 
     // 2. Populate form fields
@@ -3663,48 +3741,48 @@ export class GanttController {
         const sMonth = (dStart.getMonth() + 1).toString().padStart(2, '0');
         const sTime = `${dStart.getHours().toString().padStart(2, '0')}:${dStart.getMinutes().toString().padStart(2, '0')}`;
         const eTime = `${dEnd.getHours().toString().padStart(2, '0')}:${dEnd.getMinutes().toString().padStart(2, '0')}`;
-        timeScheduleHtml = `<span style="font-family: monospace; font-size: 10px; color: var(--text-primary); font-weight: 600; white-space: nowrap; display: inline-block;">${sDay}/${sMonth} ${sTime}-${eTime}</span>`;
+        timeScheduleHtml = `<span style="font-family: monospace; font-size: 9.5px; color: var(--text-primary); font-weight: 600; white-space: nowrap; display: inline-block;">${sDay}/${sMonth} ${sTime}-${eTime}</span>`;
 
         if (stepData.status === 'Completed') {
-          statusBadgeHtml = `<span style="padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; background: rgba(22, 163, 74, 0.15); color: #22c55e; border: 1px solid #22c55e;">✓ Done</span>`;
+          statusBadgeHtml = `<span style="padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: bold; text-transform: uppercase; background: rgba(22, 163, 74, 0.15); color: #22c55e; border: 1px solid #22c55e;">✓ Done</span>`;
         } else if (stepData.status === 'Running') {
-          statusBadgeHtml = `<span style="padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; background: rgba(57, 255, 20, 0.1); color: var(--accent-green); border: 1px solid var(--accent-green);">Running</span>`;
+          statusBadgeHtml = `<span style="padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: bold; text-transform: uppercase; background: rgba(57, 255, 20, 0.1); color: var(--accent-green); border: 1px solid var(--accent-green);">Running</span>`;
         } else if (stepData.status === 'Paused') {
-          statusBadgeHtml = `<span style="padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; background: rgba(255, 153, 0, 0.1); color: var(--accent-orange); border: 1px solid var(--accent-orange);">Paused</span>`;
+          statusBadgeHtml = `<span style="padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: bold; text-transform: uppercase; background: rgba(255, 153, 0, 0.1); color: var(--accent-orange); border: 1px solid var(--accent-orange);">Paused</span>`;
         } else {
-          statusBadgeHtml = `<span style="padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; background: rgba(0, 242, 254, 0.1); color: var(--accent-teal); border: 1px solid var(--accent-teal);">Scheduled</span>`;
+          statusBadgeHtml = `<span style="padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: bold; text-transform: uppercase; background: rgba(0, 242, 254, 0.1); color: var(--accent-teal); border: 1px solid var(--accent-teal);">Scheduled</span>`;
         }
       }
 
       tr.innerHTML = `
-        <td style="padding: 8px 6px; text-align: center;">
-          <input type="number" class="modal-step-num" value="${stepData.stepNum || 10}" min="1" step="1" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 4px; border-radius: 4px; font-size: 10px; width: 45px; text-align: center; font-weight: bold; outline: none;">
+        <td style="padding: 5px 3px; text-align: center;">
+          <input type="number" class="modal-step-num" value="${stepData.stepNum || 10}" min="1" step="1" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 3px 2px; border-radius: 4px; font-size: 10px; width: 38px; text-align: center; font-weight: bold; outline: none;">
         </td>
-        <td style="padding: 8px 6px;">
-          <select class="modal-step-machine" style="background: #ffffff; color: #000000; border: 1px solid var(--border-glass); padding: 4px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; width: 100%; outline: none; cursor: pointer;">
+        <td style="padding: 5px 4px;">
+          <select class="modal-step-machine" style="background: #ffffff; color: #000000; border: 1px solid var(--border-glass); padding: 3px 4px; border-radius: 4px; font-size: 10px; font-weight: 600; width: 100%; outline: none; cursor: pointer;">
             ${wcOptions}
           </select>
         </td>
-        <td style="padding: 8px 6px;">
-          <input type="text" class="modal-step-name" value="${stepData.name || ''}" placeholder="Operation name" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 4px 6px; border-radius: 4px; font-size: 10px; width: 100%; outline: none;">
+        <td style="padding: 5px 4px;">
+          <input type="text" class="modal-step-name" value="${stepData.name || ''}" placeholder="Operation name" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 3px 6px; border-radius: 4px; font-size: 10px; width: 100%; outline: none;">
         </td>
-        <td style="padding: 8px 4px; text-align: center;">
-          <input type="number" class="modal-step-setup" value="${stepData.setupMinutes !== undefined ? stepData.setupMinutes : 0}" min="0" step="1" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 4px; border-radius: 4px; font-size: 10px; width: 55px; text-align: center; outline: none;">
+        <td style="padding: 5px 2px; text-align: center;">
+          <input type="number" class="modal-step-setup" value="${stepData.setupMinutes !== undefined ? stepData.setupMinutes : 0}" min="0" step="1" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 3px 2px; border-radius: 4px; font-size: 10px; width: 46px; text-align: center; outline: none;">
         </td>
-        <td style="padding: 8px 4px; text-align: center;">
-          <input type="number" class="modal-step-cycle" value="${stepData.cycleMinutes !== undefined ? stepData.cycleMinutes : 1}" min="0.01" step="0.01" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 4px; border-radius: 4px; font-size: 10px; width: 65px; text-align: center; outline: none;">
+        <td style="padding: 5px 2px; text-align: center;">
+          <input type="number" class="modal-step-cycle" value="${stepData.cycleMinutes !== undefined ? stepData.cycleMinutes : 1}" min="0.01" step="0.01" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 3px 2px; border-radius: 4px; font-size: 10px; width: 54px; text-align: center; outline: none;">
         </td>
-        <td style="padding: 8px 4px; text-align: center;">
-          <input type="number" class="modal-step-esthours" value="${stepData.estHours !== undefined ? parseFloat((stepData.estHours * 60.0).toFixed(1)) : 60.0}" min="0.1" step="0.1" title="Estimated duration in minutes" style="background: var(--bg-darkest); color: var(--accent-teal); border: 1px solid var(--border-glass); padding: 4px; border-radius: 4px; font-size: 10px; width: 60px; text-align: center; font-weight: bold; outline: none;">
+        <td style="padding: 5px 2px; text-align: center;">
+          <input type="number" class="modal-step-esthours" value="${stepData.estHours !== undefined ? parseFloat((stepData.estHours * 60.0).toFixed(1)) : 60.0}" min="0.1" step="0.1" title="Estimated duration in minutes" style="background: var(--bg-darkest); color: var(--accent-teal); border: 1px solid var(--border-glass); padding: 3px 2px; border-radius: 4px; font-size: 10px; width: 48px; text-align: center; font-weight: bold; outline: none;">
         </td>
-        <td style="padding: 8px 6px; text-align: center;">
+        <td style="padding: 5px 3px; text-align: center;">
           ${statusBadgeHtml}
         </td>
-        <td style="padding: 8px 6px; text-align: center; white-space: nowrap;">
+        <td style="padding: 5px 3px; text-align: center; white-space: nowrap;">
           ${timeScheduleHtml}
         </td>
-        <td style="padding: 8px 4px; text-align: center;">
-          <button type="button" class="btn-remove-step-row" title="ลบขั้นตอนนี้" style="background: none; border: none; color: var(--accent-red); cursor: pointer; font-size: 14px; padding: 2px 4px; font-weight: bold; line-height: 1;">✕</button>
+        <td style="padding: 5px 2px; text-align: center;">
+          <button type="button" class="btn-remove-step-row" title="ลบขั้นตอนนี้" style="background: none; border: none; color: var(--accent-red); cursor: pointer; font-size: 13px; padding: 2px 4px; font-weight: bold; line-height: 1;">✕</button>
         </td>
       `;
 
