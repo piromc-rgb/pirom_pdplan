@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="/pirom_pdplan/assets/index-BxCQelPP.js"></script>
+    <script type="module" crossorigin src="/pirom_pdplan/assets/index-eiVTVA8O.js"></script>
     <link rel="stylesheet" crossorigin href="/pirom_pdplan/assets/index-BOnFYm8_.css">
   </head>
   <body>
@@ -1856,63 +1856,7 @@
         </div>
       </div>
 
-      <!-- DWG PDF VIEWER WINDOW POPUP MODAL -->
-      <div id="dwg-pdf-modal" class="modal-overlay hidden" style="position: fixed; inset: 0; z-index: 9999; backdrop-filter: blur(4px); background: rgba(0, 0, 0, 0.65); display: none; align-items: center; justify-content: center; padding: 15px;">
-        <div id="dwg-pdf-window" class="modal-content card-glass" style="max-width: 95vw; width: 1250px; height: 90vh; display: flex; flex-direction: column; padding: 12px 16px; border-radius: 12px; background: var(--bg-card, #0f172a); border: 1px solid var(--border-glass, rgba(255,255,255,0.12)); box-shadow: 0 20px 50px rgba(0,0,0,0.85); transition: all 0.2s ease;">
-          
-          <!-- Window Title Bar / Header (Draggable) -->
-          <div id="dwg-pdf-modal-header" class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px; margin-bottom: 8px; flex-shrink: 0; cursor: grab; user-select: none;" title="คลิกค้างแล้วลากเพื่อย้ายหน้าต่าง (Drag to move)">
-            <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; min-width: 0; pointer-events: none;">
-              <span style="font-size: 20px; line-height: 1;">📐</span>
-              <div style="display: flex; flex-direction: column; min-width: 0;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <h3 id="dwg-pdf-modal-title" style="font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--accent-teal); margin: 0; white-space: nowrap;">
-                    Drawing PDF Viewer
-                  </h3>
-                  <span id="dwg-pdf-modal-badge" style="font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 4px; background: rgba(0, 242, 254, 0.12); color: var(--accent-teal); border: 1px solid var(--accent-teal); font-family: monospace;">
-                    DWG
-                  </span>
-                  <span style="font-size: 12px; opacity: 0.7; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 2px;" title="คลิกลากเพื่อย้ายหน้าต่าง">
-                    ✥ <span style="font-size: 10px;">ลากขยับได้</span>
-                  </span>
-                </div>
-                <span id="dwg-pdf-modal-filename" style="font-size: 11px; color: var(--text-secondary); font-family: monospace; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;" title=""></span>
-              </div>
-            </div>
-
-            <!-- Window Action Controls -->
-            <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: 12px; pointer-events: auto;">
-              <a id="btn-dwg-pdf-open-external" href="#" target="_blank" class="btn" title="เปิดดูในแท็บใหม่ของเบราว์เซอร์" style="padding: 4px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); color: var(--text-primary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
-                <span>↗️ เปิดแท็บใหม่</span>
-              </a>
-              <a id="btn-dwg-pdf-download" href="#" download class="btn" title="ดาวน์โหลดไฟล์ PDF เก็บไว้ในเครื่อง" style="padding: 4px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; background: rgba(0, 242, 254, 0.12); border: 1px solid var(--accent-teal); color: var(--accent-teal); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
-                <span>💾 ดาวน์โหลด</span>
-              </a>
-              <button id="btn-dwg-pdf-fullscreen" type="button" class="btn" title="ขยายเต็มจอ / ปรับขนาดปกติ" style="padding: 4px 8px; font-size: 12px; font-weight: bold; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass); color: var(--text-primary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">
-                ⛶
-              </button>
-              <button id="btn-close-dwg-pdf-modal" type="button" style="background: none; border: none; cursor: pointer; font-size: 22px; color: var(--text-secondary); line-height: 1; padding: 2px 6px; border-radius: 4px; transition: color 0.15s;" title="ปิดหน้าต่างนี้ (Esc)">
-                ✕
-              </button>
-            </div>
-          </div>
-
-          <!-- Window Content: PDF Frame Container -->
-          <div style="flex: 1; position: relative; width: 100%; height: 100%; border-radius: 8px; overflow: hidden; background: #0f172a; border: 1px solid var(--border-glass); display: flex; flex-direction: column;">
-            
-            <!-- Loading Overlay -->
-            <div id="dwg-pdf-loading" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: rgba(15, 23, 42, 0.9); z-index: 5; transition: opacity 0.2s;">
-              <span style="font-size: 28px;">⏳</span>
-              <span style="font-size: 13px; color: var(--text-primary); font-weight: 600;">กำลังโหลดเอกสารแบบ Drawing PDF...</span>
-            </div>
-
-            <!-- PDF Viewer Iframe -->
-            <iframe id="dwg-pdf-iframe" src="" style="width: 100%; height: 100%; border: none; flex: 1; background: #ffffff;" allow="autoplay" allowfullscreen></iframe>
-          </div>
-
-        </div>
-      </div>
-
+      <!-- DWG PDF opens directly in a new Google Drive tab (no popup modal) -->
     <!-- MAIN MODULE LOADER -->
   </body>
 </html>
