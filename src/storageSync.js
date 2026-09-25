@@ -7,8 +7,9 @@
 
 export const DEFAULT_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA?lfhs=2';
 export const DEFAULT_DRIVE_FOLDER_ID = '1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA';
-export const DEFAULT_DWG_FOLDER_URL = 'https://drive.google.com/drive/folders/17w0vlhgTfMW18p2H0LRq2aB1fOSHEdvg';
-export const DEFAULT_DWG_FOLDER_ID = '17w0vlhgTfMW18p2H0LRq2aB1fOSHEdvg';
+export const DEFAULT_DWG_FOLDER_URL = 'https://drive.google.com/drive/folders/1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm';
+export const DEFAULT_DWG_FOLDER_ID = '1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm';
+export const DEFAULT_SYNC_ENDPOINT_URL = 'https://script.google.com/macros/s/AKfycbzLDxqPOnJAC8aRVyr8-_oNLWLdXEbSvJqbGSh-5W-zFVo_cwdVhsQPISjUUF3NSpJJFg/exec';
 
 const STORAGE_ENDPOINT_KEY = 'PDPLAN_STORAGE_ENDPOINT';
 const STORAGE_CACHE_KEY = 'pdplan_cached_plan';
@@ -27,7 +28,7 @@ export class StorageSyncManager {
       window.openStorageLocationModal = () => this.openSyncModal();
       window.openDwgPdfViewer = (dwgNo) => this.openDwgPdfViewer(dwgNo);
     }
-    this.endpointUrl = localStorage.getItem(STORAGE_ENDPOINT_KEY) || '';
+    this.endpointUrl = localStorage.getItem(STORAGE_ENDPOINT_KEY) || DEFAULT_SYNC_ENDPOINT_URL;
     this.autoSync = localStorage.getItem(STORAGE_AUTO_SYNC_KEY) !== 'false';
     this.lastSyncTime = localStorage.getItem(STORAGE_LAST_SYNC_KEY) || null;
     this.syncStatus = 'idle'; // 'idle' | 'syncing' | 'success' | 'error' | 'local_only'

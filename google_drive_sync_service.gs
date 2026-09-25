@@ -32,7 +32,7 @@
 
 // โฟลเดอร์เป้าหมายใน Google Drive
 const TARGET_FOLDER_ID = '1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA';
-const TARGET_DWG_FOLDER_ID = '17w0vlhgTfMW18p2H0LRq2aB1fOSHEdvg';
+const TARGET_DWG_FOLDER_ID = '1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm';
 const TARGET_FILE_NAME = 'Plan.json';
 const MACHINE_SETTINGS_FILE_NAME = 'machine_settings.json';
 const COMPLETED_PDS_FILE_NAME = 'completed_pds.json';
@@ -164,15 +164,28 @@ function doGet(e) {
         };
       };
       let dwgInfo = { exists: false, folderId: customDwgFolderId, subfolders: [] };
+      let df = null;
       try {
-        const df = DriveApp.getFolderById(customDwgFolderId);
-        if (df) {
-          const subs = [];
-          const subIter = df.getFolders();
-          while (subIter.hasNext()) subs.push(subIter.next().getName());
-          dwgInfo = { exists: true, folderId: df.getId(), folderName: df.getName(), subfolders: subs };
-        }
+        df = DriveApp.getFolderById(customDwgFolderId);
       } catch (err) {}
+      if (!df && customDwgFolderId !== TARGET_DWG_FOLDER_ID) {
+        try { df = DriveApp.getFolderById(TARGET_DWG_FOLDER_ID); } catch (err) {}
+      }
+      if (!df) {
+        try {
+          const subFolders = folder.getFolders();
+          while (subFolders.hasNext()) {
+            const sf = subFolders.next();
+            if (sf.getName().toLowerCase().includes('dwg')) { df = sf; break; }
+          }
+        } catch (err) {}
+      }
+      if (df) {
+        const subs = [];
+        const subIter = df.getFolders();
+        while (subIter.hasNext()) subs.push(subIter.next().getName());
+        dwgInfo = { exists: true, folderId: df.getId(), folderName: df.getName(), subfolders: subs };
+      }
       return ContentService.createTextOutput(JSON.stringify({
         status: 'success',
         source: 'google_drive_cloud',

@@ -42,9 +42,9 @@ export default defineConfig({
 
           const readCloudConfig = () => {
             const cfg = {
-              endpointUrl: '',
+              endpointUrl: 'https://script.google.com/macros/s/AKfycbzLDxqPOnJAC8aRVyr8-_oNLWLdXEbSvJqbGSh-5W-zFVo_cwdVhsQPISjUUF3NSpJJFg/exec',
               driveFolderUrl: 'https://drive.google.com/drive/folders/1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA?lfhs=2',
-              dwgFolderUrl: 'https://drive.google.com/drive/folders/17w0vlhgTfMW18p2H0LRq2aB1fOSHEdvg',
+              dwgFolderUrl: 'https://drive.google.com/drive/folders/1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm',
               statusOverviewFilename: 'LN Status Overview.xlsx'
             };
             for (const p of [cloudConfigLocalPath, cloudConfigGdrivePath]) {
@@ -52,9 +52,20 @@ export default defineConfig({
                 try {
                   const parsed = JSON.parse(fs.readFileSync(p, 'utf-8'));
                   if (parsed && typeof parsed === 'object') {
-                    if (parsed.endpointUrl && !cfg.endpointUrl) cfg.endpointUrl = String(parsed.endpointUrl).trim();
+                    if (parsed.endpointUrl && String(parsed.endpointUrl).trim()) cfg.endpointUrl = String(parsed.endpointUrl).trim();
                     if (parsed.driveFolderUrl) cfg.driveFolderUrl = String(parsed.driveFolderUrl).trim();
-                    if (parsed.dwgFolderUrl) cfg.dwgFolderUrl = String(parsed.dwgFolderUrl).trim();
+                    if (parsed.dwgFolderUrl) {
+                      const rawDwg = String(parsed.dwgFolderUrl).trim();
+                      const matches = [...rawDwg.matchAll(/folders\/([a-zA-Z0-9_-]+)/g)];
+                      if (matches.length > 0) {
+                        const lastId = matches[matches.length - 1][1];
+                        cfg.dwgFolderUrl = lastId === '17w0vlhgTfMW18p2H0LRq2aB1fOSHEdvg'
+                          ? 'https://drive.google.com/drive/folders/1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm'
+                          : `https://drive.google.com/drive/folders/${lastId}`;
+                      } else {
+                        cfg.dwgFolderUrl = rawDwg;
+                      }
+                    }
                     if (parsed.statusOverviewFilename) cfg.statusOverviewFilename = String(parsed.statusOverviewFilename).trim();
                   }
                 } catch {}
@@ -783,12 +794,17 @@ export default defineConfig({
             if (endpointUrl) {
               if (endpointUrl.includes('drive.google.com/drive/folders')) {
                 cloudApi.message = 'เป็นลิงก์โฟลเดอร์ Google Drive ไม่ใช่ Web App URL (https://script.google.com/macros/s/.../exec)';
+              } else if (/\/dev(\?|$)/i.test(endpointUrl)) {
+                cloudApi.message = 'ลิงก์ลงท้ายด้วย /dev (เป็นลิงก์ Test ใช้ผ่าน API ไม่ได้) กรุณากด Deploy > New deployment ตั้งสิทธิ์เป็น Anyone แล้วใช้ลิงก์ที่ลงท้ายด้วย /exec';
               } else if (endpointUrl.startsWith('http')) {
                 try {
+                  const dwgMatches = [...(dwgUrl || '').matchAll(/folders\/([a-zA-Z0-9_-]+)/g)];
+                  let dwgFolderId = dwgMatches.length > 0 ? dwgMatches[dwgMatches.length - 1][1] : '1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm';
+                  if (dwgFolderId === '17w0vlhgTfMW18p2H0LRq2aB1fOSHEdvg') dwgFolderId = '1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm';
                   const sep = endpointUrl.includes('?') ? '&' : '?';
                   const controller = new AbortController();
                   const timer = setTimeout(() => controller.abort(), 8000);
-                  const r = await fetch(`${endpointUrl}${sep}action=check-cloud-status&statusFilename=${encodeURIComponent(statusFilename)}&t=${Date.now()}`, {
+                  const r = await fetch(`${endpointUrl}${sep}action=check-cloud-status&statusFilename=${encodeURIComponent(statusFilename)}&dwgFolderId=${encodeURIComponent(dwgFolderId)}&t=${Date.now()}`, {
                     method: 'GET',
                     redirect: 'follow',
                     signal: controller.signal
@@ -796,8 +812,9 @@ export default defineConfig({
                   clearTimeout(timer);
                   if (r.ok) {
                     const txt = await r.text();
-                    if (txt.includes('<!DOCTYPE') || txt.includes('<html')) {
-                      cloudApi.message = 'ติดสิทธิ์เข้าถึง Google Apps Script (ต้องตั้งค่า Deploy -> ผู้ที่มีสิทธิ์เข้าถึง เป็น "ทุกคน / Anyone")';
+                    const lowerTxt = txt.toLowerCase();
+                    if (lowerTxt.includes('<!doctype') || lowerTxt.includes('<html') || lowerTxt.includes('accounts.google.com')) {
+                      cloudApi.message = 'ติดหน้า Google Sign-In (กรุณาตั้งค่า Deploy -> ผู้ที่มีสิทธิ์เข้าถึง เป็น "ทุกคน / Anyone" และใช้ลิงก์ /exec)';
                     } else {
                       const parsed = JSON.parse(txt);
                       if (parsed && parsed.status === 'success') {
