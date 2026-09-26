@@ -107,6 +107,83 @@ export class StorageSyncManager {
     this.userModeOptionView = document.getElementById('user-mode-option-view');
     this.userModeOptionPlan = document.getElementById('user-mode-option-plan');
 
+    let pwBox = document.getElementById('user-mode-password-box');
+    if (!pwBox && this.userModeMenu) {
+      pwBox = document.createElement('div');
+      pwBox.id = 'user-mode-password-box';
+      pwBox.className = 'hidden';
+      pwBox.style.cssText = 'margin-top: 6px; padding: 10px; border-radius: 8px; background: rgba(22, 163, 74, 0.08); border: 1px solid rgba(34, 197, 94, 0.35);';
+      pwBox.innerHTML = `
+        <div style="font-size: 10.5px; font-weight: 700; color: #16a34a; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">
+          <span>🔑 กรอก Password เพื่อเปิดโหมด EDIT</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <input id="user-mode-password-input" type="password" inputmode="numeric" placeholder="Password" autocomplete="off" style="flex: 1; min-width: 0; padding: 5px 8px; font-size: 12px; border-radius: 6px; border: 1px solid var(--border-glass, #cbd5e1); background: var(--bg-darker, #ffffff); color: var(--text-primary, #0f172a); outline: none; font-family: monospace; letter-spacing: 2px;" />
+          <button id="btn-user-mode-password-submit" type="button" style="padding: 5px 10px; font-size: 11px; font-weight: 700; border-radius: 6px; border: none; background: #16a34a; color: #ffffff; cursor: pointer; white-space: nowrap;">ตกลง</button>
+        </div>
+        <div id="user-mode-password-error" class="hidden" style="color: #ef4444; font-size: 10px; font-weight: 600; margin-top: 5px;">
+          ❌ รหัสผ่านไม่ถูกต้อง
+        </div>
+      `;
+      this.userModeMenu.appendChild(pwBox);
+    }
+
+    const pwInput = document.getElementById('user-mode-password-input');
+    const pwSubmit = document.getElementById('btn-user-mode-password-submit');
+    const pwError = document.getElementById('user-mode-password-error');
+
+    const resetPwBox = () => {
+      if (pwBox) pwBox.classList.add('hidden');
+      if (pwInput) {
+        pwInput.value = '';
+        pwInput.style.borderColor = 'var(--border-glass, #cbd5e1)';
+      }
+      if (pwError) pwError.classList.add('hidden');
+    };
+
+    const verifyPw = () => {
+      if (!pwInput) return;
+      const expectedPw = (localStorage.getItem('PDPLAN_EDIT_PASSWORD') || '1122').trim();
+      if (pwInput.value.trim() === expectedPw) {
+        resetPwBox();
+        this.setUserMode('plan');
+        if (this.userModeMenu) this.userModeMenu.classList.add('hidden');
+        if (this.btnUserMode) this.btnUserMode.classList.remove('menu-open');
+      } else {
+        if (pwError) pwError.classList.remove('hidden');
+        pwInput.style.borderColor = '#ef4444';
+        pwInput.focus();
+        pwInput.select();
+        this.showToast('❌ รหัสผ่านไม่ถูกต้อง', 'error');
+      }
+    };
+
+    if (pwBox) {
+      pwBox.addEventListener('click', (e) => e.stopPropagation());
+    }
+    if (pwSubmit) {
+      pwSubmit.addEventListener('click', (e) => {
+        e.stopPropagation();
+        verifyPw();
+      });
+    }
+    if (pwInput) {
+      pwInput.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          verifyPw();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          resetPwBox();
+        }
+      });
+      pwInput.addEventListener('input', () => {
+        if (pwError) pwError.classList.add('hidden');
+        pwInput.style.borderColor = 'var(--border-glass, #cbd5e1)';
+      });
+    }
+
     if (this.btnUserMode && this.userModeMenu) {
       this.btnUserMode.addEventListener('click', (e) => {
         e.preventDefault();
@@ -118,9 +195,11 @@ export class StorageSyncManager {
 
         const willOpen = this.userModeMenu.classList.contains('hidden');
         if (willOpen) {
+          resetPwBox();
           this.userModeMenu.classList.remove('hidden');
           this.btnUserMode.classList.add('menu-open');
         } else {
+          resetPwBox();
           this.userModeMenu.classList.add('hidden');
           this.btnUserMode.classList.remove('menu-open');
         }
@@ -129,6 +208,7 @@ export class StorageSyncManager {
       document.addEventListener('click', (e) => {
         if (this.userModeMenu && !this.userModeMenu.classList.contains('hidden')) {
           if (this.userModeWrapper && !this.userModeWrapper.contains(e.target)) {
+            resetPwBox();
             this.userModeMenu.classList.add('hidden');
             this.btnUserMode?.classList.remove('menu-open');
           }
@@ -139,6 +219,7 @@ export class StorageSyncManager {
     if (this.userModeOptionView) {
       this.userModeOptionView.addEventListener('click', (e) => {
         e.stopPropagation();
+        resetPwBox();
         this.setUserMode('view');
         if (this.userModeMenu) this.userModeMenu.classList.add('hidden');
         if (this.btnUserMode) this.btnUserMode.classList.remove('menu-open');
@@ -148,9 +229,19 @@ export class StorageSyncManager {
     if (this.userModeOptionPlan) {
       this.userModeOptionPlan.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.setUserMode('plan');
-        if (this.userModeMenu) this.userModeMenu.classList.add('hidden');
-        if (this.btnUserMode) this.btnUserMode.classList.remove('menu-open');
+        if (this.getUserMode() === 'plan') {
+          resetPwBox();
+          if (this.userModeMenu) this.userModeMenu.classList.add('hidden');
+          if (this.btnUserMode) this.btnUserMode.classList.remove('menu-open');
+          return;
+        }
+        if (pwBox) pwBox.classList.remove('hidden');
+        if (pwError) pwError.classList.add('hidden');
+        if (pwInput) {
+          pwInput.value = '';
+          pwInput.style.borderColor = '#16a34a';
+          setTimeout(() => pwInput.focus(), 20);
+        }
       });
     }
 
