@@ -119,7 +119,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.01';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.1B';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -1508,6 +1508,29 @@ class App {
             state.notify();
           });
         }
+      }
+    }
+
+    // 7.1 Planning Tools Dropdown Menu
+    const planningToolsDropdown = document.getElementById('planning-tools-dropdown');
+    if (planningToolsDropdown) {
+      const btnPlanningTools = document.getElementById('btn-planning-tools');
+      const planningToolsMenu = document.getElementById('planning-tools-menu');
+      if (btnPlanningTools && planningToolsMenu) {
+        btnPlanningTools.addEventListener('click', (e) => {
+          e.stopPropagation();
+          planningToolsMenu.classList.toggle('hidden');
+        });
+        document.addEventListener('click', (e) => {
+          if (!planningToolsDropdown.contains(e.target)) {
+            planningToolsMenu.classList.add('hidden');
+          }
+        });
+        planningToolsMenu.querySelectorAll('button').forEach(btn => {
+          btn.addEventListener('click', () => {
+            planningToolsMenu.classList.add('hidden');
+          });
+        });
       }
     }
 

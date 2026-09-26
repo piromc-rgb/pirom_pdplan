@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const compileVersion = '1.01';
+const compileVersion = '1.1B';
 
 export default defineConfig({
   base: '/pirom_pdplan/',
