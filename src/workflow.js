@@ -398,10 +398,12 @@ export class WorkflowController {
         // Bind Delete button click
         backlogCard.querySelector('.btn-delete-pd').addEventListener('click', (e) => {
           e.stopPropagation();
-          const confirmDelete = confirm(`คุณต้องการลบ Production Order: ${wo.id} ออกจาก Backlog ใช่หรือไม่?`);
-          if (confirmDelete) {
-            this.state.workOrders = this.state.workOrders.filter(w => w.id !== wo.id);
-            this.state.notify();
+          const childPds = typeof this.state.getDescendantPdIds === 'function' ? this.state.getDescendantPdIds(wo.id) : [];
+          const confirmMsg = childPds.length > 0
+            ? `คุณต้องการลบ Production Order: ${wo.id} พร้อม PD ลูกทั้งหมดอีก ${childPds.length} รายการ (${childPds.slice(0, 10).join(', ')}${childPds.length > 10 ? '...' : ''}) ออกจากระบบใช่หรือไม่?`
+            : `คุณต้องการลบ Production Order: ${wo.id} ออกจาก Backlog ใช่หรือไม่?`;
+          if (confirm(confirmMsg)) {
+            this.state.deleteProductionOrder(wo.id);
           }
         });
 
@@ -1576,15 +1578,16 @@ export class WorkflowController {
           });
         });
 
+        if (typeof this.state.cascadeCompletedPdsToChildren === 'function') {
+          this.state.cascadeCompletedPdsToChildren();
+        }
         if (typeof this.state.syncOverviewStatusToJobs === 'function') {
           this.state.syncOverviewStatusToJobs();
         }
 
         // Apply conditions 2 & 3's inferences: drop the now-completed PDs and the
         // now-completed individual steps out of both the backlog and the board.
-        if (inferredCompletedIds.length > 0) {
-          this.state.workOrders = this.state.workOrders.filter(wo => !this.state.isPdInCompletedHistory(wo.id));
-        }
+        this.state.workOrders = this.state.workOrders.filter(wo => !this.state.isPdInCompletedHistory(wo.id));
         this.state.scheduledJobs = this.state.scheduledJobs.filter(j =>
           !this.state.isPdInCompletedHistory(j.woId) && !this.state.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name)
         );

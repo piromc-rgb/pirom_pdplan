@@ -366,7 +366,11 @@ export class DailyScheduleController {
       if (btnMarkCompleted) {
         btnMarkCompleted.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (confirm(`บันทึกว่า ${job.woId} ผลิตจริงเสร็จแล้วใช่หรือไม่?\n(PD นี้จะถูกนำออกจากแผน และจะไม่ถูกนำกลับเข้ามาอีก)`)) {
+          const childPds = typeof this.state.getDescendantPdIds === 'function' ? this.state.getDescendantPdIds(job.woId) : [];
+          const confirmMsg = childPds.length > 0
+            ? `บันทึกว่า ${job.woId} พร้อม PD ลูกทั้งหมดอีก ${childPds.length} รายการ (${childPds.slice(0, 10).join(', ')}${childPds.length > 10 ? '...' : ''}) ผลิตจริงเสร็จแล้วใช่หรือไม่?\n(PD แม่และ PD ลูกทั้งหมดจะถูกนำออกจากแผน และจะไม่ถูกนำกลับเข้ามาอีก)`
+            : `บันทึกว่า ${job.woId} ผลิตจริงเสร็จแล้วใช่หรือไม่?\n(PD นี้จะถูกนำออกจากแผน และจะไม่ถูกนำกลับเข้ามาอีก)`;
+          if (confirm(confirmMsg)) {
             this.state.markPdCompletedAndRemove(job.woId);
             this.render();
           }

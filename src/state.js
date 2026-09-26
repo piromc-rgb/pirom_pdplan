@@ -1799,23 +1799,37 @@ class CentralState {
   }
 
   deleteProductionOrder(woId) {
+    if (!woId) return [];
     this.saveStateToHistory();
-    this.scheduledJobs = this.scheduledJobs.filter(j => j.woId !== woId && j.id !== woId);
-    this.workOrders = this.workOrders.filter(wo => wo.id !== woId);
-    if (this.pdMemos && this.pdMemos[woId]) {
-      delete this.pdMemos[woId];
+    const childPdIds = typeof this.getDescendantPdIds === 'function' ? this.getDescendantPdIds(woId) : [];
+    const allIdsToDelete = new Set([woId, ...childPdIds]);
+
+    // If the main PD was marked completed in history, also ensure all its children are marked completed
+    if (this.isPdInCompletedHistory(woId)) {
+      allIdsToDelete.forEach(id => {
+        this.completedPdHistory[id] = true;
+      });
+    }
+
+    this.scheduledJobs = this.scheduledJobs.filter(j => !allIdsToDelete.has(j.woId) && !allIdsToDelete.has(j.id));
+    this.workOrders = this.workOrders.filter(wo => !allIdsToDelete.has(wo.id));
+    if (this.pdMemos) {
+      allIdsToDelete.forEach(id => {
+        delete this.pdMemos[id];
+      });
     }
     if (this.assemblyLinks) {
       this.assemblyLinks = this.assemblyLinks.filter(link => {
         const fromWo = this.parseStepId(link.from).woId;
         const toWo = this.parseStepId(link.to).woId;
-        return fromWo !== woId && toWo !== woId;
+        return !allIdsToDelete.has(fromWo) && !allIdsToDelete.has(toWo);
       });
     }
     this.saveWorkOrdersToFile();
     this.savePlanToFile();
     this.notify();
     this.dispatchHistoryEvent();
+    return childPdIds;
   }
 
   setKioskMachine(machine) {
@@ -2220,42 +2234,210 @@ class CentralState {
     return Boolean(this.removedStepHistory[key]);
   }
 
-  markPdCompletedHistory(pdId, completed) {
-    if (!pdId) return;
-    if (completed) {
-      this.completedPdHistory[pdId] = true;
-    } else {
-      delete this.completedPdHistory[pdId];
+  // Finds all descendant (child, grandchild, etc.) PD IDs of a Main/Parent PD
+  // across Plan + Mat (planMaterials & dwgToPdMap), assemblyLinks, and hierarchical dash suffixes.
+  getDescendantPdIds(woId) {
+    if (!woId) return [];
+    const descendants = new Set();
+    const visited = new Set([woId]);
+    const queue = [woId];
+
+    const allKnownWoIds = new Set();
+    const partKeyToWoIds = new Map();
+    const woIdToPartKey = new Map();
+
+    const extractPartKey = (item) => {
+      if (!item) return '';
+      if (item.partName) {
+        const match = item.partName.trim().match(/^([A-Za-z0-9_]+(-\d+)*)/);
+        if (match && match[1] && (match[1].includes('-') || /^[A-Za-z0-9_]+$/.test(match[1]))) {
+          return match[1];
+        }
+      }
+      if (item.dwgNo) {
+        const match = item.dwgNo.trim().match(/^([A-Za-z0-9_]+(-\d+)*)/);
+        if (match && match[1]) return match[1];
+      }
+      return '';
+    };
+
+    const registerWo = (id, sampleItem) => {
+      if (!id) return;
+      allKnownWoIds.add(id);
+      if (sampleItem && !woIdToPartKey.has(id)) {
+        const key = extractPartKey(sampleItem);
+        if (key) {
+          woIdToPartKey.set(id, key);
+          if (!partKeyToWoIds.has(key)) partKeyToWoIds.set(key, new Set());
+          partKeyToWoIds.get(key).add(id);
+        }
+      }
+    };
+
+    (this.scheduledJobs || []).forEach(j => registerWo(j.woId, j));
+    (this.workOrders || []).forEach(w => registerWo(w.id, w));
+    if (this.planMaterials) {
+      Object.keys(this.planMaterials).forEach(id => registerWo(id, null));
     }
+    if (this.dwgToPdMap) {
+      Object.values(this.dwgToPdMap).forEach(info => {
+        if (info && info.pdId) registerWo(info.pdId, info);
+      });
+    }
+
+    while (queue.length > 0) {
+      const curWoId = queue.shift();
+
+      const addChild = (childId) => {
+        if (!childId || childId === '📦 วัตถุดิบคลัง' || childId === '-') return;
+        if (!visited.has(childId)) {
+          visited.add(childId);
+          descendants.add(childId);
+          queue.push(childId);
+        }
+      };
+
+      // 1. From planMaterials (Sheet "Plan + Mat") & dwgToPdMap / live jobs / backlog
+      const mats = (this.planMaterials && this.planMaterials[curWoId]) || [];
+      mats.forEach(item => {
+        const matCode = String(item.mat || '').trim();
+        if (!matCode) return;
+        if (matCode.length === 10 && /^\d+$/.test(matCode)) return; // 10-digit raw material
+
+        const dwgPdId = this.dwgToPdMap?.[matCode]?.pdId;
+        if (dwgPdId) addChild(dwgPdId);
+
+        (this.scheduledJobs || []).forEach(j => {
+          if ((j.dwgNo && j.dwgNo.trim() === matCode) || j.woId === matCode) {
+            addChild(j.woId);
+          }
+        });
+        (this.workOrders || []).forEach(w => {
+          if ((w.dwgNo && w.dwgNo.trim() === matCode) || w.id === matCode) {
+            addChild(w.id);
+          }
+        });
+      });
+
+      // 2. From assemblyLinks (from = child step, to = parent step)
+      (this.assemblyLinks || []).forEach(link => {
+        const fromWo = this.parseStepId(link.from).woId;
+        const toWo = this.parseStepId(link.to).woId;
+        if (toWo === curWoId && fromWo && fromWo !== curWoId) {
+          addChild(fromWo);
+        }
+      });
+
+      // 3. Direct woId dash-suffix children (e.g. PD0000301-1 -> PD0000301)
+      allKnownWoIds.forEach(candidateId => {
+        if (candidateId.startsWith(curWoId + '-')) {
+          addChild(candidateId);
+        }
+      });
+
+      // 4. Part key dash-suffix children (e.g. SR-268-0-1 -> SR-268-0)
+      const curPartKey = woIdToPartKey.get(curWoId);
+      if (curPartKey && curPartKey.includes('-') && !/^\d+-\d+$/.test(curPartKey)) {
+        partKeyToWoIds.forEach((woSet, candidateKey) => {
+          if (candidateKey.startsWith(curPartKey + '-')) {
+            const suffix = candidateKey.slice(curPartKey.length + 1);
+            if (/^\d+(-\d+)*$/.test(suffix)) {
+              woSet.forEach(cId => addChild(cId));
+            }
+          }
+        });
+      }
+    }
+
+    return Array.from(descendants);
+  }
+
+  // Ensures that any PD already in completedPdHistory also cascades its completed status
+  // to all of its descendant child PDs (and removes them from active schedule/backlog).
+  cascadeCompletedPdsToChildren() {
+    if (!this.completedPdHistory) return false;
+    const initialIds = Object.keys(this.completedPdHistory).filter(id => this.completedPdHistory[id]);
+    if (initialIds.length === 0) return false;
+
+    let addedAny = false;
+    initialIds.forEach(pdId => {
+      const childIds = this.getDescendantPdIds(pdId);
+      childIds.forEach(cId => {
+        if (!this.completedPdHistory[cId]) {
+          this.completedPdHistory[cId] = true;
+          addedAny = true;
+        }
+      });
+    });
+
+    if (addedAny) {
+      this.scheduledJobs = (this.scheduledJobs || []).filter(j => !this.isPdInCompletedHistory(j.woId));
+      this.workOrders = (this.workOrders || []).filter(wo => !this.isPdInCompletedHistory(wo.id));
+    }
+    return addedAny;
+  }
+
+  markPdCompletedHistory(pdId, completed, cascadeChildren = true) {
+    if (!pdId) return [];
+    const childPdIds = cascadeChildren ? this.getDescendantPdIds(pdId) : [];
+    const allIds = [pdId, ...childPdIds];
+    allIds.forEach(id => {
+      if (completed) {
+        this.completedPdHistory[id] = true;
+      } else {
+        delete this.completedPdHistory[id];
+      }
+    });
     this.savePlanToFile();
     this.notify();
+    return childPdIds;
   }
 
   // One-click "mark finished and take it off the board now" - same permanent
   // record as the "ผลิตจริงเสร็จแล้ว" checkbox in the PD edit modal, but also
-  // pulls this PD's steps out of scheduledJobs immediately instead of waiting
-  // for the next reload to filter them out.
+  // pulls this PD's (and all its child PDs') steps out of scheduledJobs immediately.
   markPdCompletedAndRemove(pdId) {
-    if (!pdId) return;
+    if (!pdId) return [];
     this.saveStateToHistory();
-    this.completedPdHistory[pdId] = true;
-    this.scheduledJobs = this.scheduledJobs.filter(j => j.woId !== pdId);
-    this.workOrders = this.workOrders.filter(wo => wo.id !== pdId);
+    const childPdIds = this.getDescendantPdIds(pdId);
+    const idSet = new Set([pdId, ...childPdIds]);
+    idSet.forEach(id => { this.completedPdHistory[id] = true; });
+    this.scheduledJobs = this.scheduledJobs.filter(j => !idSet.has(j.woId));
+    this.workOrders = this.workOrders.filter(wo => !idSet.has(wo.id));
+    if (this.assemblyLinks) {
+      this.assemblyLinks = this.assemblyLinks.filter(link => {
+        const fromWo = this.parseStepId(link.from).woId;
+        const toWo = this.parseStepId(link.to).woId;
+        return !idSet.has(fromWo) && !idSet.has(toWo);
+      });
+    }
     this.savePlanToFile();
     this.notify();
     this.dispatchHistoryEvent();
+    return childPdIds;
   }
 
   // Same as markPdCompletedAndRemove() but for many PDs at once (e.g. every PD
   // that falls inside a checked PD Range Filter entry) - one history snapshot
-  // and one save/notify instead of one per PD.
+  // and one save/notify instead of one per PD. Also cascades to all child PDs.
   markPdsCompletedAndRemoveBulk(pdIds) {
     if (!pdIds || pdIds.length === 0) return;
     this.saveStateToHistory();
     const idSet = new Set(pdIds);
+    pdIds.forEach(id => {
+      const children = this.getDescendantPdIds(id);
+      children.forEach(cId => idSet.add(cId));
+    });
     idSet.forEach(id => { this.completedPdHistory[id] = true; });
     this.scheduledJobs = this.scheduledJobs.filter(j => !idSet.has(j.woId));
     this.workOrders = this.workOrders.filter(wo => !idSet.has(wo.id));
+    if (this.assemblyLinks) {
+      this.assemblyLinks = this.assemblyLinks.filter(link => {
+        const fromWo = this.parseStepId(link.from).woId;
+        const toWo = this.parseStepId(link.to).woId;
+        return !idSet.has(fromWo) && !idSet.has(toWo);
+      });
+    }
     this.savePlanToFile();
     this.notify();
     this.dispatchHistoryEvent();
@@ -2473,6 +2655,7 @@ class CentralState {
       if (data.planMaterials) this.planMaterials = data.planMaterials;
       if (data.dwgToPdMap) this.dwgToPdMap = data.dwgToPdMap;
       if (data.pdOpStatusMap) this.pdOpStatusMap = data.pdOpStatusMap;
+      this.cascadeCompletedPdsToChildren();
       this.syncOverviewStatusToJobs();
 
       this.scheduledJobs = this.scheduledJobs.filter(j => !this.isPdInCompletedHistory(j.woId) && !this.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name));

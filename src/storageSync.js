@@ -1005,6 +1005,9 @@ export class StorageSyncManager {
       if (data.planMaterials) this.state.planMaterials = data.planMaterials;
       if (data.dwgToPdMap) this.state.dwgToPdMap = data.dwgToPdMap;
       if (data.pdOpStatusMap) this.state.pdOpStatusMap = data.pdOpStatusMap;
+      if (typeof this.state.cascadeCompletedPdsToChildren === 'function') {
+        this.state.cascadeCompletedPdsToChildren();
+      }
       if (typeof this.state.syncOverviewStatusToJobs === 'function') {
         this.state.syncOverviewStatusToJobs();
       }
@@ -1564,6 +1567,9 @@ export class StorageSyncManager {
   }
 
   updateAssemblyTreeAfterMaterials() {
+    if (typeof this.state.cascadeCompletedPdsToChildren === 'function') {
+      this.state.cascadeCompletedPdsToChildren();
+    }
     if (typeof this.state.syncOverviewStatusToJobs === 'function') {
       this.state.syncOverviewStatusToJobs();
     }

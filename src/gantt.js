@@ -4212,10 +4212,16 @@ export class GanttController {
       const cleanBtnDelete = btnDelete.cloneNode(true);
       btnDelete.parentNode.replaceChild(cleanBtnDelete, btnDelete);
       cleanBtnDelete.addEventListener('click', () => {
-        if (confirm(`คุณต้องการลบ Production Order: ${woId} นี้ใช่หรือไม่?\n(การลบจะนำขั้นตอนและข้อมูลทั้งหมดของ PD นี้ออกจากระบบ)`)) {
-          this.state.deleteProductionOrder(woId);
+        const childPds = typeof this.state.getDescendantPdIds === 'function' ? this.state.getDescendantPdIds(woId) : [];
+        const confirmMsg = childPds.length > 0
+          ? `คุณต้องการลบ Production Order: ${woId} พร้อม PD ลูกทั้งหมดอีก ${childPds.length} รายการ (${childPds.slice(0, 10).join(', ')}${childPds.length > 10 ? '...' : ''}) ใช่หรือไม่?\n(การลบจะนำขั้นตอนและข้อมูลทั้งหมดของ PD แม่และ PD ลูกออกจากระบบ)`
+          : `คุณต้องการลบ Production Order: ${woId} นี้ใช่หรือไม่?\n(การลบจะนำขั้นตอนและข้อมูลทั้งหมดของ PD นี้ออกจากระบบ)`;
+        if (confirm(confirmMsg)) {
+          const deletedChildren = this.state.deleteProductionOrder(woId) || [];
           this.closePDPlanModal();
-          this.showToast(`🗑️ ลบ Production Order ${woId} เรียบร้อยแล้ว`);
+          this.showToast(deletedChildren.length > 0
+            ? `🗑️ ลบ Production Order ${woId} และ PD ลูกทั้งหมด (${deletedChildren.length} รายการ) เรียบร้อยแล้ว`
+            : `🗑️ ลบ Production Order ${woId} เรียบร้อยแล้ว`);
         }
       });
     }
@@ -4261,10 +4267,18 @@ export class GanttController {
       cleanInputCompletedHistory.checked = this.state.isPdInCompletedHistory(woId);
       inputCompletedHistory.parentNode.replaceChild(cleanInputCompletedHistory, inputCompletedHistory);
       cleanInputCompletedHistory.addEventListener('change', () => {
-        this.state.markPdCompletedHistory(woId, cleanInputCompletedHistory.checked);
-        this.showToast(cleanInputCompletedHistory.checked
-          ? `✅ บันทึกว่า ${woId} ผลิตจริงเสร็จแล้ว - จะไม่ถูกนำกลับเข้าแผนอีก`
-          : `↩️ ยกเลิกสถานะผลิตเสร็จแล้วของ ${woId}`);
+        const isChecked = cleanInputCompletedHistory.checked;
+        const childPds = this.state.markPdCompletedHistory(woId, isChecked) || [];
+        this.showPDPlanModal(woId);
+        if (childPds.length > 0) {
+          this.showToast(isChecked
+            ? `✅ บันทึกว่า ${woId} และ PD ลูกทั้งหมด (${childPds.length} รายการ) ผลิตจริงเสร็จแล้ว`
+            : `↩️ ยกเลิกสถานะผลิตเสร็จแล้วของ ${woId} และ PD ลูกทั้งหมด (${childPds.length} รายการ)`);
+        } else {
+          this.showToast(isChecked
+            ? `✅ บันทึกว่า ${woId} ผลิตจริงเสร็จแล้ว - จะไม่ถูกนำกลับเข้าแผนอีก`
+            : `↩️ ยกเลิกสถานะผลิตเสร็จแล้วของ ${woId}`);
+        }
       });
     }
 
