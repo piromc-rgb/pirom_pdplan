@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const compileVersion = '1.1B';
+const compileVersion = '1.2';
 
 function getTempCacheDir() {
   const dir = path.join(os.tmpdir(), 'pirom_pdplan');
@@ -185,12 +185,18 @@ export default defineConfig({
           if (cleanUrl === '/api/pd' || cleanUrl.startsWith('/api/pd?')) {
             const pdFilePath = path.resolve(__dirname, 'pd.md');
             const gdrivePdPath = path.join(gdriveDir, 'pd.md');
+            const tempPdPath = path.join(tempCacheDir, 'pd.md');
+            const urlObj = new URL(cleanUrl, 'http://localhost');
+            const preferTemp = urlObj.searchParams.get('source') === 'temp';
+            const tempOnly = urlObj.searchParams.get('tempOnly') === '1';
             
             if (req.method === 'GET') {
               res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              const activePdPath = (fs.existsSync(gdrivePdPath) && (!fs.existsSync(pdFilePath) || fs.statSync(gdrivePdPath).mtimeMs >= fs.statSync(pdFilePath).mtimeMs))
-                ? gdrivePdPath
-                : pdFilePath;
+              const activePdPath = (preferTemp && fs.existsSync(tempPdPath))
+                ? tempPdPath
+                : (fs.existsSync(gdrivePdPath) && (!fs.existsSync(pdFilePath) || fs.statSync(gdrivePdPath).mtimeMs >= fs.statSync(pdFilePath).mtimeMs))
+                  ? gdrivePdPath
+                  : pdFilePath;
               if (fs.existsSync(activePdPath)) {
                 try {
                   const content = fs.readFileSync(activePdPath, 'utf-8');
@@ -234,12 +240,22 @@ export default defineConfig({
                   markdownContent += `\n## Raw Data Block (Auto-generated)\n`;
                   markdownContent += `\`\`\`json\n${JSON.stringify(workOrders, null, 2)}\n\`\`\`\n`;
                   
-                  fs.writeFileSync(pdFilePath, markdownContent, 'utf-8');
-                  if (fs.existsSync(gdriveDir)) {
-                    try { fs.writeFileSync(gdrivePdPath, markdownContent, 'utf-8'); } catch (e) {}
+                  // Always write working copy to OS Temp folder (Windows %TEMP%/pirom_pdplan & macOS $TMPDIR/pirom_pdplan)
+                  try { fs.writeFileSync(tempPdPath, markdownContent, 'utf-8'); } catch (e) {}
+
+                  if (!tempOnly) {
+                    fs.writeFileSync(pdFilePath, markdownContent, 'utf-8');
+                    if (fs.existsSync(gdriveDir)) {
+                      try { fs.writeFileSync(gdrivePdPath, markdownContent, 'utf-8'); } catch (e) {}
+                    }
                   }
                   res.statusCode = 200;
-                  res.end(JSON.stringify({ success: true }));
+                  res.end(JSON.stringify({
+                    success: true,
+                    savedTo: tempOnly ? 'temp' : 'cloud',
+                    tempDir: tempCacheDir,
+                    platform: process.platform
+                  }));
                 } catch (err) {
                   console.error('Error saving pd.md:', err);
                   res.statusCode = 500;
@@ -253,13 +269,21 @@ export default defineConfig({
           if (cleanUrl === '/api/plan' || cleanUrl.startsWith('/api/plan?')) {
             const planFilePath = path.resolve(__dirname, 'Plan.json');
             const gdrivePlanPath = path.join(gdriveDir, 'Plan.json');
+            const tempPlanPath = path.join(tempCacheDir, 'Plan.json');
             const machineFilePath = path.resolve(__dirname, 'machine_settings.json');
             const gdriveMachinePath = path.join(gdriveDir, 'machine_settings.json');
+            const tempMachinePath = path.join(tempCacheDir, 'machine_settings.json');
             const completedFilePath = path.resolve(__dirname, 'completed_pds.json');
             const gdriveCompletedPath = path.join(gdriveDir, 'completed_pds.json');
+            const tempCompletedPath = path.join(tempCacheDir, 'completed_pds.json');
+            const tempPdPath = path.join(tempCacheDir, 'pd.md');
+            const pdFilePath = path.resolve(__dirname, 'pd.md');
+            const gdrivePdPath = path.join(gdriveDir, 'pd.md');
             
             if (req.method === 'GET') {
               res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              const urlObj = new URL(cleanUrl, 'http://localhost');
+              const preferTemp = urlObj.searchParams.get('source') === 'temp';
               let content = { scheduledJobs: [], nests: {}, completedPdHistory: {}, workCenters: {}, workCenterOrder: [] };
               // Auto-seed Google Drive Plan.json if missing
               if (fs.existsSync(gdriveDir) && !fs.existsSync(gdrivePlanPath) && fs.existsSync(planFilePath)) {
@@ -272,9 +296,11 @@ export default defineConfig({
                   fs.writeFileSync(gdrivePlanPath, JSON.stringify(lightPlan, null, 2), 'utf-8');
                 } catch (e) {}
               }
-              const activePlanPath = (fs.existsSync(gdrivePlanPath) && (!fs.existsSync(planFilePath) || fs.statSync(gdrivePlanPath).mtimeMs >= fs.statSync(planFilePath).mtimeMs))
-                ? gdrivePlanPath
-                : planFilePath;
+              const activePlanPath = (preferTemp && fs.existsSync(tempPlanPath))
+                ? tempPlanPath
+                : (fs.existsSync(gdrivePlanPath) && (!fs.existsSync(planFilePath) || fs.statSync(gdrivePlanPath).mtimeMs >= fs.statSync(planFilePath).mtimeMs))
+                  ? gdrivePlanPath
+                  : planFilePath;
               if (fs.existsSync(activePlanPath)) {
                 try {
                   const raw = fs.readFileSync(activePlanPath, 'utf-8');
@@ -283,7 +309,9 @@ export default defineConfig({
                   console.error('Error reading Plan.json:', err);
                 }
               }
-              const activeMachinePath = fs.existsSync(gdriveMachinePath) ? gdriveMachinePath : machineFilePath;
+              const activeMachinePath = (preferTemp && fs.existsSync(tempMachinePath))
+                ? tempMachinePath
+                : (fs.existsSync(gdriveMachinePath) ? gdriveMachinePath : machineFilePath);
               if (fs.existsSync(activeMachinePath)) {
                 try {
                   const mRaw = JSON.parse(fs.readFileSync(activeMachinePath, 'utf-8'));
@@ -291,7 +319,9 @@ export default defineConfig({
                   if (mRaw.workCenterOrder) content.workCenterOrder = mRaw.workCenterOrder;
                 } catch (e) {}
               }
-              const activeCompletedPath = fs.existsSync(gdriveCompletedPath) ? gdriveCompletedPath : completedFilePath;
+              const activeCompletedPath = (preferTemp && fs.existsSync(tempCompletedPath))
+                ? tempCompletedPath
+                : (fs.existsSync(gdriveCompletedPath) ? gdriveCompletedPath : completedFilePath);
               if (fs.existsSync(activeCompletedPath)) {
                 try {
                   const cRaw = JSON.parse(fs.readFileSync(activeCompletedPath, 'utf-8'));
@@ -310,7 +340,8 @@ export default defineConfig({
             
             if (req.method === 'POST') {
               const urlObj = new URL(cleanUrl, 'http://localhost');
-              const forwardCloud = urlObj.searchParams.get('forwardCloud') === '1';
+              const tempOnly = urlObj.searchParams.get('tempOnly') === '1';
+              const forwardCloud = urlObj.searchParams.get('forwardCloud') === '1' || urlObj.searchParams.get('commitCloud') === '1';
               const chunks = [];
               req.on('data', chunk => {
                 chunks.push(chunk);
@@ -339,12 +370,8 @@ export default defineConfig({
                   delete lightPlan.pdOpStatusMap;
                   const lightPlanStr = JSON.stringify(lightPlan, null, 2);
                   
-                  fs.writeFileSync(planFilePath, lightPlanStr, 'utf-8');
-                  if (fs.existsSync(gdriveDir)) {
-                    try {
-                      fs.writeFileSync(path.join(gdriveDir, 'Plan.json'), lightPlanStr, 'utf-8');
-                    } catch (e) {}
-                  }
+                  // 1. Always save working copy into OS Temp Folder (Windows %TEMP%/pirom_pdplan & macOS $TMPDIR/pirom_pdplan)
+                  try { fs.writeFileSync(tempPlanPath, lightPlanStr, 'utf-8'); } catch (e) {}
 
                   if (payload.workCenters) {
                     const mPayload = {
@@ -353,29 +380,53 @@ export default defineConfig({
                       workCenterOrder: payload.workCenterOrder || Object.keys(payload.workCenters)
                     };
                     const mStr = JSON.stringify(mPayload, null, 2);
-                    fs.writeFileSync(machineFilePath, mStr, 'utf-8');
-                    if (fs.existsSync(gdriveDir)) {
-                      try { fs.writeFileSync(path.join(gdriveDir, 'machine_settings.json'), mStr, 'utf-8'); } catch (e) {}
+                    try { fs.writeFileSync(tempMachinePath, mStr, 'utf-8'); } catch (e) {}
+                    if (!tempOnly) {
+                      fs.writeFileSync(machineFilePath, mStr, 'utf-8');
+                      if (fs.existsSync(gdriveDir)) {
+                        try { fs.writeFileSync(path.join(gdriveDir, 'machine_settings.json'), mStr, 'utf-8'); } catch (e) {}
+                      }
                     }
                   }
 
                   if (payload.completedPdHistory) {
                     const cStr = JSON.stringify(payload.completedPdHistory, null, 2);
-                    fs.writeFileSync(completedFilePath, cStr, 'utf-8');
-                    if (fs.existsSync(gdriveDir)) {
-                      try { fs.writeFileSync(path.join(gdriveDir, 'completed_pds.json'), cStr, 'utf-8'); } catch (e) {}
+                    try { fs.writeFileSync(tempCompletedPath, cStr, 'utf-8'); } catch (e) {}
+                    if (!tempOnly) {
+                      fs.writeFileSync(completedFilePath, cStr, 'utf-8');
+                      if (fs.existsSync(gdriveDir)) {
+                        try { fs.writeFileSync(path.join(gdriveDir, 'completed_pds.json'), cStr, 'utf-8'); } catch (e) {}
+                      }
                     }
                   }
 
-                  if (forwardCloud) {
-                    const savedCfg = readCloudConfig();
-                    const ep = (savedCfg.endpointUrl || '').trim();
-                    if (ep && ep.startsWith('http') && !ep.includes('drive.google.com/drive/folders')) {
-                      fetch(ep, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify(lightPlan)
-                      }).catch(err => console.warn('Server-side forwardCloud failed:', err));
+                  // 2. Only write to Local Project + Google Drive Desktop + Cloud when tempOnly is false (i.e., user clicked Save)
+                  if (!tempOnly) {
+                    fs.writeFileSync(planFilePath, lightPlanStr, 'utf-8');
+                    if (fs.existsSync(gdriveDir)) {
+                      try {
+                        fs.writeFileSync(path.join(gdriveDir, 'Plan.json'), lightPlanStr, 'utf-8');
+                      } catch (e) {}
+                    }
+                    if (fs.existsSync(tempPdPath)) {
+                      try {
+                        const tempPdContent = fs.readFileSync(tempPdPath, 'utf-8');
+                        fs.writeFileSync(pdFilePath, tempPdContent, 'utf-8');
+                        if (fs.existsSync(gdriveDir)) {
+                          try { fs.writeFileSync(gdrivePdPath, tempPdContent, 'utf-8'); } catch (e) {}
+                        }
+                      } catch (e) {}
+                    }
+                    if (forwardCloud) {
+                      const savedCfg = readCloudConfig();
+                      const ep = (savedCfg.endpointUrl || '').trim();
+                      if (ep && ep.startsWith('http') && !ep.includes('drive.google.com/drive/folders')) {
+                        fetch(ep, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                          body: JSON.stringify(lightPlan)
+                        }).catch(err => console.warn('Server-side forwardCloud failed:', err));
+                      }
                     }
                   }
                   
@@ -386,7 +437,12 @@ export default defineConfig({
                   }
                   
                   res.statusCode = 200;
-                  res.end(JSON.stringify({ success: true }));
+                  res.end(JSON.stringify({
+                    success: true,
+                    savedTo: tempOnly ? 'temp' : 'cloud',
+                    tempDir: tempCacheDir,
+                    platform: process.platform
+                  }));
                 } catch (err) {
                   console.error('Error saving Plan.json:', err);
                   res.statusCode = 500;

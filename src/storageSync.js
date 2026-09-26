@@ -33,6 +33,9 @@ export class StorageSyncManager {
     this.lastSyncTime = localStorage.getItem(STORAGE_LAST_SYNC_KEY) || null;
     this.syncStatus = 'idle'; // 'idle' | 'syncing' | 'success' | 'error' | 'local_only'
     this.debounceTimer = null;
+    this.tempDebounceTimer = null;
+    this.hasUnsavedChanges = false;
+    this.isSavingToCloud = false;
     // โหมดผู้ใช้งาน: 'view' (ดูแผน - default) หรือ 'plan' (วางแผน)
     // ทุกครั้งที่เปิดใช้งานใหม่จะเริ่มต้นเป็น 'view' (ดูแผน) เป็นค่าเริ่มต้น
     this.userMode = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(STORAGE_USER_MODE_KEY) : null) || 'view';
@@ -85,27 +88,41 @@ export class StorageSyncManager {
       localStorage.setItem(STORAGE_USER_MODE_KEY, mode);
     } catch (e) {}
     this.updateUserModeUI();
+    this.updateStatusBadge();
     if (mode === 'plan') {
-      this.showToast('✏️ สลับเป็นโหมด "EDIT" (วางแผนลง Board หรือปิด App จะ Auto Save ลง Google Drive ที่เดียวกับ LN Overview)', 'success');
+      this.showToast('✏️ สลับเป็นโหมด "EDIT" (ทำงานใน Temp Folder ของ Windows/macOS • กดปุ่ม 💾 Save เพื่อบันทึกขึ้น Cloud)', 'success');
       if (this.state && typeof this.state.buildPlanPayload === 'function') {
-        if (typeof this.state.saveWorkOrdersToFile === 'function') this.state.saveWorkOrdersToFile();
-        this.pushToCloud(this.state.buildPlanPayload(false), true);
+        if (typeof this.state.saveWorkOrdersToFile === 'function') this.state.saveWorkOrdersToFile(false);
+        this.saveToTemp(this.state.buildPlanPayload(false), true, false);
       }
     } else {
       if (this.debounceTimer) {
         clearTimeout(this.debounceTimer);
         this.debounceTimer = null;
       }
-      this.showToast('👁️ สลับเป็นโหมด "VIEW ONLY" (Load เมื่อเปิด App แต่ไม่ Save เมื่อวางแผนหรือปิด App)', 'info');
+      if (this.tempDebounceTimer) {
+        clearTimeout(this.tempDebounceTimer);
+        this.tempDebounceTimer = null;
+      }
+      this.showToast('👁️ สลับเป็นโหมด "VIEW ONLY" (ดูแผนอย่างเดียว)', 'info');
     }
   }
 
   initUserModeUI() {
     this.userModeWrapper = document.getElementById('user-mode-wrapper');
     this.btnUserMode = document.getElementById('btn-user-mode');
+    this.btnEditModeSave = document.getElementById('btn-edit-mode-save');
     this.userModeMenu = document.getElementById('user-mode-menu');
     this.userModeOptionView = document.getElementById('user-mode-option-view');
     this.userModeOptionPlan = document.getElementById('user-mode-option-plan');
+
+    if (this.btnEditModeSave) {
+      this.btnEditModeSave.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.saveTempToCloud();
+      });
+    }
 
     let pwBox = document.getElementById('user-mode-password-box');
     if (!pwBox && this.userModeMenu) {
@@ -251,6 +268,7 @@ export class StorageSyncManager {
   updateUserModeUI() {
     const isPlan = this.getUserMode() === 'plan';
     const btnUserMode = this.btnUserMode || document.getElementById('btn-user-mode');
+    const btnEditSave = this.btnEditModeSave || document.getElementById('btn-edit-mode-save');
     const userModeIcon = document.getElementById('user-mode-icon');
     const userModeText = document.getElementById('user-mode-text');
     const optView = this.userModeOptionView || document.getElementById('user-mode-option-view');
@@ -262,11 +280,21 @@ export class StorageSyncManager {
       if (isPlan) {
         btnUserMode.classList.remove('mode-view');
         btnUserMode.classList.add('mode-plan');
-        btnUserMode.title = 'โหมดผู้ใช้งาน: EDIT (วางแผนลง Board & ปิด App จะ Save ลง Google Drive) - คลิกเพื่อสลับโหมด';
+        btnUserMode.title = 'โหมดผู้ใช้งาน: EDIT (ทำงานใน Temp Folder ของ Windows/macOS • กดปุ่ม Save เพื่อบันทึกขึ้น Cloud) - คลิกเพื่อสลับโหมด';
       } else {
         btnUserMode.classList.remove('mode-plan');
         btnUserMode.classList.add('mode-view');
-        btnUserMode.title = 'โหมดผู้ใช้งาน: VIEW ONLY (Load เปิด App / ไม่ Save เมื่อวางแผนหรือปิด App) - คลิกเพื่อสลับโหมด';
+        btnUserMode.title = 'โหมดผู้ใช้งาน: VIEW ONLY (ดูแผนอย่างเดียว) - คลิกเพื่อสลับโหมด';
+      }
+    }
+
+    if (btnEditSave) {
+      if (isPlan) {
+        btnEditSave.classList.remove('hidden');
+        btnEditSave.style.display = 'inline-flex';
+      } else {
+        btnEditSave.classList.add('hidden');
+        btnEditSave.style.display = 'none';
       }
     }
 
@@ -285,44 +313,59 @@ export class StorageSyncManager {
       checkView.classList.toggle('hidden', isPlan);
       checkPlan.classList.toggle('hidden', !isPlan);
     }
+
+    this.updateSaveButtonUI();
+  }
+
+  updateSaveButtonUI() {
+    const btn = this.btnEditModeSave || document.getElementById('btn-edit-mode-save');
+    const icon = document.getElementById('edit-save-icon');
+    const text = document.getElementById('edit-save-text');
+    const dot = document.getElementById('edit-save-dirty-dot');
+    if (!btn) return;
+    if (this.isSavingToCloud) {
+      btn.disabled = true;
+      btn.style.opacity = '0.85';
+      if (icon) icon.textContent = '⏳';
+      if (text) text.textContent = 'Saving...';
+      if (dot) dot.style.display = 'none';
+    } else if (this.hasUnsavedChanges) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.background = 'linear-gradient(135deg, #2563eb, #1d4ed8)';
+      btn.style.boxShadow = '0 2px 10px rgba(37, 99, 235, 0.45)';
+      if (icon) icon.textContent = '💾';
+      if (text) text.textContent = 'Save*';
+      if (dot) dot.style.display = 'inline-block';
+      btn.title = 'มีการแก้ไขใน Temp Folder (Windows/macOS) ที่ยังไม่ได้บันทึกขึ้น Cloud — คลิกเพื่อ Save ลง Cloud';
+    } else {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.background = 'linear-gradient(135deg, #0284c7, #0369a1)';
+      btn.style.boxShadow = '0 2px 6px rgba(2, 132, 199, 0.25)';
+      if (icon) icon.textContent = '💾';
+      if (text) text.textContent = 'Save';
+      if (dot) dot.style.display = 'none';
+      btn.title = 'บันทึกข้อมูลจาก Temp Folder (Windows/macOS) ขึ้น Cloud (Google Drive)';
+    }
   }
 
   initAppLifecycle() {
     if (typeof window === 'undefined') return;
 
-    const handleAutoSave = () => {
-      // ถ้าอยู่ในโหมดดูแผน (view mode) ห้ามบันทึกใดๆ ทั้งสิ้นตอนออกจาก Web App
+    const handleAutoSaveToTemp = () => {
+      // ถ้าอยู่ในโหมดดูแผน (view mode) ห้ามบันทึกใดๆ ทั้งสิ้น
       if (!this.state || this.getUserMode() !== 'plan') return;
       const payload = this.state.buildPlanPayload(false);
-
-      // บันทึก Local Cache ทันที (เฉพาะเมื่ออยู่ในโหมดวางแผน และขนาดไม่เกินโควต้า 4MB)
-      try {
-        const payloadStr = JSON.stringify(payload);
-        if (payloadStr.length < 4 * 1024 * 1024) {
-          localStorage.setItem(STORAGE_CACHE_KEY, payloadStr);
-        }
-        if (payload.workCenters) {
-          localStorage.setItem('pdplan_machine_settings', JSON.stringify({
-            workCenters: payload.workCenters,
-            workCenterOrder: payload.workCenterOrder || []
-          }));
-        }
-        if (payload.completedPdHistory) {
-          localStorage.setItem('pdplan_completed_pds', JSON.stringify(payload.completedPdHistory));
-        }
-      } catch (e) {}
-
-      // ส่งข้อมูลขึ้น Cloud & Server ทันทีด้วย sendBeacon / keepalive (เฉพาะเมื่อเปิด Auto-Sync และอยู่ในโหมดวางแผน)
-      if (this.autoSync) {
-        this.executePush(payload, true);
-      }
+      // ระหว่างอยู่ในโหมด EDIT บันทึกลง Temp Folder + Local Cache เท่านั้น (จะขึ้น Cloud เมื่อกดปุ่ม Save)
+      this.saveToTemp(payload, true, false);
     };
 
-    window.addEventListener('beforeunload', () => handleAutoSave());
-    window.addEventListener('pagehide', () => handleAutoSave());
+    window.addEventListener('beforeunload', () => handleAutoSaveToTemp());
+    window.addEventListener('pagehide', () => handleAutoSaveToTemp());
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') {
-        handleAutoSave();
+        handleAutoSaveToTemp();
       }
     });
   }
@@ -445,6 +488,7 @@ export class StorageSyncManager {
     
     const hasEndpoint = Boolean(this.getEndpointUrl());
     const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const isEditMode = this.getUserMode() === 'plan';
 
     badges.forEach(badge => {
       if (this.syncStatus === 'syncing') {
@@ -454,15 +498,19 @@ export class StorageSyncManager {
       } else if (this.syncStatus === 'error') {
         badge.className = 'sync-pill error';
         badge.innerHTML = `⚠️ ซิงค์ล้มเหลว`;
-        badge.title = 'ไม่สามารถเชื่อมต่อ Cloud ได้ ระบบกำลังใช้ข้อมูลใน Local Cache';
+        badge.title = 'ไม่สามารถเชื่อมต่อ Cloud ได้ ระบบกำลังใช้ข้อมูลใน Temp Folder / Local Cache';
+      } else if (isEditMode && this.hasUnsavedChanges) {
+        badge.className = 'sync-pill local';
+        badge.innerHTML = `📂 Temp Working (รอ Save)`;
+        badge.title = 'กำลังทำงานใน Temp Folder (Windows/macOS) — กดปุ่ม 💾 Save ด้านบนเพื่อบันทึกขึ้น Cloud';
       } else if (hasEndpoint) {
         badge.className = 'sync-pill success';
         const timeStr = this.lastSyncTime ? new Date(this.lastSyncTime).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '';
-        const modeStr = this.autoSync ? '' : ' (Manual)';
+        const modeStr = isEditMode ? ' (Temp Ready)' : (this.autoSync ? '' : ' (Manual)');
         badge.innerHTML = `☁️ Google Drive${modeStr} ${timeStr ? '(' + timeStr + ')' : ''}`;
-        badge.title = this.autoSync
-          ? `เชื่อมต่อ Google Drive เรียบร้อย (Auto-Sync เปิดอยู่: ซิงค์ล่าสุด: ${this.lastSyncTime || 'ยังไม่มี'})`
-          : `เชื่อมต่อ Google Drive (Auto-Sync ปิดอยู่: โหลด/บันทึกด้วยตนเอง)`;
+        badge.title = isEditMode
+          ? `โหมด EDIT: ทำงานใน Temp Folder (Windows/macOS) • กดปุ่ม Save เพื่อบันทึกขึ้น Cloud (ซิงค์ล่าสุด: ${this.lastSyncTime || 'ยังไม่มี'})`
+          : `เชื่อมต่อ Google Drive เรียบร้อย (ซิงค์ล่าสุด: ${this.lastSyncTime || 'ยังไม่มี'})`;
       } else if (isLocalhost) {
         badge.className = 'sync-pill local';
         badge.innerHTML = `💻 Local Plan.json`;
@@ -653,24 +701,24 @@ export class StorageSyncManager {
   }
 
   /**
-   * ส่งข้อมูล Plan ขึ้น Cloud (Google Drive / Endpoint) และบันทึกแคช
-   * ในโหมดวางแผน (plan mode) จะบันทึกทั้ง Local Cache และอัปโหลดขึ้น Cloud
-   * ในโหมดดูแผน (view mode) จะบันทึกเฉพาะใน Local Cache เท่านั้น (ยกเว้นผู้ใช้สั่ง Cloud Save โดยตรง allowViewMode = true)
+   * ระหว่างทำงานในโหมด EDIT จะบันทึกข้อมูลลงใน Temp Folder ของ OS (Windows: %TEMP%\pirom_pdplan / macOS: $TMPDIR/pirom_pdplan)
+   * และ LocalStorage Cache เท่านั้น โดยยังไม่ส่งขึ้น Cloud จนกว่าจะกดปุ่ม Save
    */
-  pushToCloud(payload, immediate = false, isClosing = false, allowViewMode = false) {
-    // ถ้าอยู่ในโหมดดูแผน (view) และไม่ใช่การกดปุ่มบันทึก Cloud Save โดยตรง (allowViewMode) ให้งดการบันทึกทุกช่องทาง
-    if (this.getUserMode() !== 'plan' && !allowViewMode) return;
+  saveToTemp(payload, immediate = false, markDirty = true) {
+    if (this.getUserMode() !== 'plan') return;
+    if (this.state && this.state._isLoadingData && markDirty) return;
 
-    // บันทึก Local Cache ทันทีเมื่ออยู่ในโหมดวางแผน
+    // 1. บันทึกลง LocalStorage Cache ทันที
+    let localBodyStr = '';
     try {
       const localCopy = { ...payload };
       delete localCopy.planMaterials;
       delete localCopy.dwgToPdMap;
       delete localCopy.pdOpStatusMap;
       delete localCopy._includeMaterials;
-      const payloadStr = JSON.stringify(localCopy);
-      if (payloadStr.length < 4 * 1024 * 1024) {
-        localStorage.setItem(STORAGE_CACHE_KEY, payloadStr);
+      localBodyStr = JSON.stringify(localCopy);
+      if (localBodyStr.length < 4 * 1024 * 1024) {
+        localStorage.setItem(STORAGE_CACHE_KEY, localBodyStr);
       }
       if (payload && payload.workCenters) {
         localStorage.setItem('pdplan_machine_settings', JSON.stringify({
@@ -685,26 +733,125 @@ export class StorageSyncManager {
       console.warn('Failed to save to localStorage cache:', e);
     }
 
-    if (!this.autoSync && !immediate && !isClosing && !allowViewMode) return;
+    if (markDirty && (!this.state || !this.state._isLoadingData)) {
+      this.hasUnsavedChanges = true;
+      this.updateSaveButtonUI();
+      this.updateStatusBadge();
+    }
+
+    // 2. ส่งไปเก็บใน OS Temp Folder (Windows %TEMP%\pirom_pdplan / macOS $TMPDIR/pirom_pdplan) ผ่าน /api/plan?tempOnly=1
+    const isLocalDev = typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.startsWith('192.168.') ||
+      window.location.port === '5173'
+    );
+    if (!isLocalDev) return;
+
+    const sendTempWrite = () => {
+      const bodyToWrite = localBodyStr || JSON.stringify(payload || {});
+      const candidateUrls = ['/pirom_pdplan/api/plan?tempOnly=1', '/api/plan?tempOnly=1'];
+      for (const tempUrl of candidateUrls) {
+        try {
+          fetch(tempUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: bodyToWrite,
+            keepalive: immediate && bodyToWrite.length < 60000
+          }).catch(() => {});
+          break;
+        } catch (e) {}
+      }
+    };
+
+    if (this.tempDebounceTimer) {
+      clearTimeout(this.tempDebounceTimer);
+      this.tempDebounceTimer = null;
+    }
+
+    if (immediate) {
+      sendTempWrite();
+    } else {
+      this.tempDebounceTimer = setTimeout(() => {
+        sendTempWrite();
+      }, 350);
+    }
+  }
+
+  /**
+   * กดปุ่ม 💾 Save ในโหมด EDIT เพื่อนำข้อมูลที่ทำงานอยู่ใน Temp Folder บันทึกขึ้น Cloud (Google Drive)
+   */
+  async saveTempToCloud() {
+    if (this.isSavingToCloud) return;
+    if (!this.state || typeof this.state.buildPlanPayload !== 'function') return;
+
+    this.isSavingToCloud = true;
+    this.updateSaveButtonUI();
+
+    try {
+      // 1. บันทึก Work Orders (pd.md) ลงไฟล์หลัก
+      if (typeof this.state.saveWorkOrdersToFile === 'function') {
+        this.state.saveWorkOrdersToFile(true);
+      }
+
+      // 2. สร้าง Payload ล่าสุดและ Commit จาก Temp ขึ้น Cloud + Google Drive
+      const payload = this.state.buildPlanPayload(false);
+      await this.executePush(payload, false);
+
+      this.hasUnsavedChanges = false;
+      this.isSavingToCloud = false;
+      this.updateSaveButtonUI();
+      this.updateStatusBadge();
+
+      // แสดงสถานะ Saved บนปุ่มชั่วคราว
+      const icon = document.getElementById('edit-save-icon');
+      const text = document.getElementById('edit-save-text');
+      if (icon) icon.textContent = '✅';
+      if (text) text.textContent = 'Saved!';
+      setTimeout(() => {
+        if (!this.isSavingToCloud) this.updateSaveButtonUI();
+      }, 1800);
+
+      const jobCount = (this.state.scheduledJobs || []).length;
+      const wcCount = Object.keys(this.state.workCenters || {}).length;
+      const completedCount = Object.keys(this.state.completedPdHistory || {}).length;
+      this.showToast(`☁️ บันทึกข้อมูลจาก Temp Folder ขึ้น Cloud สำเร็จ! (Plan ${jobCount} Tasks, ${wcCount} เครื่อง, Completed ${completedCount} รายการ)`, 'success');
+    } catch (err) {
+      this.isSavingToCloud = false;
+      this.updateSaveButtonUI();
+      this.showToast(`⚠️ บันทึกขึ้น Cloud ไม่สำเร็จ: ${err.message || err}`, 'error');
+    }
+  }
+
+  /**
+   * ส่งข้อมูล Plan:
+   * - ระหว่างทำงานปกติในโหมด EDIT (allowViewMode = false): จะบันทึกไว้ใน Temp Folder (Windows/macOS) + Local Cache เท่านั้น
+   * - เมื่อกดปุ่ม Save หรือสั่ง Cloud Save โดยตรง (allowViewMode = true): จะบันทึกจาก Temp ขึ้น Cloud (Google Drive)
+   */
+  pushToCloud(payload, immediate = false, isClosing = false, allowViewMode = false) {
+    // ถ้าอยู่ในโหมดดูแผน (view) และไม่ใช่การกดปุ่มบันทึก Cloud Save โดยตรง (allowViewMode) ให้งดการบันทึกทุกช่องทาง
+    if (this.getUserMode() !== 'plan' && !allowViewMode) return;
+
+    // ระหว่างทำงานในโหมด EDIT (ที่ยังไม่ได้กดปุ่ม Save / allowViewMode === false) ให้เก็บลง Temp Folder เท่านั้น
+    if (!allowViewMode) {
+      return this.saveToTemp(payload, immediate || isClosing, true);
+    }
+
+    // กรณีกดปุ่ม Save เพื่อ Commit ขึ้น Cloud
+    this.saveToTemp(payload, true, false);
 
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
     }
 
-    if (immediate || isClosing || allowViewMode) {
-      return this.executePush(payload, isClosing);
-    }
-
-    const delay = 600; // Debounce 0.6 วินาที
-    this.debounceTimer = setTimeout(() => {
-      this.executePush(payload, false);
-    }, delay);
+    return this.executePush(payload, isClosing);
   }
 
   async executePush(payload, isClosing = false) {
     const endpoint = this.getEndpointUrl();
 
-    // 1. ถ้าอยู่ Localhost หรือ Dev Server ให้ส่งไปที่ local API ด้วย (ซึ่งจะบันทึกลง Google Drive Desktop โฟลเดอร์เดียวกับ LN Status Overview)
+    // 1. ถ้าอยู่ Localhost หรือ Dev Server ให้ส่งไปที่ local API ด้วย (พร้อม commitCloud=1 เพื่อบันทึกลง Temp + Project + Google Drive Desktop)
     const isLocalDev = typeof window !== 'undefined' && (
       window.location.hostname === 'localhost' ||
       window.location.hostname === '127.0.0.1' ||
@@ -733,7 +880,7 @@ export class StorageSyncManager {
       const candidateUrls = ['/pirom_pdplan/api/plan', '/api/plan'];
       for (const localApiUrl of candidateUrls) {
         try {
-          const targetUrl = isClosing ? `${localApiUrl}?forwardCloud=1` : localApiUrl;
+          const targetUrl = isClosing ? `${localApiUrl}?commitCloud=1&forwardCloud=1` : `${localApiUrl}?commitCloud=1`;
           if (useKeepalive && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
             const blob = new Blob([cloudBodyStr], { type: 'application/json' });
             navigator.sendBeacon(targetUrl, blob);
@@ -753,6 +900,8 @@ export class StorageSyncManager {
     // 2. ถ้ามี Cloud Endpoint ส่งไปยัง Google Drive โฟลเดอร์เดียวกับ LN Status Overview
     if (!endpoint) {
       this.syncStatus = 'local_only';
+      this.hasUnsavedChanges = false;
+      this.updateSaveButtonUI();
       this.updateStatusBadge();
       this.updateModalValues();
       return;
@@ -793,13 +942,16 @@ export class StorageSyncManager {
         this.updateStatusBadge();
         this.updateModalValues();
       }
+      throw err;
     }
   }
 
   recordSyncSuccess(payload) {
     this.syncStatus = 'success';
+    this.hasUnsavedChanges = false;
     this.lastSyncTime = new Date().toISOString();
     localStorage.setItem(STORAGE_LAST_SYNC_KEY, this.lastSyncTime);
+    this.updateSaveButtonUI();
     this.updateStatusBadge();
   }
 

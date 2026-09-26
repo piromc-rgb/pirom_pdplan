@@ -469,11 +469,12 @@ class CentralState {
     this._oeeCache = null;
     this.subscribers.forEach(callback => callback(this));
     
-    // Debounced save to pd.md and plan.md
+    // Debounced save to Temp folder (pd.md and Plan.json in OS Temp) when in EDIT mode
+    if (this._isLoadingData) return;
     if (this._saveTimeout) clearTimeout(this._saveTimeout);
     this._saveTimeout = setTimeout(() => {
-      this.saveWorkOrdersToFile();
-      this.savePlanToFile();
+      this.saveWorkOrdersToFile(false);
+      this.savePlanToFile(false);
     }, 500);
   }
 
@@ -2282,8 +2283,14 @@ class CentralState {
       .catch(err => console.error('Error loading PD from file:', err));
   }
 
-  saveWorkOrdersToFile() {
-    fetch('/api/pd', {
+  saveWorkOrdersToFile(commitCloud = false) {
+    if (this._isLoadingData && !commitCloud) return;
+    const isPlanMode = this.storageSync
+      ? this.storageSync.getUserMode() === 'plan'
+      : (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('PDPLAN_USER_MODE') === 'plan' : false);
+    if (!isPlanMode && !commitCloud) return;
+    const targetUrl = commitCloud ? '/api/pd?commitCloud=1' : '/api/pd?tempOnly=1';
+    fetch(targetUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -2661,27 +2668,28 @@ class CentralState {
       });
   }
 
-  savePlanToFile() {
-    const payload = this.buildPlanPayload();
+  savePlanToFile(commitCloud = false) {
+    if (this._isLoadingData && !commitCloud) return;
+    const payload = this.buildPlanPayload(false);
 
-    // 1. Sync to Cloud Manager (handles localStorage cache + Google Drive push)
+    // 1. Delegate to StorageSyncManager (in EDIT mode writes to OS Temp folder & local cache; commits to Cloud when commitCloud=true)
     if (this.storageSync) {
-      this.storageSync.pushToCloud(payload);
-    } else {
-      try {
-        const payloadStr = JSON.stringify(payload);
-        if (payloadStr.length < 4 * 1024 * 1024) {
-          localStorage.setItem('pdplan_cached_plan', payloadStr);
-        }
-      } catch (e) {}
+      this.storageSync.pushToCloud(payload, commitCloud, false, commitCloud);
+      return;
     }
 
-    // 2. Also save to local dev server /api/plan if running on localhost (เฉพาะโหมดวางแผน plan เท่านั้น)
-    const isPlanMode = this.storageSync
-      ? this.storageSync.getUserMode() === 'plan'
-      : (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('PDPLAN_USER_MODE') === 'plan' : false);
-    if (isPlanMode && typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-      fetch('/api/plan', {
+    try {
+      const payloadStr = JSON.stringify(payload);
+      if (payloadStr.length < 4 * 1024 * 1024) {
+        localStorage.setItem('pdplan_cached_plan', payloadStr);
+      }
+    } catch (e) {}
+
+    // 2. Fallback save to local dev server /api/plan if storageSync is not attached yet
+    const isPlanMode = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('PDPLAN_USER_MODE') === 'plan' : false;
+    if ((isPlanMode || commitCloud) && typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      const targetUrl = commitCloud ? '/api/plan?commitCloud=1' : '/api/plan?tempOnly=1';
+      fetch(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
