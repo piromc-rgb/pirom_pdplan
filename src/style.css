@@ -860,6 +860,10 @@ body.sidebar-left-resizing * {
   margin-top: 10px;
 }
 
+.gantt-legend.hidden {
+  display: none !important;
+}
+
 .legend-item {
   display: flex;
   align-items: center;

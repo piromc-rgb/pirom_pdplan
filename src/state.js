@@ -64,6 +64,9 @@ class CentralState {
     // task bar is shown.
     this.showPriorityBadge = false;
 
+    // Whether the Gantt legend bar is shown (default: false / hide)
+    this.showGanttLegend = false;
+
     // Whether the scheduler is allowed to offload a job onto a work center's
     // configured alt machine(s) to keep it running when the original machine
     // is busy. Off restricts every job to strictly its own machine.

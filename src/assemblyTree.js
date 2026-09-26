@@ -2392,6 +2392,10 @@ export class AssemblyTreeController {
     if (timelineRuler) timelineRuler.style.display = 'grid';
 
     const ganttLegend = document.querySelector('.gantt-legend');
-    if (ganttLegend) ganttLegend.style.display = 'flex';
+    if (ganttLegend) {
+      const shouldShow = !!(this.state && this.state.showGanttLegend);
+      ganttLegend.classList.toggle('hidden', !shouldShow);
+      ganttLegend.style.display = shouldShow ? 'flex' : 'none';
+    }
   }
 }

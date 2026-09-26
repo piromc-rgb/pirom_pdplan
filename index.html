@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V1.1B - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V1.2 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -113,6 +113,10 @@
                 <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
                   <span title="รวม Task Bar ที่ทับซ้อนกัน (Priority เดียวกัน) เป็นแท่งเดียวตอน Zoom Out">Merge Bar</span>
                   <span class="ios-toggle"><input type="checkbox" id="toggle-merge-bars" checked><span class="ios-toggle-slider"></span></span>
+                </label>
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                  <span title="แสดง/ซ่อนป้ายอธิบายสัญลักษณ์และสีบนบอร์ด (Legend)">ป้ายอธิบาย (Legend)</span>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-gantt-legend"><span class="ios-toggle-slider"></span></span>
                 </label>
                 <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
                   <span title="ใช้เครื่องจักรช่วยงาน (Offload ไปเครื่องสำรอง เมื่อเครื่องหลักไม่ว่าง)">เครื่องช่วยงาน</span>
@@ -420,7 +424,7 @@
                 </div>
               </div>
             </div>
-            <div class="gantt-legend">
+            <div id="gantt-legend" class="gantt-legend hidden" style="display: none;">
               <span class="legend-item"><span class="color-dot bg-cyan"></span>Scheduled</span>
               <span class="legend-item"><span class="color-dot bg-yellow flash-yellow"></span>Running</span>
               <span class="legend-item"><span class="color-dot bg-dark-green"></span>Completed</span>

@@ -119,7 +119,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.1B';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.2';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -1863,6 +1863,26 @@ class App {
       toggleMergeBars.addEventListener('change', () => {
         state.mergeBarsEnabled = toggleMergeBars.checked;
         state.notify();
+      });
+    }
+
+    const toggleGanttLegend = document.getElementById('toggle-gantt-legend');
+    const ganttLegendEl = document.getElementById('gantt-legend') || document.querySelector('.gantt-legend');
+    const applyGanttLegendVisibility = (visible) => {
+      state.showGanttLegend = Boolean(visible);
+      if (toggleGanttLegend) toggleGanttLegend.checked = state.showGanttLegend;
+      if (ganttLegendEl) {
+        ganttLegendEl.classList.toggle('hidden', !state.showGanttLegend);
+        ganttLegendEl.style.display = state.showGanttLegend ? 'flex' : 'none';
+      }
+      if (this.gantt && typeof this.gantt.drawDependencyLines === 'function') {
+        requestAnimationFrame(() => this.gantt.drawDependencyLines());
+      }
+    };
+    applyGanttLegendVisibility(Boolean(state.showGanttLegend));
+    if (toggleGanttLegend) {
+      toggleGanttLegend.addEventListener('change', () => {
+        applyGanttLegendVisibility(toggleGanttLegend.checked);
       });
     }
 
