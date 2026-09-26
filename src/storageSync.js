@@ -396,7 +396,7 @@ export class StorageSyncManager {
     const str = (val || '').trim();
     if (!str) return false;
     if (/^https?:\/\//i.test(str)) return false;
-    if (/^[a-zA-Z]:[\\/]/.test(str) || str.startsWith('./') || str.startsWith('../') || str.startsWith('/') || str.includes('\\')) {
+    if (/^[a-zA-Z]:[\\/]/.test(str) || str.startsWith('./') || str.startsWith('../') || str.startsWith('~/') || str.startsWith('/') || str.includes('\\')) {
       return true;
     }
     // If it looks like a raw Google Drive folder ID (25+ alphanumeric/dash/underscore chars without slashes)
@@ -630,6 +630,7 @@ export class StorageSyncManager {
           const completedCount = Object.keys(this.state.completedPdHistory || {}).length;
           this.showToast(`💾 โหลดข้อมูลจาก Local Cache: Plan (${jobCount} Tasks), machine_settings (${wcCount} เครื่อง), completed_pds (${completedCount} รายการ)`, 'info');
         }
+        this.fetchPlanMaterials();
         return true;
       } catch (e) {
         console.error('Error reading cached plan:', e);
@@ -665,6 +666,7 @@ export class StorageSyncManager {
       const localCopy = { ...payload };
       delete localCopy.planMaterials;
       delete localCopy.dwgToPdMap;
+      delete localCopy.pdOpStatusMap;
       delete localCopy._includeMaterials;
       const payloadStr = JSON.stringify(localCopy);
       if (payloadStr.length < 4 * 1024 * 1024) {
@@ -710,14 +712,22 @@ export class StorageSyncManager {
       window.location.port === '5173'
     );
 
-    const pushBodyObj = { ...payload };
-    if (!pushBodyObj._includeMaterials) {
-      delete pushBodyObj.planMaterials;
-      delete pushBodyObj.dwgToPdMap;
+    const localBodyObj = { ...payload };
+    if (!localBodyObj._includeMaterials) {
+      delete localBodyObj.planMaterials;
+      delete localBodyObj.dwgToPdMap;
+      delete localBodyObj.pdOpStatusMap;
     }
-    delete pushBodyObj._includeMaterials;
-    const bodyStr = JSON.stringify(pushBodyObj);
-    const useKeepalive = isClosing && bodyStr.length < 60000;
+    delete localBodyObj._includeMaterials;
+    const localBodyStr = JSON.stringify(localBodyObj);
+
+    // Best Practice: Cloud (Google Drive) stores only lightweight Plan.json (~200-400KB); 14MB plan_materials_cache.json stays on Temp Local Disk + IndexedDB
+    const cloudBodyObj = { ...localBodyObj };
+    delete cloudBodyObj.planMaterials;
+    delete cloudBodyObj.dwgToPdMap;
+    delete cloudBodyObj.pdOpStatusMap;
+    const cloudBodyStr = JSON.stringify(cloudBodyObj);
+    const useKeepalive = isClosing && cloudBodyStr.length < 60000;
 
     if (isLocalDev) {
       const candidateUrls = ['/pirom_pdplan/api/plan', '/api/plan'];
@@ -725,13 +735,13 @@ export class StorageSyncManager {
         try {
           const targetUrl = isClosing ? `${localApiUrl}?forwardCloud=1` : localApiUrl;
           if (useKeepalive && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-            const blob = new Blob([bodyStr], { type: 'application/json' });
+            const blob = new Blob([cloudBodyStr], { type: 'application/json' });
             navigator.sendBeacon(targetUrl, blob);
           } else {
             fetch(targetUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: bodyStr,
+              body: localBodyStr,
               keepalive: useKeepalive
             }).catch(err => console.warn(`Local ${localApiUrl} push failed:`, err));
           }
@@ -750,7 +760,7 @@ export class StorageSyncManager {
 
     if (useKeepalive && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
       try {
-        const blob = new Blob([bodyStr], { type: 'text/plain;charset=utf-8' });
+        const blob = new Blob([cloudBodyStr], { type: 'text/plain;charset=utf-8' });
         navigator.sendBeacon(endpoint, blob);
         return;
       } catch (e) {}
@@ -762,16 +772,16 @@ export class StorageSyncManager {
     }
 
     try {
-      // ส่ง POST ไปยัง Google Apps Script
+      // ส่ง POST ไปยัง Google Apps Script (เฉพาะข้อมูล Plan ที่เบา ไม่รวม plan_materials_cache.json)
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // text/plain ป้องกัน preflight CORS issue ใน Google Apps Script
-        body: bodyStr,
+        body: cloudBodyStr,
         keepalive: useKeepalive
       });
 
       if (res.ok) {
-        this.recordSyncSuccess(pushBodyObj);
+        this.recordSyncSuccess(cloudBodyObj);
         this.updateModalValues();
       } else {
         throw new Error(`HTTP ${res.status}`);
@@ -842,6 +852,10 @@ export class StorageSyncManager {
       if (data.removedStepHistory) this.state.removedStepHistory = data.removedStepHistory;
       if (data.planMaterials) this.state.planMaterials = data.planMaterials;
       if (data.dwgToPdMap) this.state.dwgToPdMap = data.dwgToPdMap;
+      if (data.pdOpStatusMap) this.state.pdOpStatusMap = data.pdOpStatusMap;
+      if (typeof this.state.syncOverviewStatusToJobs === 'function') {
+        this.state.syncOverviewStatusToJobs();
+      }
 
       // กรอง PD ที่ผลิตจริงเสร็จแล้ว และขั้นตอนที่ถูกลบออก
       this.state.scheduledJobs = this.state.scheduledJobs.filter(
@@ -984,12 +998,14 @@ export class StorageSyncManager {
   /**
    * บันทึกข้อมูลวัสดุ BOM Plan + Mat ที่ประมวลผลแล้วลง Local Cache
    */
-  async savePlanMaterialsToCache(planMaterials, dwgToPdMap = {}, filename = '') {
+  async savePlanMaterialsToCache(planMaterials, dwgToPdMap = {}, filename = '', pdOpStatusMap = null) {
     if (!planMaterials || Object.keys(planMaterials).length === 0) return false;
     const cachedAt = Date.now();
+    const resolvedOpStatusMap = pdOpStatusMap || this.state?.pdOpStatusMap || {};
     this._materialsCache = {
       planMaterials,
       dwgToPdMap: dwgToPdMap || {},
+      pdOpStatusMap: resolvedOpStatusMap,
       cachedAt,
       filename: filename || this.getStatusOverviewFilename()
     };
@@ -1002,6 +1018,7 @@ export class StorageSyncManager {
         store.put({
           planMaterials,
           dwgToPdMap: dwgToPdMap || {},
+          pdOpStatusMap: resolvedOpStatusMap,
           cachedAt,
           filename: filename || this.getStatusOverviewFilename()
         }, 'planMaterialsCache');
@@ -1018,7 +1035,13 @@ export class StorageSyncManager {
    * ดึงข้อมูลวัสดุ BOM Plan + Mat จาก Local Cache
    */
   async getPlanMaterialsFromCache() {
-    if (this._materialsCache && this._materialsCache.planMaterials && Object.keys(this._materialsCache.planMaterials).length > 0) {
+    if (
+      this._materialsCache &&
+      this._materialsCache.planMaterials &&
+      Object.keys(this._materialsCache.planMaterials).length > 0 &&
+      this._materialsCache.pdOpStatusMap &&
+      Object.keys(this._materialsCache.pdOpStatusMap).length > 0
+    ) {
       return this._materialsCache;
     }
 
@@ -1029,7 +1052,13 @@ export class StorageSyncManager {
         const store = tx.objectStore('ExcelStore');
         const req = store.get('planMaterialsCache');
         tx.oncomplete = () => {
-          if (req.result && req.result.planMaterials && Object.keys(req.result.planMaterials).length > 0) {
+          if (
+            req.result &&
+            req.result.planMaterials &&
+            Object.keys(req.result.planMaterials).length > 0 &&
+            req.result.pdOpStatusMap &&
+            Object.keys(req.result.pdOpStatusMap).length > 0
+          ) {
             this._materialsCache = req.result;
             resolve(req.result);
           } else {
@@ -1250,7 +1279,13 @@ export class StorageSyncManager {
    * มีระบบ Local Cache เพื่อความรวดเร็ว และหากอยู่ในโหมดวางแผนจะ Up ข้อมูลขึ้น Cloud
    */
   async fetchPlanMaterials(force = false) {
-    if (!force && this.state.planMaterials && Object.keys(this.state.planMaterials).length > 0) {
+    if (
+      !force &&
+      this.state.planMaterials &&
+      Object.keys(this.state.planMaterials).length > 0 &&
+      this.state.pdOpStatusMap &&
+      Object.keys(this.state.pdOpStatusMap).length > 0
+    ) {
       return this.state.planMaterials;
     }
     if (this._fetchPlanMaterialsPromise && !force) {
@@ -1266,6 +1301,7 @@ export class StorageSyncManager {
         if (cachedMaterials && cachedMaterials.planMaterials && Object.keys(cachedMaterials.planMaterials).length > 0) {
           this.state.planMaterials = cachedMaterials.planMaterials;
           if (cachedMaterials.dwgToPdMap) this.state.dwgToPdMap = cachedMaterials.dwgToPdMap;
+          if (cachedMaterials.pdOpStatusMap) this.state.pdOpStatusMap = cachedMaterials.pdOpStatusMap;
           this.updateAssemblyTreeAfterMaterials();
           console.log(`[PlanMaterials] Loaded ${Object.keys(cachedMaterials.planMaterials).length} PDs from Local Cache`);
           return this.state.planMaterials;
@@ -1300,13 +1336,10 @@ export class StorageSyncManager {
             if (json && json.planMaterials && Object.keys(json.planMaterials).length > 0) {
               this.state.planMaterials = json.planMaterials;
               if (json.dwgToPdMap) this.state.dwgToPdMap = json.dwgToPdMap;
+              if (json.pdOpStatusMap) this.state.pdOpStatusMap = json.pdOpStatusMap;
               this.updateAssemblyTreeAfterMaterials();
-              // บันทึกลง Local Cache ทันที
-              await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, filename);
-              // ถ้าอยู่ในโหมดวางแผน ค่อย Up ข้อมูลเก็บไว้ใน Cloud
-              if (this.getUserMode() === 'plan') {
-                this.pushToCloud(this.state.buildPlanPayload(), true);
-              }
+              // บันทึกลง Local Cache (IndexedDB) ทันที — ไม่ส่งไฟล์ 14MB ขึ้น Cloud เพื่อประสิทธิภาพสูงสุด
+              await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, filename, this.state.pdOpStatusMap);
               return this.state.planMaterials;
             }
           }
@@ -1328,9 +1361,10 @@ export class StorageSyncManager {
             if (json.status === 'success' && json.data && json.data.planMaterials) {
               this.state.planMaterials = json.data.planMaterials;
               if (json.data.dwgToPdMap) this.state.dwgToPdMap = json.data.dwgToPdMap;
+              if (json.data.pdOpStatusMap) this.state.pdOpStatusMap = json.data.pdOpStatusMap;
               this.updateAssemblyTreeAfterMaterials();
               // บันทึก Local Cache ทันที
-              await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, filename);
+              await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, filename, this.state.pdOpStatusMap);
               return this.state.planMaterials;
             }
           }
@@ -1353,15 +1387,12 @@ export class StorageSyncManager {
             const matRaw2D = XLSX.utils.sheet_to_json(matWorksheet, { header: 1, defval: '' });
             this.state.workflowController.parseAndStoreMaterials(matRaw2D);
             this.updateAssemblyTreeAfterMaterials();
-            // บันทึกแคช Local ทันที
-            await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, filename);
-            // ถ้าอยู่ในโหมดวางแผน ค่อย Up ข้อมูลเก็บไว้ใน Cloud
+            // บันทึกแคช Local (IndexedDB + Temp Local Disk) ทันที
+            await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, filename, this.state.pdOpStatusMap);
             if (this.getUserMode() === 'plan') {
-              this.pushToCloud(this.state.buildPlanPayload(), true);
-              this.showToast(`☁️ [โหมดวางแผน] ซิงค์ Plan + Mat (${Object.keys(this.state.planMaterials).length} รายการ) ขึ้น Cloud สำเร็จ`, 'success');
-            } else {
-              this.showToast(`💾 [โหมดดูแผน] บันทึก Plan + Mat (${Object.keys(this.state.planMaterials).length} รายการ) ลง Local Cache สำเร็จ`, 'info');
+              this.pushToCloud(this.state.buildPlanPayload(false), true);
             }
+            this.showToast(`💾 บันทึก Plan + Mat (${Object.keys(this.state.planMaterials).length} รายการ) ลง Local Cache เรียบร้อย`, 'success');
             return this.state.planMaterials;
           }
         }
@@ -1381,6 +1412,9 @@ export class StorageSyncManager {
   }
 
   updateAssemblyTreeAfterMaterials() {
+    if (typeof this.state.syncOverviewStatusToJobs === 'function') {
+      this.state.syncOverviewStatusToJobs();
+    }
     if (this.state.assemblyTree) {
       if (typeof this.state.assemblyTree.invalidateCache === 'function') {
         this.state.assemblyTree.invalidateCache();
@@ -1631,7 +1665,7 @@ export class StorageSyncManager {
               const matSheet = workbook.Sheets[matSheetName];
               const matRaw = XLSX.utils.sheet_to_json(matSheet, { header: 1, defval: '' });
               this.state.workflowController.parseAndStoreMaterials(matRaw);
-              await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, file.name);
+              await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, file.name, this.state.pdOpStatusMap);
             }
           } catch (err) {
             console.warn('Error parsing chosen status overview file:', err);
@@ -1713,6 +1747,7 @@ export class StorageSyncManager {
         if (localCopy.planMaterials && Object.keys(localCopy.planMaterials).length > 20) {
           delete localCopy.planMaterials;
           delete localCopy.dwgToPdMap;
+          delete localCopy.pdOpStatusMap;
         }
         localStorage.setItem(STORAGE_CACHE_KEY, JSON.stringify(localCopy));
       } catch (e) {}
@@ -2302,6 +2337,9 @@ function doPost(e) {
     const postData = e.postData.contents;
     const parsed = JSON.parse(postData);
     delete parsed.formattedRows;
+    delete parsed.planMaterials;
+    delete parsed.dwgToPdMap;
+    delete parsed.pdOpStatusMap;
 
     const targetFile = saveTextFile(folder, TARGET_FILE_NAME, JSON.stringify(parsed, null, 2), MimeType.PLAIN_TEXT);
 
@@ -2316,10 +2354,6 @@ function doPost(e) {
 
     if (parsed.completedPdHistory) {
       saveTextFile(folder, COMPLETED_PDS_FILE_NAME, JSON.stringify(parsed.completedPdHistory, null, 2), MimeType.PLAIN_TEXT);
-    }
-
-    if (parsed.planMaterials && Object.keys(parsed.planMaterials).length > 0) {
-      saveTextFile(folder, 'plan_materials_cache.json', JSON.stringify({ planMaterials: parsed.planMaterials, dwgToPdMap: parsed.dwgToPdMap || {} }), MimeType.PLAIN_TEXT);
     }
 
     if (parsed.statusOverviewBase64) {

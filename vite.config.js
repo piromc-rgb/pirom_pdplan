@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -7,6 +8,55 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const compileVersion = '1.1B';
+
+function getTempCacheDir() {
+  const dir = path.join(os.tmpdir(), 'pirom_pdplan');
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch {}
+  return dir;
+}
+
+function getGdriveCandidates() {
+  const home = os.homedir();
+  const candidates = [
+    'G:\\My Drive\\staus overview',
+    'G:\\My Drive\\status overview',
+    'G:\\ไดรฟ์ของฉัน\\staus overview',
+    'G:\\ไดรฟ์ของฉัน\\status overview',
+    'H:\\My Drive\\staus overview',
+    'H:\\My Drive\\status overview',
+    path.join(home, 'Google Drive', 'My Drive', 'staus overview'),
+    path.join(home, 'Google Drive', 'My Drive', 'status overview'),
+    '/Users/pirom/Library/CloudStorage/GoogleDrive-pirom.c@gmail.com/My Drive/staus overview',
+    '/Users/pirom/Library/CloudStorage/GoogleDrive-pirom.c@gmail.com/My Drive/status overview',
+    '/Volumes/GoogleDrive/My Drive/staus overview',
+    '/Volumes/GoogleDrive/My Drive/status overview'
+  ];
+
+  // Dynamically scan macOS ~/Library/CloudStorage/GoogleDrive-* for any account
+  const macCloudStorage = path.join(home, 'Library', 'CloudStorage');
+  if (fs.existsSync(macCloudStorage)) {
+    try {
+      const entries = fs.readdirSync(macCloudStorage, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory() && entry.name.startsWith('GoogleDrive')) {
+          const gdRoot = path.join(macCloudStorage, entry.name);
+          for (const sub of ['My Drive', 'ไดรฟ์ของฉัน']) {
+            for (const folder of ['staus overview', 'status overview']) {
+              const full = path.join(gdRoot, sub, folder);
+              if (!candidates.includes(full)) candidates.push(full);
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return candidates;
+}
 
 export default defineConfig({
   base: '/pirom_pdplan/',
@@ -28,15 +78,11 @@ export default defineConfig({
           const rawUrl = req.url || '';
           const cleanUrl = rawUrl.replace(/^\/pirom_pdplan/, '');
 
-          const gdriveCandidates = [
-            'G:\\My Drive\\staus overview',
-            'G:\\My Drive\\status overview',
-            'G:\\ไดรฟ์ของฉัน\\staus overview',
-            'G:\\ไดรฟ์ของฉัน\\status overview',
-            '/Users/pirom/Library/CloudStorage/GoogleDrive-pirom.c@gmail.com/My Drive/staus overview',
-            '/Users/pirom/Library/CloudStorage/GoogleDrive-pirom.c@gmail.com/My Drive/status overview'
-          ];
+          const gdriveCandidates = getGdriveCandidates();
           const gdriveDir = gdriveCandidates.find(d => fs.existsSync(d)) || gdriveCandidates[0];
+          const tempCacheDir = getTempCacheDir();
+          const tempMatCachePath = path.join(tempCacheDir, 'plan_materials_cache.json');
+          const localMatCachePath = path.resolve(__dirname, 'plan_materials_cache.json');
           const cloudConfigLocalPath = path.resolve(__dirname, 'cloud_config.json');
           const cloudConfigGdrivePath = path.join(gdriveDir, 'cloud_config.json');
 
@@ -222,6 +268,7 @@ export default defineConfig({
                   const lightPlan = Object.assign({}, localData);
                   delete lightPlan.planMaterials;
                   delete lightPlan.dwgToPdMap;
+                  delete lightPlan.pdOpStatusMap;
                   fs.writeFileSync(gdrivePlanPath, JSON.stringify(lightPlan, null, 2), 'utf-8');
                 } catch (e) {}
               }
@@ -275,21 +322,21 @@ export default defineConfig({
                   delete payload.formattedRows; // Not needed in Plan.json
                   delete payload._includeMaterials;
 
+                  // Best Practice: Keep plan_materials_cache.json in Temp Local Disk + Local Workspace only (never sync 14MB cache to Google Drive)
                   if (payload.planMaterials && Object.keys(payload.planMaterials).length > 0) {
-                    const cachePath = path.resolve(__dirname, 'plan_materials_cache.json');
-                    const pmPayload = {
+                    const pmPayloadStr = JSON.stringify({
                       planMaterials: payload.planMaterials,
-                      dwgToPdMap: payload.dwgToPdMap || {}
-                    };
-                    fs.writeFileSync(cachePath, JSON.stringify(pmPayload), 'utf-8');
-                    if (fs.existsSync(gdriveDir)) {
-                      try { fs.writeFileSync(path.join(gdriveDir, 'plan_materials_cache.json'), JSON.stringify(pmPayload), 'utf-8'); } catch (e) {}
-                    }
+                      dwgToPdMap: payload.dwgToPdMap || {},
+                      pdOpStatusMap: payload.pdOpStatusMap || {}
+                    });
+                    try { fs.writeFileSync(tempMatCachePath, pmPayloadStr, 'utf-8'); } catch (e) {}
+                    try { fs.writeFileSync(localMatCachePath, pmPayloadStr, 'utf-8'); } catch (e) {}
                   }
 
                   const lightPlan = Object.assign({}, payload);
                   delete lightPlan.planMaterials;
                   delete lightPlan.dwgToPdMap;
+                  delete lightPlan.pdOpStatusMap;
                   const lightPlanStr = JSON.stringify(lightPlan, null, 2);
                   
                   fs.writeFileSync(planFilePath, lightPlanStr, 'utf-8');
@@ -376,7 +423,6 @@ export default defineConfig({
             const urlObj = new URL(req.url, 'http://localhost');
             const requestedFile = urlObj.searchParams.get('filename') || 'LN Status Overview.xlsx';
             const force = urlObj.searchParams.get('force') === '1' || urlObj.searchParams.get('refresh') === 'true';
-            const cachePath = path.resolve(__dirname, 'plan_materials_cache.json');
             const gdriveFile = path.join(gdriveDir, requestedFile);
             
             try {
@@ -389,14 +435,18 @@ export default defineConfig({
                   fs.copyFileSync(checkPath, localXlsx);
                   needRefresh = true;
                 }
-                if (force || needRefresh || !fs.existsSync(cachePath)) {
+                if (force || needRefresh || (!fs.existsSync(tempMatCachePath) && !fs.existsSync(localMatCachePath))) {
                   const { execSync } = await import('child_process');
                   const scriptPath = path.resolve(__dirname, 'scripts', 'sync_plan_materials.py');
                   if (fs.existsSync(scriptPath)) {
-                    try {
-                      execSync(`python "${scriptPath}" "${targetName}"`, { timeout: 45000 });
-                    } catch {
-                      execSync(`python3 "${scriptPath}" "${targetName}"`, { timeout: 45000 });
+                    const pyCommands = process.platform === 'win32'
+                      ? [`python "${scriptPath}" "${targetName}"`, `py -3 "${scriptPath}" "${targetName}"`, `python3 "${scriptPath}" "${targetName}"`]
+                      : [`python3 "${scriptPath}" "${targetName}"`, `python "${scriptPath}" "${targetName}"`];
+                    for (const cmd of pyCommands) {
+                      try {
+                        execSync(cmd, { timeout: 45000 });
+                        break;
+                      } catch {}
                     }
                   }
                 }
@@ -405,11 +455,25 @@ export default defineConfig({
               console.warn('Auto-sync from Google Drive error:', e.message);
             }
 
-            if (fs.existsSync(cachePath)) {
+            // Ensure Temp Local Disk cache is seeded and up-to-date with local workspace cache
+            if (fs.existsSync(localMatCachePath)) {
+              try {
+                if (!fs.existsSync(tempMatCachePath) || fs.statSync(localMatCachePath).mtimeMs > fs.statSync(tempMatCachePath).mtimeMs) {
+                  fs.copyFileSync(localMatCachePath, tempMatCachePath);
+                }
+              } catch {}
+            }
+
+            const activeCachePath = fs.existsSync(tempMatCachePath)
+              ? tempMatCachePath
+              : (fs.existsSync(localMatCachePath) ? localMatCachePath : null);
+
+            if (activeCachePath) {
               try {
                 res.setHeader('Content-Type', 'application/json; charset=utf-8');
                 res.setHeader('Access-Control-Allow-Origin', '*');
-                const stream = fs.createReadStream(cachePath);
+                res.setHeader('X-Cache-Location', activeCachePath === tempMatCachePath ? 'temp-local-disk' : 'local-workspace');
+                const stream = fs.createReadStream(activeCachePath);
                 stream.on('error', (err) => {
                   console.error('Error streaming plan_materials_cache.json:', err);
                   if (!res.headersSent) {
@@ -428,7 +492,7 @@ export default defineConfig({
               res.setHeader('Content-Type', 'application/json; charset=utf-8');
               res.setHeader('Access-Control-Allow-Origin', '*');
               res.statusCode = 200;
-              res.end(JSON.stringify({ planMaterials: {}, dwgToPdMap: {} }));
+              res.end(JSON.stringify({ planMaterials: {}, dwgToPdMap: {}, pdOpStatusMap: {} }));
               return;
             }
           }
@@ -574,32 +638,51 @@ export default defineConfig({
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             try {
               const { execFile } = await import('child_process');
-              const psScript = [
-                "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;",
-                "Add-Type -AssemblyName System.Windows.Forms;",
-                "$top = New-Object System.Windows.Forms.Form;",
-                "$top.TopMost = $true;",
-                "$f = New-Object System.Windows.Forms.FolderBrowserDialog;",
-                "$f.Description = 'เลือกโฟลเดอร์เก็บไฟล์ DWG / Drawing PDF';",
-                "$f.ShowNewFolderButton = $true;",
-                "if ($f.ShowDialog($top) -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }",
-                "$top.Dispose();"
-              ].join(' ');
-              execFile('powershell.exe', ['-NoProfile', '-Sta', '-Command', psScript], { timeout: 120000 }, (err, stdout) => {
-                const selected = (stdout || '').trim();
-                if (err && !selected) {
-                  res.statusCode = 500;
-                  res.end(JSON.stringify({ status: 'error', message: err.message }));
-                  return;
-                }
-                if (selected) {
-                  res.statusCode = 200;
-                  res.end(JSON.stringify({ status: 'success', folderPath: selected }));
-                } else {
-                  res.statusCode = 200;
-                  res.end(JSON.stringify({ status: 'cancelled' }));
-                }
-              });
+              if (process.platform === 'darwin') {
+                const appleScript = 'POSIX path of (choose folder with prompt "เลือกโฟลเดอร์เก็บไฟล์ DWG / Drawing PDF")';
+                execFile('osascript', ['-e', appleScript], { timeout: 120000 }, (err, stdout) => {
+                  const selected = (stdout || '').trim();
+                  if (err && !selected) {
+                    res.statusCode = 200;
+                    res.end(JSON.stringify({ status: 'cancelled' }));
+                    return;
+                  }
+                  if (selected) {
+                    res.statusCode = 200;
+                    res.end(JSON.stringify({ status: 'success', folderPath: selected }));
+                  } else {
+                    res.statusCode = 200;
+                    res.end(JSON.stringify({ status: 'cancelled' }));
+                  }
+                });
+              } else {
+                const psScript = [
+                  "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;",
+                  "Add-Type -AssemblyName System.Windows.Forms;",
+                  "$top = New-Object System.Windows.Forms.Form;",
+                  "$top.TopMost = $true;",
+                  "$f = New-Object System.Windows.Forms.FolderBrowserDialog;",
+                  "$f.Description = 'เลือกโฟลเดอร์เก็บไฟล์ DWG / Drawing PDF';",
+                  "$f.ShowNewFolderButton = $true;",
+                  "if ($f.ShowDialog($top) -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }",
+                  "$top.Dispose();"
+                ].join(' ');
+                execFile('powershell.exe', ['-NoProfile', '-Sta', '-Command', psScript], { timeout: 120000 }, (err, stdout) => {
+                  const selected = (stdout || '').trim();
+                  if (err && !selected) {
+                    res.statusCode = 500;
+                    res.end(JSON.stringify({ status: 'error', message: err.message }));
+                    return;
+                  }
+                  if (selected) {
+                    res.statusCode = 200;
+                    res.end(JSON.stringify({ status: 'success', folderPath: selected }));
+                  } else {
+                    res.statusCode = 200;
+                    res.end(JSON.stringify({ status: 'cancelled' }));
+                  }
+                });
+              }
               return;
             } catch (err) {
               res.statusCode = 500;
@@ -617,8 +700,9 @@ export default defineConfig({
               const defaultDwgDir = fs.existsSync(path.join(gdriveDir, 'dwg'))
                 ? path.join(gdriveDir, 'dwg')
                 : path.resolve(__dirname, 'dwg');
-              const resolvedDir = rawDir
-                ? (path.isAbsolute(rawDir) ? rawDir : path.resolve(__dirname, rawDir))
+              const expandedRaw = rawDir.startsWith('~/') ? path.join(os.homedir(), rawDir.slice(2)) : rawDir;
+              const resolvedDir = expandedRaw
+                ? (path.isAbsolute(expandedRaw) ? expandedRaw : path.resolve(__dirname, expandedRaw))
                 : defaultDwgDir;
               if (!fs.existsSync(resolvedDir)) {
                 res.statusCode = 404;
@@ -626,7 +710,8 @@ export default defineConfig({
                 return;
               }
               const { execFile } = await import('child_process');
-              execFile('explorer.exe', [resolvedDir], () => {});
+              const openCmd = process.platform === 'darwin' ? 'open' : (process.platform === 'win32' ? 'explorer.exe' : 'xdg-open');
+              execFile(openCmd, [resolvedDir], () => {});
               res.statusCode = 200;
               res.end(JSON.stringify({ status: 'success', openedPath: resolvedDir }));
               return;
@@ -718,7 +803,9 @@ export default defineConfig({
                 if (p && fs.existsSync(p)) {
                   try {
                     const st = fs.statSync(p);
-                    const isGd = p.toLowerCase().includes('my drive') || p.toLowerCase().includes('ไดรฟ์ของฉัน') || p.toLowerCase().includes('googledrive');
+                    const lowerP = p.toLowerCase();
+                    const isGd = lowerP.includes('my drive') || lowerP.includes('ไดรฟ์ของฉัน') || lowerP.includes('googledrive');
+                    const isTemp = p.startsWith(tempCacheDir);
                     return {
                       exists: true,
                       path: p,
@@ -728,7 +815,8 @@ export default defineConfig({
                       sizeMB: +(st.size / (1024 * 1024)).toFixed(2),
                       updatedAt: st.mtime.toISOString(),
                       inGoogleDrive: isGd,
-                      sourceType: isGd ? 'gdrive_desktop' : 'local_workspace'
+                      inTempLocalDisk: isTemp,
+                      sourceType: isTemp ? 'temp_local_disk' : (isGd ? 'gdrive_desktop' : 'local_workspace')
                     };
                   } catch {}
                 }
@@ -745,14 +833,16 @@ export default defineConfig({
                 const lightPlan = Object.assign({}, localData);
                 delete lightPlan.planMaterials;
                 delete lightPlan.dwgToPdMap;
+                delete lightPlan.pdOpStatusMap;
                 fs.writeFileSync(gdrivePlanPath, JSON.stringify(lightPlan, null, 2), 'utf-8');
               } catch (e) {}
             }
-            const gdriveMatCachePath = path.join(gdriveDir, 'plan_materials_cache.json');
-            const localMatCachePath = path.resolve(__dirname, 'plan_materials_cache.json');
-            if (gdriveExists && !fs.existsSync(gdriveMatCachePath) && fs.existsSync(localMatCachePath)) {
+            // Seed Temp Local Disk cache from local workspace if missing or older
+            if (fs.existsSync(localMatCachePath)) {
               try {
-                fs.copyFileSync(localMatCachePath, gdriveMatCachePath);
+                if (!fs.existsSync(tempMatCachePath) || fs.statSync(localMatCachePath).mtimeMs > fs.statSync(tempMatCachePath).mtimeMs) {
+                  fs.copyFileSync(localMatCachePath, tempMatCachePath);
+                }
               } catch (e) {}
             }
 
@@ -765,7 +855,7 @@ export default defineConfig({
               path.join(gdriveDir, 'LN Status Overview.xlsx'),
               path.resolve(__dirname, 'LN Status Overview.xlsx')
             ]);
-            const matCacheInfo = inspectFile([gdriveMatCachePath, localMatCachePath]);
+            const matCacheInfo = inspectFile([tempMatCachePath, localMatCachePath]);
 
             // Count PDF files in DWG directories
             const dwgDirsToCheck = [];

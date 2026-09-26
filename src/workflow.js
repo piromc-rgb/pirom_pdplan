@@ -1269,8 +1269,9 @@ export class WorkflowController {
         const priorityFilterList = priorityFilter ? priorityFilter.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
         const projectFilterList = projectFilter ? projectFilter.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
 
-        // Build Dwg to PD mapping for 14-char sub-assembly tracking
+        // Build Dwg to PD mapping for 14-char sub-assembly tracking and PD Operation Status map
         const dwgToPdMap = this.state.dwgToPdMap || {};
+        const pdOpStatusMap = this.state.pdOpStatusMap || {};
         for (let i = 1; i < raw2D.length; i++) {
           const rawRow = raw2D[i];
           if (!rawRow || rawRow.length === 0) continue;
@@ -1278,12 +1279,25 @@ export class WorkflowController {
           const rawPd = String(rawRow[col.pd] || '').trim();
           const pdMatch = rawPd.match(/^PD\d+[A-Z]?/i);
           const pdId = pdMatch ? pdMatch[0].toUpperCase() : rawPd;
-          if (!dwg || !pdId) continue;
+          if (!pdId) continue;
           const opNum = parseInt(rawRow[col.step]) || 10;
           const opStatus = String(rawRow[col.opStatus] || '').trim();
           const orderStatus = String(rawRow[col.orderStatus] || '').trim();
           const wcDesc = String(rawRow[col.wcDesc] || '').trim();
           const wcCode = String(rawRow[col.wcCode] || '').trim();
+
+          if (opStatus) {
+            if (!pdOpStatusMap[pdId]) pdOpStatusMap[pdId] = {};
+            pdOpStatusMap[pdId][String(opNum)] = opStatus;
+            if (wcCode) {
+              const prevSt = pdOpStatusMap[pdId][wcCode] || '';
+              if (!prevSt || prevSt.toLowerCase() === 'completed') {
+                pdOpStatusMap[pdId][wcCode] = opStatus;
+              }
+            }
+          }
+
+          if (!dwg) continue;
 
           if (!dwgToPdMap[dwg]) {
             dwgToPdMap[dwg] = {
@@ -1307,6 +1321,7 @@ export class WorkflowController {
           }
         }
         this.state.dwgToPdMap = dwgToPdMap;
+        this.state.pdOpStatusMap = pdOpStatusMap;
 
         // Group rows by Production Order ID
         const groups = {};
@@ -1432,6 +1447,7 @@ export class WorkflowController {
           const machineCode = this.matchWorkCenter(wcDesc, wcCode);
           const cycleMinutes = parseFloat(rawRow[col.cycleTime]) || 1.0;
           const setupMinutes = parseFloat(rawRow[col.setupTime]) || 0.0;
+          const rowOpStatus = String(rawRow[col.opStatus] || '').trim();
 
           // Skip a step someone manually removed from this PD's Routing Steps table
           // (edit modal) - it must not come back just because the Excel file still
@@ -1444,7 +1460,8 @@ export class WorkflowController {
             name: stepNameForCheck,
             machine: machineCode,
             cycleMinutes: cycleMinutes,
-            setupMinutes: setupMinutes
+            setupMinutes: setupMinutes,
+            opStatus: rowOpStatus
           });
         }
         
@@ -1526,6 +1543,7 @@ export class WorkflowController {
               setupMinutes: setup, 
               estHours: totalHours, 
               status: 'Unscheduled',
+              opStatus: step.opStatus || '',
               startHour: null
             };
           });
@@ -1553,9 +1571,14 @@ export class WorkflowController {
               scheduledJob.setupMinutes = newStep.setupMinutes;
               scheduledJob.cycleMinutes = newStep.cycleMinutes;
               scheduledJob.estHours = newStep.estHours;
+              if (newStep.opStatus) scheduledJob.opStatus = newStep.opStatus;
             }
           });
         });
+
+        if (typeof this.state.syncOverviewStatusToJobs === 'function') {
+          this.state.syncOverviewStatusToJobs();
+        }
 
         // Apply conditions 2 & 3's inferences: drop the now-completed PDs and the
         // now-completed individual steps out of both the backlog and the board.
@@ -1699,6 +1722,7 @@ export class WorkflowController {
     };
 
     const planMaterials = this.state.planMaterials || {};
+    const pdOpStatusMap = this.state.pdOpStatusMap || {};
     for (let i = 1; i < matRaw2D.length; i++) {
       const row = matRaw2D[i];
       if (!row || row.length === 0) continue;
@@ -1722,6 +1746,16 @@ export class WorkflowController {
       const operStatus = String(row[col.operStatus] || '').trim();
       const orderStatus = String(row[col.orderStatus] || '').trim();
 
+      if (operStatus) {
+        if (!pdOpStatusMap[pdId]) pdOpStatusMap[pdId] = {};
+        if (!pdOpStatusMap[pdId][String(stepNum)]) {
+          pdOpStatusMap[pdId][String(stepNum)] = operStatus;
+        }
+        if (wc && !pdOpStatusMap[pdId][wc]) {
+          pdOpStatusMap[pdId][wc] = operStatus;
+        }
+      }
+
       const exists = planMaterials[pdId].some(m => m.mat === mat && m.stepNum === stepNum);
       if (!exists) {
         planMaterials[pdId].push({
@@ -1739,5 +1773,9 @@ export class WorkflowController {
       }
     }
     this.state.planMaterials = planMaterials;
+    this.state.pdOpStatusMap = pdOpStatusMap;
+    if (typeof this.state.syncOverviewStatusToJobs === 'function') {
+      this.state.syncOverviewStatusToJobs();
+    }
   }
 }

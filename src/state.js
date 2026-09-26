@@ -1712,8 +1712,11 @@ class CentralState {
         existingJob.cycleMinutes = cycleMinutes;
         existingJob.estHours = estHours;
         if (step.status) existingJob.status = step.status;
+        if (step.opStatus) existingJob.opStatus = step.opStatus;
         keptScheduledJobIds.add(existingJob.id);
       } else {
+        const prevBacklogStep = backlogWO?.steps?.find(bs => bs.id === stepId || bs.stepNum === sNum);
+        const resolvedOpStatus = step.opStatus || prevBacklogStep?.opStatus || this.getStepOverviewStatus(woId, sNum, machine, dwgNo);
         // Step is in backlog
         newBacklogSteps.push({
           id: stepId,
@@ -1724,6 +1727,7 @@ class CentralState {
           cycleMinutes: cycleMinutes,
           estHours: estHours,
           status: 'Unscheduled',
+          opStatus: (resolvedOpStatus && resolvedOpStatus !== 'Unscheduled' && resolvedOpStatus !== 'Scheduled') ? resolvedOpStatus : undefined,
           startHour: null,
           dueHour: dueHour
         });
@@ -2325,8 +2329,105 @@ class CentralState {
       pdMemos: this.pdMemos || {},
       removedStepHistory: this.removedStepHistory || {},
       planMaterials: this.planMaterials || {},
-      dwgToPdMap: this.dwgToPdMap || {}
+      dwgToPdMap: this.dwgToPdMap || {},
+      pdOpStatusMap: this.pdOpStatusMap || {}
     };
+  }
+
+  syncOverviewStatusToJobs() {
+    if (!this.pdOpStatusMap && !this.planMaterials && !this.dwgToPdMap) return;
+    (this.scheduledJobs || []).forEach(j => {
+      const woId = j.woId || j.id;
+      const st = this.getStepOverviewStatus(woId, j.stepNum, j.machine, j.dwgNo, null);
+      if (st && st !== 'Unscheduled' && st !== 'Scheduled') {
+        j.opStatus = st;
+      }
+    });
+    (this.workOrders || []).forEach(wo => {
+      (wo.steps || []).forEach(s => {
+        const st = this.getStepOverviewStatus(wo.id, s.stepNum, s.machine, wo.dwgNo, null);
+        if (st && st !== 'Unscheduled' && st !== 'Scheduled') {
+          s.opStatus = st;
+        }
+      });
+    });
+  }
+
+  getStepOverviewStatus(woId, stepNum, machine = '', dwgNo = '', stepOrJob = null) {
+    if (woId && typeof this.isPdInCompletedHistory === 'function' && this.isPdInCompletedHistory(woId)) {
+      return 'Completed';
+    }
+    if (stepOrJob) {
+      const curSt = String(stepOrJob.status || '').trim();
+      if (curSt === 'Completed' || curSt === 'Running' || curSt === 'Paused' || curSt === 'Setup') {
+        return curSt;
+      }
+    }
+
+    const sNum = Number(stepNum) || Number(stepOrJob?.stepNum) || 0;
+    const mach = String(machine || stepOrJob?.machine || stepOrJob?.originalMachine || '').trim().toUpperCase();
+
+    // 1. Check pdOpStatusMap (from Status Overview Sheet 5 Data & Sheet 8 Plan + Mat)
+    const pdOps = woId && this.pdOpStatusMap ? this.pdOpStatusMap[woId] : null;
+    if (pdOps) {
+      if (sNum && pdOps[String(sNum)]) {
+        return pdOps[String(sNum)];
+      }
+      if (mach && pdOps[mach]) {
+        return pdOps[mach];
+      }
+    }
+
+    // 2. Check opStatus stored directly on the step/job object
+    if (stepOrJob && stepOrJob.opStatus && String(stepOrJob.opStatus).trim()) {
+      return String(stepOrJob.opStatus).trim();
+    }
+
+    // 3. Check planMaterials (Sheet 8 Plan + Mat)
+    const mats = woId && this.planMaterials ? this.planMaterials[woId] : null;
+    if (Array.isArray(mats) && mats.length > 0) {
+      if (sNum) {
+        const byStep = mats.find(m => Number(m.stepNum) === sNum && m.operStatus && String(m.operStatus).trim());
+        if (byStep) return String(byStep.operStatus).trim();
+      }
+      if (mach) {
+        const byMachActive = mats.find(m => String(m.wc || '').trim().toUpperCase() === mach && m.operStatus && String(m.operStatus).trim().toLowerCase() !== 'completed');
+        if (byMachActive) return String(byMachActive.operStatus).trim();
+        const byMachAny = mats.find(m => String(m.wc || '').trim().toUpperCase() === mach && m.operStatus && String(m.operStatus).trim());
+        if (byMachAny) return String(byMachAny.operStatus).trim();
+      }
+    }
+
+    // 4. Check dwgToPdMap (Sheet 5 Data)
+    if (this.dwgToPdMap) {
+      const cleanDwg = String(dwgNo || stepOrJob?.dwgNo || '').trim();
+      let dwgInfo = (cleanDwg && this.dwgToPdMap[cleanDwg]?.pdId === woId) ? this.dwgToPdMap[cleanDwg] : null;
+      if (!dwgInfo && woId) {
+        for (const info of Object.values(this.dwgToPdMap)) {
+          if (info && info.pdId === woId) {
+            dwgInfo = info;
+            break;
+          }
+        }
+      }
+      if (dwgInfo && Array.isArray(dwgInfo.operations)) {
+        if (sNum) {
+          const byStep = dwgInfo.operations.find(op => Number(op.stepNum) === sNum && op.status && String(op.status).trim());
+          if (byStep) return String(byStep.status).trim();
+        }
+        if (mach) {
+          const byMachActive = dwgInfo.operations.find(op => String(op.machine || '').trim().toUpperCase() === mach && op.status && String(op.status).trim().toLowerCase() !== 'completed');
+          if (byMachActive) return String(byMachActive.status).trim();
+          const byMachAny = dwgInfo.operations.find(op => String(op.machine || '').trim().toUpperCase() === mach && op.status && String(op.status).trim());
+          if (byMachAny) return String(byMachAny.status).trim();
+        }
+      }
+    }
+
+    if (stepOrJob && stepOrJob.status && String(stepOrJob.status).trim()) {
+      return String(stepOrJob.status).trim();
+    }
+    return 'Unscheduled';
   }
 
   applyPlanData(data) {
@@ -2361,6 +2462,8 @@ class CentralState {
       if (data.removedStepHistory) this.removedStepHistory = data.removedStepHistory;
       if (data.planMaterials) this.planMaterials = data.planMaterials;
       if (data.dwgToPdMap) this.dwgToPdMap = data.dwgToPdMap;
+      if (data.pdOpStatusMap) this.pdOpStatusMap = data.pdOpStatusMap;
+      this.syncOverviewStatusToJobs();
 
       this.scheduledJobs = this.scheduledJobs.filter(j => !this.isPdInCompletedHistory(j.woId) && !this.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name));
       this.workOrders = this.workOrders.filter(wo => !this.isPdInCompletedHistory(wo.id));
@@ -2454,11 +2557,24 @@ class CentralState {
 
     if (allJobsForPd.length > 0 || woForPd) {
       const allSteps = [
-        ...allJobsForPd.map(j => ({ stepNum: j.stepNum, name: j.stepName || j.name || j.machine, status: j.status, machine: j.machine })),
-        ...(woForPd?.steps || []).map(s => ({ stepNum: s.stepNum, name: s.name || s.machine, status: 'Unscheduled', machine: s.machine }))
+        ...allJobsForPd.map(j => ({
+          stepNum: j.stepNum,
+          name: j.stepName || j.name || j.machine,
+          status: this.getStepOverviewStatus(childPdId, j.stepNum, j.machine, trimmedMat, j),
+          machine: j.machine
+        })),
+        ...(woForPd?.steps || []).map(s => ({
+          stepNum: s.stepNum,
+          name: s.name || s.machine,
+          status: this.getStepOverviewStatus(childPdId, s.stepNum, s.machine, trimmedMat, s),
+          machine: s.machine
+        }))
       ].sort((a, b) => (a.stepNum || 0) - (b.stepNum || 0));
 
-      const unfinished = allSteps.filter(s => s.status !== 'Completed');
+      const unfinished = allSteps.filter(s => {
+        const st = String(s.status || '').toLowerCase();
+        return st !== 'completed' && st !== 'complete' && st !== 'closed';
+      });
       if (unfinished.length === 0 && allSteps.length > 0) {
         isAllDone = true;
       } else {
