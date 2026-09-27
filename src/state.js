@@ -2234,17 +2234,22 @@ class CentralState {
     return Boolean(this.removedStepHistory[key]);
   }
 
-  // Finds all descendant (child, grandchild, etc.) PD IDs of a Main/Parent PD
+  // Finds all descendant (child, grandchild, etc.) PD IDs of one or more Main/Parent PDs
   // across Plan + Mat (planMaterials & dwgToPdMap), assemblyLinks, and hierarchical dash suffixes.
-  getDescendantPdIds(woId) {
-    if (!woId) return [];
-    const descendants = new Set();
-    const visited = new Set([woId]);
-    const queue = [woId];
+  getDescendantPdIds(woIdOrList) {
+    if (!woIdOrList) return [];
+    const seeds = (Array.isArray(woIdOrList) ? woIdOrList : [woIdOrList]).filter(Boolean);
+    if (seeds.length === 0) return [];
 
-    const allKnownWoIds = new Set();
+    const descendants = new Set();
+    const visited = new Set(seeds);
+    const queue = [...seeds];
+
+    const dwgToWoIds = new Map();
+    const dashPrefixToWoIds = new Map();
     const partKeyToWoIds = new Map();
     const woIdToPartKey = new Map();
+    const parentToLinkedChildren = new Map();
 
     const extractPartKey = (item) => {
       if (!item) return '';
@@ -2263,27 +2268,39 @@ class CentralState {
 
     const registerWo = (id, sampleItem) => {
       if (!id) return;
-      allKnownWoIds.add(id);
-      if (sampleItem && !woIdToPartKey.has(id)) {
-        const key = extractPartKey(sampleItem);
-        if (key) {
-          woIdToPartKey.set(id, key);
-          if (!partKeyToWoIds.has(key)) partKeyToWoIds.set(key, new Set());
-          partKeyToWoIds.get(key).add(id);
+      const dashIdx = id.lastIndexOf('-');
+      if (dashIdx > 0) {
+        const parentPrefix = id.slice(0, dashIdx);
+        if (!dashPrefixToWoIds.has(parentPrefix)) dashPrefixToWoIds.set(parentPrefix, []);
+        dashPrefixToWoIds.get(parentPrefix).push(id);
+      }
+      if (sampleItem) {
+        const dwg = sampleItem.dwgNo ? sampleItem.dwgNo.trim() : '';
+        if (dwg) {
+          if (!dwgToWoIds.has(dwg)) dwgToWoIds.set(dwg, []);
+          dwgToWoIds.get(dwg).push(id);
+        }
+        if (!woIdToPartKey.has(id)) {
+          const key = extractPartKey(sampleItem);
+          if (key) {
+            woIdToPartKey.set(id, key);
+            if (!partKeyToWoIds.has(key)) partKeyToWoIds.set(key, new Set());
+            partKeyToWoIds.get(key).add(id);
+          }
         }
       }
     };
 
     (this.scheduledJobs || []).forEach(j => registerWo(j.woId, j));
     (this.workOrders || []).forEach(w => registerWo(w.id, w));
-    if (this.planMaterials) {
-      Object.keys(this.planMaterials).forEach(id => registerWo(id, null));
-    }
-    if (this.dwgToPdMap) {
-      Object.values(this.dwgToPdMap).forEach(info => {
-        if (info && info.pdId) registerWo(info.pdId, info);
-      });
-    }
+    (this.assemblyLinks || []).forEach(link => {
+      const fromWo = this.parseStepId(link.from).woId;
+      const toWo = this.parseStepId(link.to).woId;
+      if (toWo && fromWo && fromWo !== toWo) {
+        if (!parentToLinkedChildren.has(toWo)) parentToLinkedChildren.set(toWo, []);
+        parentToLinkedChildren.get(toWo).push(fromWo);
+      }
+    });
 
     while (queue.length > 0) {
       const curWoId = queue.shift();
@@ -2299,41 +2316,32 @@ class CentralState {
 
       // 1. From planMaterials (Sheet "Plan + Mat") & dwgToPdMap / live jobs / backlog
       const mats = (this.planMaterials && this.planMaterials[curWoId]) || [];
-      mats.forEach(item => {
-        const matCode = String(item.mat || '').trim();
-        if (!matCode) return;
-        if (matCode.length === 10 && /^\d+$/.test(matCode)) return; // 10-digit raw material
+      for (let i = 0; i < mats.length; i++) {
+        const matCode = String(mats[i].mat || '').trim();
+        if (!matCode) continue;
+        if (matCode.length === 10 && /^\d+$/.test(matCode)) continue; // 10-digit raw material
 
         const dwgPdId = this.dwgToPdMap?.[matCode]?.pdId;
         if (dwgPdId) addChild(dwgPdId);
 
-        (this.scheduledJobs || []).forEach(j => {
-          if ((j.dwgNo && j.dwgNo.trim() === matCode) || j.woId === matCode) {
-            addChild(j.woId);
-          }
-        });
-        (this.workOrders || []).forEach(w => {
-          if ((w.dwgNo && w.dwgNo.trim() === matCode) || w.id === matCode) {
-            addChild(w.id);
-          }
-        });
-      });
-
-      // 2. From assemblyLinks (from = child step, to = parent step)
-      (this.assemblyLinks || []).forEach(link => {
-        const fromWo = this.parseStepId(link.from).woId;
-        const toWo = this.parseStepId(link.to).woId;
-        if (toWo === curWoId && fromWo && fromWo !== curWoId) {
-          addChild(fromWo);
+        const matchedWos = dwgToWoIds.get(matCode);
+        if (matchedWos) {
+          for (let k = 0; k < matchedWos.length; k++) addChild(matchedWos[k]);
         }
-      });
+        if (woIdToPartKey.has(matCode)) addChild(matCode);
+      }
 
-      // 3. Direct woId dash-suffix children (e.g. PD0000301-1 -> PD0000301)
-      allKnownWoIds.forEach(candidateId => {
-        if (candidateId.startsWith(curWoId + '-')) {
-          addChild(candidateId);
-        }
-      });
+      // 2. From assemblyLinks (O(1) map lookup)
+      const linkedChildren = parentToLinkedChildren.get(curWoId);
+      if (linkedChildren) {
+        for (let i = 0; i < linkedChildren.length; i++) addChild(linkedChildren[i]);
+      }
+
+      // 3. Direct woId dash-suffix children (O(1) map lookup)
+      const dashChildren = dashPrefixToWoIds.get(curWoId);
+      if (dashChildren) {
+        for (let i = 0; i < dashChildren.length; i++) addChild(dashChildren[i]);
+      }
 
       // 4. Part key dash-suffix children (e.g. SR-268-0-1 -> SR-268-0)
       const curPartKey = woIdToPartKey.get(curWoId);
@@ -2360,15 +2368,14 @@ class CentralState {
     if (initialIds.length === 0) return false;
 
     let addedAny = false;
-    initialIds.forEach(pdId => {
-      const childIds = this.getDescendantPdIds(pdId);
-      childIds.forEach(cId => {
-        if (!this.completedPdHistory[cId]) {
-          this.completedPdHistory[cId] = true;
-          addedAny = true;
-        }
-      });
-    });
+    const childIds = this.getDescendantPdIds(initialIds);
+    for (let i = 0; i < childIds.length; i++) {
+      const cId = childIds[i];
+      if (!this.completedPdHistory[cId]) {
+        this.completedPdHistory[cId] = true;
+        addedAny = true;
+      }
+    }
 
     if (addedAny) {
       this.scheduledJobs = (this.scheduledJobs || []).filter(j => !this.isPdInCompletedHistory(j.woId));
@@ -2424,10 +2431,8 @@ class CentralState {
     if (!pdIds || pdIds.length === 0) return;
     this.saveStateToHistory();
     const idSet = new Set(pdIds);
-    pdIds.forEach(id => {
-      const children = this.getDescendantPdIds(id);
-      children.forEach(cId => idSet.add(cId));
-    });
+    const children = this.getDescendantPdIds(pdIds);
+    for (let i = 0; i < children.length; i++) idSet.add(children[i]);
     idSet.forEach(id => { this.completedPdHistory[id] = true; });
     this.scheduledJobs = this.scheduledJobs.filter(j => !idSet.has(j.woId));
     this.workOrders = this.workOrders.filter(wo => !idSet.has(wo.id));
@@ -2527,17 +2532,21 @@ class CentralState {
   }
 
   syncOverviewStatusToJobs() {
-    if (!this.pdOpStatusMap && !this.planMaterials && !this.dwgToPdMap) return;
+    const hasOpMap = this.pdOpStatusMap && Object.keys(this.pdOpStatusMap).length > 0;
+    const hasMats = this.planMaterials && Object.keys(this.planMaterials).length > 0;
+    const hasDwg = this.dwgToPdMap && Object.keys(this.dwgToPdMap).length > 0;
+    if (!hasOpMap && !hasMats && !hasDwg) return;
+
     (this.scheduledJobs || []).forEach(j => {
       const woId = j.woId || j.id;
-      const st = this.getStepOverviewStatus(woId, j.stepNum, j.machine, j.dwgNo, null);
+      const st = this.getStepOverviewStatus(woId, j.stepNum, j.machine, j.dwgNo, j);
       if (st && st !== 'Unscheduled' && st !== 'Scheduled') {
         j.opStatus = st;
       }
     });
     (this.workOrders || []).forEach(wo => {
       (wo.steps || []).forEach(s => {
-        const st = this.getStepOverviewStatus(wo.id, s.stepNum, s.machine, wo.dwgNo, null);
+        const st = this.getStepOverviewStatus(wo.id, s.stepNum, s.machine, wo.dwgNo, s);
         if (st && st !== 'Unscheduled' && st !== 'Scheduled') {
           s.opStatus = st;
         }
@@ -2560,7 +2569,7 @@ class CentralState {
     const mach = String(machine || stepOrJob?.machine || stepOrJob?.originalMachine || '').trim().toUpperCase();
     const origMach = String(stepOrJob?.originalMachine || '').trim().toUpperCase();
 
-    // 1. Check pdOpStatusMap (from Status Overview Sheet 5 Data & Sheet 8 Plan + Mat)
+    // 1. Check pdOpStatusMap (O(1) hash lookup from Status Overview Sheet 5 Data & Sheet 8 Plan + Mat)
     const pdOps = woId && this.pdOpStatusMap ? this.pdOpStatusMap[woId] : null;
     if (pdOps) {
       if (sNum && pdOps[String(sNum)]) {
@@ -2582,7 +2591,7 @@ class CentralState {
       }
     }
 
-    // 3. Check planMaterials (Sheet 8 Plan + Mat)
+    // 3. Check planMaterials (O(1) hash lookup from Sheet 8 Plan + Mat)
     const mats = woId && this.planMaterials ? this.planMaterials[woId] : null;
     if (Array.isArray(mats) && mats.length > 0) {
       if (sNum) {
@@ -2601,17 +2610,19 @@ class CentralState {
       }
     }
 
-    // 4. Check dwgToPdMap (Sheet 5 Data)
+    // 4. Check dwgToPdMap (O(1) hash lookup via cached reverse map)
     if (this.dwgToPdMap) {
       const cleanDwg = String(dwgNo || stepOrJob?.dwgNo || '').trim();
       let dwgInfo = (cleanDwg && this.dwgToPdMap[cleanDwg]?.pdId === woId) ? this.dwgToPdMap[cleanDwg] : null;
       if (!dwgInfo && woId) {
-        for (const info of Object.values(this.dwgToPdMap)) {
-          if (info && info.pdId === woId) {
-            dwgInfo = info;
-            break;
+        if (this._cachedDwgMapRef !== this.dwgToPdMap || !this._pdIdToDwgInfo) {
+          this._cachedDwgMapRef = this.dwgToPdMap;
+          this._pdIdToDwgInfo = new Map();
+          for (const info of Object.values(this.dwgToPdMap)) {
+            if (info && info.pdId) this._pdIdToDwgInfo.set(info.pdId, info);
           }
         }
+        dwgInfo = this._pdIdToDwgInfo.get(woId) || null;
       }
       if (dwgInfo && Array.isArray(dwgInfo.operations)) {
         if (sNum) {
