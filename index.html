@@ -1168,23 +1168,23 @@
             <div style="background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-glass); display: flex; flex-direction: column; gap: 8px;">
               <div style="font-size: 11px; font-weight: bold; color: var(--accent-teal); text-transform: uppercase; letter-spacing: 0.5px;">ข้อมูลทั่วไป (General Information)</div>
               
-              <div style="display: grid; grid-template-columns: 110px 150px 1fr 150px; gap: 10px;">
+              <div style="display: grid; grid-template-columns: 110px 150px 1fr 150px; gap: 10px; align-items: end;">
                 <div class="form-group" style="display: flex; flex-direction: column; gap: 4px;">
-                  <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary);">PD Number / ID</label>
+                  <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary); line-height: 16px;">PD Number / ID</label>
                   <input type="text" id="edit-pd-id" readonly style="background: var(--bg-darkest); color: var(--accent-teal); border: 1px solid var(--border-glass); padding: 6px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; font-family: monospace; cursor: not-allowed; opacity: 0.9;">
                 </div>
                 <div class="form-group" style="display: flex; flex-direction: column; gap: 4px;">
-                  <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary);">SO Number / Project</label>
+                  <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary); line-height: 16px;">SO Number / Project</label>
                   <input type="text" id="edit-pd-project" placeholder="e.g. WM2600002" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 6px 8px; border-radius: 6px; font-size: 11px; outline: none;">
                 </div>
                 <div class="form-group" style="display: flex; flex-direction: column; gap: 4px;">
-                  <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary);">Customer (ลูกค้า)</label>
+                  <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary); line-height: 16px;">Customer (ลูกค้า)</label>
                   <input type="text" id="edit-pd-customer" placeholder="e.g. General" style="background: var(--bg-darkest); color: var(--text-primary); border: 1px solid var(--border-glass); padding: 6px 8px; border-radius: 6px; font-size: 11px; outline: none;">
                 </div>
                 <div class="form-group" style="display: flex; flex-direction: column; gap: 4px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary);">Dwg No (หมายเลขแบบ)</label>
-                    <button type="button" id="btn-open-dwg-pdf" title="คลิกเพื่อเปิดไฟล์แบบ PDF (หรือดับเบิลคลิกที่ช่อง Dwg No)" style="background: rgba(2, 132, 199, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); font-size: 9px; font-weight: bold; border-radius: 4px; padding: 1px 5px; cursor: pointer; display: inline-flex; align-items: center; gap: 2px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; height: 16px;">
+                    <label style="font-size: 10px; font-weight: bold; color: var(--text-secondary); white-space: nowrap; line-height: 16px; margin: 0;">Dwg No</label>
+                    <button type="button" id="btn-open-dwg-pdf" title="คลิกเพื่อเปิดไฟล์แบบ PDF (หรือดับเบิลคลิกที่ช่อง Dwg No)" style="background: rgba(2, 132, 199, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); font-size: 9px; font-weight: bold; border-radius: 4px; padding: 0 5px; height: 16px; line-height: 1; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; gap: 2px;">
                       📄 PDF
                     </button>
                   </div>
