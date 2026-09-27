@@ -3385,9 +3385,12 @@ export class GanttController {
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid var(--border-glass)';
         
-        const resolvedJobStatus = typeof this.state.getStepOverviewStatus === 'function'
+        const rawJobStatus = typeof this.state.getStepOverviewStatus === 'function'
           ? this.state.getStepOverviewStatus(job.woId || job.id, job.stepNum, job.machine, job.dwgNo, job)
-          : (job.opStatus || job.status || 'Scheduled');
+          : (job.opStatus || job.status || 'Planned');
+        const resolvedJobStatus = (String(rawJobStatus).toLowerCase() === 'scheduled' || String(rawJobStatus).toLowerCase() === 'unscheduled' || !rawJobStatus)
+          ? 'Planned'
+          : rawJobStatus;
         const lowerJobStatus = String(resolvedJobStatus).toLowerCase();
 
         let statusBadge = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(0, 242, 254, 0.12); color: var(--accent-teal); border: 1px solid var(--accent-teal);">${resolvedJobStatus}</span>`;
@@ -3398,7 +3401,7 @@ export class GanttController {
         } else if (lowerJobStatus === 'completed') {
           statusBadge = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(22, 163, 74, 0.15); color: var(--accent-green); border: 1px solid var(--accent-green);">${resolvedJobStatus}</span>`;
         } else if (lowerJobStatus === 'planned') {
-          statusBadge = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(148, 163, 184, 0.14); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.4);">${resolvedJobStatus}</span>`;
+          statusBadge = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(0, 242, 254, 0.12); color: var(--accent-teal); border: 1px solid var(--accent-teal);">${resolvedJobStatus}</span>`;
         }
 
         tr.innerHTML = `
@@ -3448,9 +3451,12 @@ export class GanttController {
       const startTimeStr = dStart.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
       const endDateStr = dEnd.toLocaleDateString('en-GB');
       const endTimeStr = dEnd.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-      const resolvedJobStatus = typeof this.state.getStepOverviewStatus === 'function'
+      const rawJobStatus = typeof this.state.getStepOverviewStatus === 'function'
         ? this.state.getStepOverviewStatus(job.woId || job.id, job.stepNum, job.machine, job.dwgNo, job)
-        : (job.opStatus || job.status || 'Scheduled');
+        : (job.opStatus || job.status || 'Planned');
+      const resolvedJobStatus = (String(rawJobStatus).toLowerCase() === 'scheduled' || String(rawJobStatus).toLowerCase() === 'unscheduled' || !rawJobStatus)
+        ? 'Planned'
+        : rawJobStatus;
       
       return [
         job.woId || job.id,
@@ -3665,9 +3671,12 @@ export class GanttController {
       }
       if (cyc === undefined || cyc === null || isNaN(cyc)) cyc = 1;
 
-      const resolvedStatus = typeof this.state.getStepOverviewStatus === 'function'
+      const rawStatusFromOverview = typeof this.state.getStepOverviewStatus === 'function'
         ? this.state.getStepOverviewStatus(woId, job.stepNum, job.machine, dwgNo || job.dwgNo, job)
-        : (job.opStatus || job.status || 'Scheduled');
+        : (job.opStatus || job.status || 'Planned');
+      const resolvedStatus = (!rawStatusFromOverview || String(rawStatusFromOverview).toLowerCase() === 'scheduled' || String(rawStatusFromOverview).toLowerCase() === 'unscheduled')
+        ? 'Planned'
+        : rawStatusFromOverview;
 
       stepsList.push({
         id: job.id,
@@ -3678,7 +3687,7 @@ export class GanttController {
         cycleMinutes: cyc,
         estHours: job.estHours,
         status: resolvedStatus,
-        opStatus: job.opStatus || resolvedStatus,
+        opStatus: resolvedStatus,
         startHour: job.startHour,
         isScheduled: true
       });
@@ -3697,9 +3706,12 @@ export class GanttController {
           }
           if (cyc === undefined || cyc === null || isNaN(cyc)) cyc = 1;
 
-          const resolvedStatus = typeof this.state.getStepOverviewStatus === 'function'
+          const rawStatusFromOverview = typeof this.state.getStepOverviewStatus === 'function'
             ? this.state.getStepOverviewStatus(woId, s.stepNum, s.machine, dwgNo || backlogWO.dwgNo, s)
-            : (s.opStatus || s.status || 'Unscheduled');
+            : (s.opStatus || s.status || 'Planned');
+          const resolvedStatus = (!rawStatusFromOverview || String(rawStatusFromOverview).toLowerCase() === 'scheduled' || String(rawStatusFromOverview).toLowerCase() === 'unscheduled')
+            ? 'Planned'
+            : rawStatusFromOverview;
 
           stepsList.push({
             id: s.id,
@@ -3710,7 +3722,7 @@ export class GanttController {
             cycleMinutes: cyc,
             estHours: s.estHours,
             status: resolvedStatus,
-            opStatus: s.opStatus || resolvedStatus,
+            opStatus: resolvedStatus,
             startHour: null,
             isScheduled: false
           });
@@ -3758,7 +3770,7 @@ export class GanttController {
       const tr = document.createElement('tr');
       tr.className = 'modal-step-row';
       tr.setAttribute('data-step-id', stepData.id || '');
-      tr.setAttribute('data-step-opstatus', stepData.opStatus || stepData.status || '');
+      tr.setAttribute('data-step-opstatus', stepData.opStatus || stepData.status || 'Planned');
       tr.style.borderBottom = '1px solid var(--border-glass)';
       tr.style.background = 'rgba(255,255,255,0.01)';
 
@@ -3768,7 +3780,10 @@ export class GanttController {
         return `<option value="${wc}" ${isSelected ? 'selected' : ''} style="color: #000000; background: #ffffff;">${wc} - ${wcName}</option>`;
       }).join('');
 
-      const rawStatus = String(stepData.status || (stepData.isScheduled ? 'Scheduled' : 'Unscheduled')).trim();
+      const initStatus = String(stepData.opStatus || stepData.status || 'Planned').trim();
+      const rawStatus = (!initStatus || initStatus.toLowerCase() === 'scheduled' || initStatus.toLowerCase() === 'unscheduled')
+        ? 'Planned'
+        : initStatus;
       const lowerStatus = rawStatus.toLowerCase();
       let statusBadgeHtml = '';
       if (lowerStatus === 'completed') {
@@ -3780,7 +3795,7 @@ export class GanttController {
       } else if (lowerStatus === 'ready to start') {
         statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(0, 242, 254, 0.12); color: var(--accent-teal); border: 1px solid var(--accent-teal);">${rawStatus}</span>`;
       } else if (lowerStatus === 'planned') {
-        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(148, 163, 184, 0.14); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.4);">${rawStatus}</span>`;
+        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(0, 242, 254, 0.12); color: var(--accent-teal); border: 1px solid var(--accent-teal);">${rawStatus}</span>`;
       } else if (stepData.isScheduled) {
         statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(0, 242, 254, 0.1); color: var(--accent-teal); border: 1px solid var(--accent-teal);">${rawStatus}</span>`;
       } else {
@@ -4240,9 +4255,12 @@ export class GanttController {
           const estHours = (parseFloat(row.querySelector('.modal-step-esthours').value) || 6.0) / 60.0;
 
           const sched = scheduledJobs.find(j => j.stepNum === stepNum);
-          const resolvedStatus = typeof this.state.getStepOverviewStatus === 'function'
+          const rawStatusFromOverview = typeof this.state.getStepOverviewStatus === 'function'
             ? this.state.getStepOverviewStatus(woId, stepNum, machine, inputDwgNo.value.trim(), sched)
-            : (sched ? (sched.opStatus || sched.status) : 'Unscheduled');
+            : (sched ? (sched.opStatus || sched.status) : 'Planned');
+          const resolvedStatus = (!rawStatusFromOverview || String(rawStatusFromOverview).toLowerCase() === 'scheduled' || String(rawStatusFromOverview).toLowerCase() === 'unscheduled')
+            ? 'Planned'
+            : rawStatusFromOverview;
 
           jobsForExport.push({
             woId: woId,
@@ -4330,7 +4348,7 @@ export class GanttController {
         startTimeStr,
         endDateStr,
         endTimeStr,
-        job.status || 'Unscheduled'
+        job.status || 'Planned'
       ];
     });
     

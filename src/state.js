@@ -2558,6 +2558,7 @@ class CentralState {
 
     const sNum = Number(stepNum) || Number(stepOrJob?.stepNum) || 0;
     const mach = String(machine || stepOrJob?.machine || stepOrJob?.originalMachine || '').trim().toUpperCase();
+    const origMach = String(stepOrJob?.originalMachine || '').trim().toUpperCase();
 
     // 1. Check pdOpStatusMap (from Status Overview Sheet 5 Data & Sheet 8 Plan + Mat)
     const pdOps = woId && this.pdOpStatusMap ? this.pdOpStatusMap[woId] : null;
@@ -2568,11 +2569,17 @@ class CentralState {
       if (mach && pdOps[mach]) {
         return pdOps[mach];
       }
+      if (origMach && pdOps[origMach]) {
+        return pdOps[origMach];
+      }
     }
 
     // 2. Check opStatus stored directly on the step/job object
     if (stepOrJob && stepOrJob.opStatus && String(stepOrJob.opStatus).trim()) {
-      return String(stepOrJob.opStatus).trim();
+      const opSt = String(stepOrJob.opStatus).trim();
+      if (opSt.toLowerCase() !== 'scheduled' && opSt.toLowerCase() !== 'unscheduled') {
+        return opSt;
+      }
     }
 
     // 3. Check planMaterials (Sheet 8 Plan + Mat)
@@ -2582,10 +2589,14 @@ class CentralState {
         const byStep = mats.find(m => Number(m.stepNum) === sNum && m.operStatus && String(m.operStatus).trim());
         if (byStep) return String(byStep.operStatus).trim();
       }
-      if (mach) {
-        const byMachActive = mats.find(m => String(m.wc || '').trim().toUpperCase() === mach && m.operStatus && String(m.operStatus).trim().toLowerCase() !== 'completed');
+      if (mach || origMach) {
+        const matchWc = (wc) => {
+          const w = String(wc || '').trim().toUpperCase();
+          return (mach && w === mach) || (origMach && w === origMach);
+        };
+        const byMachActive = mats.find(m => matchWc(m.wc) && m.operStatus && String(m.operStatus).trim().toLowerCase() !== 'completed');
         if (byMachActive) return String(byMachActive.operStatus).trim();
-        const byMachAny = mats.find(m => String(m.wc || '').trim().toUpperCase() === mach && m.operStatus && String(m.operStatus).trim());
+        const byMachAny = mats.find(m => matchWc(m.wc) && m.operStatus && String(m.operStatus).trim());
         if (byMachAny) return String(byMachAny.operStatus).trim();
       }
     }
@@ -2607,19 +2618,27 @@ class CentralState {
           const byStep = dwgInfo.operations.find(op => Number(op.stepNum) === sNum && op.status && String(op.status).trim());
           if (byStep) return String(byStep.status).trim();
         }
-        if (mach) {
-          const byMachActive = dwgInfo.operations.find(op => String(op.machine || '').trim().toUpperCase() === mach && op.status && String(op.status).trim().toLowerCase() !== 'completed');
+        if (mach || origMach) {
+          const matchOpMc = (mc) => {
+            const w = String(mc || '').trim().toUpperCase();
+            return (mach && w === mach) || (origMach && w === origMach);
+          };
+          const byMachActive = dwgInfo.operations.find(op => matchOpMc(op.machine) && op.status && String(op.status).trim().toLowerCase() !== 'completed');
           if (byMachActive) return String(byMachActive.status).trim();
-          const byMachAny = dwgInfo.operations.find(op => String(op.machine || '').trim().toUpperCase() === mach && op.status && String(op.status).trim());
+          const byMachAny = dwgInfo.operations.find(op => matchOpMc(op.machine) && op.status && String(op.status).trim());
           if (byMachAny) return String(byMachAny.status).trim();
         }
       }
     }
 
     if (stepOrJob && stepOrJob.status && String(stepOrJob.status).trim()) {
-      return String(stepOrJob.status).trim();
+      const rawSt = String(stepOrJob.status).trim();
+      if (rawSt.toLowerCase() === 'scheduled' || rawSt.toLowerCase() === 'unscheduled') {
+        return 'Planned';
+      }
+      return rawSt;
     }
-    return 'Unscheduled';
+    return 'Planned';
   }
 
   applyPlanData(data) {

@@ -1711,7 +1711,7 @@ export class WorkflowController {
     };
 
     const col = {
-      pd: findColIdx(['production order', 'productionorder', 'pd id', 'pd_id', 'pd no', 'order'], 5),
+      pd: findColIdx(['production order', 'productionorder', 'pd id', 'pd_id', 'pd no'], 5),
       step: findColIdx(['operation', 'step', 'oper', 'op'], 9),
       wc: findColIdx(['work center', 'wc'], 10),
       operDesc: findColIdx(['r.ref.oper.desc', 'machine description', 'operation description'], 11),

@@ -283,9 +283,13 @@ def sync_plan_materials(target_filename="LN Status Overview.xlsx"):
             json.dump(output_obj, out, ensure_ascii=False)
         print(f"Successfully generated {cache_json} with {len(plan_materials)} PDs, {len(dwg_to_pd_map)} DWGs, and {len(pd_op_status_map)} PD op statuses.")
 
-        # Also enrich Plan.json scheduledJobs and workOrders with opStatus if Plan.json exists
-        plan_json_path = os.path.join(base_dir, "Plan.json")
-        if os.path.exists(plan_json_path):
+        # Also enrich Plan.json scheduledJobs and workOrders with opStatus across local, Google Drive, and Temp
+        plan_json_candidates = [
+            os.path.join(base_dir, "Plan.json"),
+            os.path.join(gdrive_dir, "Plan.json") if gdrive_dir else None,
+            os.path.join(temp_dir, "Plan.json") if temp_dir else None,
+        ]
+        for plan_json_path in [p for p in plan_json_candidates if p and os.path.exists(p)]:
             try:
                 with open(plan_json_path, "r", encoding="utf-8") as pf:
                     plan_data = json.load(pf)
@@ -293,30 +297,39 @@ def sync_plan_materials(target_filename="LN Status Overview.xlsx"):
                 for job in plan_data.get("scheduledJobs", []):
                     wo_id = job.get("woId") or job.get("id")
                     pd_ops = pd_op_status_map.get(wo_id)
+                    s_key = str(job.get("stepNum") or 10)
+                    mc = (job.get("machine") or "").strip()
+                    orig_mc = (job.get("originalMachine") or "").strip()
+                    op_st = None
                     if pd_ops:
-                        s_key = str(job.get("stepNum") or 10)
-                        mc = (job.get("machine") or "").strip()
-                        op_st = pd_ops.get(s_key) or (pd_ops.get(mc) if mc else None)
-                        if op_st and job.get("opStatus") != op_st:
-                            job["opStatus"] = op_st
-                            changed = True
+                        op_st = pd_ops.get(s_key) or (pd_ops.get(mc) if mc else None) or (pd_ops.get(orig_mc) if orig_mc else None)
+                    if not op_st:
+                        cur_op = (job.get("opStatus") or "").strip()
+                        op_st = cur_op if (cur_op and cur_op.lower() not in ("scheduled", "unscheduled")) else "Planned"
+                    if job.get("opStatus") != op_st:
+                        job["opStatus"] = op_st
+                        changed = True
                 for wo in plan_data.get("workOrders", []):
                     wo_id = wo.get("id")
                     pd_ops = pd_op_status_map.get(wo_id)
-                    if pd_ops:
-                        for step in wo.get("steps", []):
-                            s_key = str(step.get("stepNum") or 10)
-                            mc = (step.get("machine") or "").strip()
+                    for step in wo.get("steps", []):
+                        s_key = str(step.get("stepNum") or 10)
+                        mc = (step.get("machine") or "").strip()
+                        op_st = None
+                        if pd_ops:
                             op_st = pd_ops.get(s_key) or (pd_ops.get(mc) if mc else None)
-                            if op_st and step.get("opStatus") != op_st:
-                                step["opStatus"] = op_st
-                                changed = True
+                        if not op_st:
+                            cur_op = (step.get("opStatus") or "").strip()
+                            op_st = cur_op if (cur_op and cur_op.lower() not in ("scheduled", "unscheduled")) else "Planned"
+                        if step.get("opStatus") != op_st:
+                            step["opStatus"] = op_st
+                            changed = True
                 if changed:
                     with open(plan_json_path, "w", encoding="utf-8") as pf:
                         json.dump(plan_data, pf, ensure_ascii=False, indent=2)
                     print(f"Updated opStatus in {plan_json_path}")
             except Exception as e:
-                print(f"Warning: could not update Plan.json opStatus: {e}")
+                print(f"Warning: could not update {plan_json_path} opStatus: {e}")
 
         public_cache = os.path.join(base_dir, "public", "plan_materials_cache.json")
         try:
