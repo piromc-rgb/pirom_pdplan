@@ -1567,6 +1567,42 @@ export class StorageSyncManager {
   }
 
   updateAssemblyTreeAfterMaterials() {
+    if (
+      (!this.state.pdOpStatusMap || Object.keys(this.state.pdOpStatusMap).length === 0) &&
+      ((this.state.dwgToPdMap && Object.keys(this.state.dwgToPdMap).length > 0) ||
+       (this.state.planMaterials && Object.keys(this.state.planMaterials).length > 0))
+    ) {
+      const map = this.state.pdOpStatusMap || {};
+      if (this.state.dwgToPdMap) {
+        for (const info of Object.values(this.state.dwgToPdMap)) {
+          if (!info || !info.pdId || !Array.isArray(info.operations)) continue;
+          const entry = map[info.pdId] || (map[info.pdId] = {});
+          for (const op of info.operations) {
+            const st = String(op.status || '').trim();
+            if (!st) continue;
+            if (op.stepNum) entry[String(op.stepNum)] = st;
+            if (op.machine) {
+              const prev = entry[op.machine];
+              if (!prev || prev.toLowerCase() === 'completed') entry[op.machine] = st;
+            }
+          }
+        }
+      }
+      if (this.state.planMaterials) {
+        for (const [pdId, mats] of Object.entries(this.state.planMaterials)) {
+          if (!Array.isArray(mats)) continue;
+          const entry = map[pdId] || (map[pdId] = {});
+          for (const m of mats) {
+            const st = String(m.operStatus || '').trim();
+            if (!st) continue;
+            const sKey = String(m.stepNum || 10);
+            if (!entry[sKey]) entry[sKey] = st;
+            if (m.wc && !entry[m.wc]) entry[m.wc] = st;
+          }
+        }
+      }
+      this.state.pdOpStatusMap = map;
+    }
     if (typeof this.state.cascadeCompletedPdsToChildren === 'function') {
       this.state.cascadeCompletedPdsToChildren();
     }

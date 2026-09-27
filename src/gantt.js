@@ -1076,6 +1076,7 @@ export class GanttController {
 
         let assemblyLabelHtml = '';
         let assemblyChildStatsHtml = '';
+        const backlogWO = backlogWoById.get(woId);
 
         const isAssyStepObj = (s) => {
           if (!s) return false;
@@ -1152,7 +1153,6 @@ export class GanttController {
           assemblyLabelHtml = `<span class="gantt-row-assembly-badge" style="font-size: 10px; font-weight: bold; color: ${color}; margin-left: auto;" title="Assembly Parts Ready / Total (ชิ้นงานประกอบเสร็จ / ทั้งหมด)">${labelPrefix} ${totalComplete}/${totalAll}</span>`;
         } else {
           // PD without Assembly: count completed steps / all steps
-          const backlogWO = backlogWoById.get(woId);
           const backlogStepsCount = backlogWO ? backlogWO.steps.length : 0;
           const totalSteps = woJobs.length + backlogStepsCount;
           const completedSteps = woJobs.filter(j => j.status === 'Completed').length;
@@ -3493,11 +3493,11 @@ export class GanttController {
     document.body.removeChild(link);
   }
 
-  openPdPlanModal(woId) {
-    return this.showPDPlanModal(woId);
+  openPdPlanModal(woId, isRefresh = false) {
+    return this.showPDPlanModal(woId, isRefresh);
   }
 
-  showPDPlanModal(woId) {
+  showPDPlanModal(woId, isRefresh = false) {
     const modal = document.getElementById('pd-plan-modal');
     if (!modal) return;
 
@@ -3521,16 +3521,17 @@ export class GanttController {
     const btnDelete = document.getElementById('btn-delete-this-pd');
     const inputCompletedHistory = document.getElementById('chk-pd-completed-history');
 
-    // If Status Overview maps (pdOpStatusMap / planMaterials) are not loaded yet, fetch in background and refresh modal
+    // If Status Overview maps (pdOpStatusMap / planMaterials) are not loaded yet, fetch once in background and refresh modal
     const needsOverviewLoad = (
       (!this.state.pdOpStatusMap || Object.keys(this.state.pdOpStatusMap).length === 0) ||
       (!this.state.planMaterials || Object.keys(this.state.planMaterials).length === 0)
     );
-    if (needsOverviewLoad && this.state.storageSync?.fetchPlanMaterials) {
+    if (!isRefresh && !this._overviewLoadAttempted && needsOverviewLoad && this.state.storageSync?.fetchPlanMaterials) {
+      this._overviewLoadAttempted = true;
       this.state.storageSync.fetchPlanMaterials().then(() => {
         const currentModalId = document.getElementById('edit-pd-id')?.value;
         if (!modal.classList.contains('hidden') && currentModalId === woId) {
-          this.showPDPlanModal(woId);
+          this.showPDPlanModal(woId, true);
         }
       });
     }
@@ -3663,9 +3664,9 @@ export class GanttController {
     scheduledJobs.forEach(job => {
       let setup = job.setupMinutes !== undefined ? job.setupMinutes : 0;
       let cyc = job.cycleMinutes;
-      if ((cyc === undefined || cyc === null) && job.estHours > 0 && (job.qty || woQty) > 0) {
+      if ((cyc === undefined || cyc === null) && job.estHours > 0 && (job.qty || qty) > 0) {
         const cap = this.state.workCenters[job.machine]?.capacity || 1;
-        const q = job.qty || woQty || 1;
+        const q = job.qty || qty || 1;
         cyc = parseFloat(((job.estHours * 60.0 * cap - setup) / q).toFixed(2));
         if (cyc <= 0) cyc = parseFloat(((job.estHours * 60.0 * cap) / q).toFixed(2));
       }
@@ -3699,10 +3700,10 @@ export class GanttController {
         if (!stepIdsSeen.has(s.id)) {
           let setup = s.setupMinutes !== undefined ? s.setupMinutes : 0;
           let cyc = s.cycleMinutes;
-          if ((cyc === undefined || cyc === null) && s.estHours > 0 && woQty > 0) {
+          if ((cyc === undefined || cyc === null) && s.estHours > 0 && qty > 0) {
             const cap = this.state.workCenters[s.machine]?.capacity || 1;
-            cyc = parseFloat(((s.estHours * 60.0 * cap - setup) / woQty).toFixed(2));
-            if (cyc <= 0) cyc = parseFloat(((s.estHours * 60.0 * cap) / woQty).toFixed(2));
+            cyc = parseFloat(((s.estHours * 60.0 * cap - setup) / qty).toFixed(2));
+            if (cyc <= 0) cyc = parseFloat(((s.estHours * 60.0 * cap) / qty).toFixed(2));
           }
           if (cyc === undefined || cyc === null || isNaN(cyc)) cyc = 1;
 
@@ -3940,12 +3941,13 @@ export class GanttController {
               </td>
             </tr>
           `;
-          if ((!this.state.planMaterials || Object.keys(this.state.planMaterials).length === 0) && this.state.storageSync?.fetchPlanMaterials) {
+          if (!isRefresh && !this._matLoadAttempted && (!this.state.planMaterials || Object.keys(this.state.planMaterials).length === 0) && this.state.storageSync?.fetchPlanMaterials) {
+            this._matLoadAttempted = true;
             this.state.storageSync.fetchPlanMaterials().then(res => {
               if (res && this.state.planMaterials && this.state.planMaterials[woId]) {
                 const currentModalId = document.getElementById('edit-pd-id')?.value;
                 if (currentModalId === woId) {
-                  this.openPdPlanModal(woId);
+                  this.openPdPlanModal(woId, true);
                 }
               }
             });
