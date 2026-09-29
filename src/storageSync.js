@@ -73,6 +73,7 @@ export class StorageSyncManager {
     this.initUserModeUI();
     this.initAppLifecycle();
     this.updateStatusBadge();
+    this.resolveStatusOverviewFilenameLight();
   }
 
   getUserMode() {
@@ -478,9 +479,54 @@ export class StorageSyncManager {
   }
 
   noteResolvedOverview(name) {
+    if (!name || name.toUpperCase() === 'AUTO') return;
     this.resolvedOverviewName = name;
     const badge = document.getElementById('badge-status-overview-file');
-    if (badge && name) badge.textContent = this.isStatusOverviewAuto() ? `AUTO → ${name}` : name;
+    if (badge) badge.textContent = this.isStatusOverviewAuto() ? `AUTO → ${name}` : name;
+    const headerBadge = document.getElementById('header-status-overview-file');
+    if (headerBadge) headerBadge.textContent = `| 📄 ${name}`;
+  }
+
+  // Resolves which Status Overview file is actually active (mainly for the "AUTO" setting,
+  // which picks the newest "*Status Overview*.xlsx") without downloading the whole file:
+  // checks the local dev API's file listing first, then the Google Apps Script cloud endpoint.
+  async resolveStatusOverviewFilenameLight() {
+    const configured = this.getStatusOverviewFilename();
+    if (!this.isStatusOverviewAuto()) {
+      this.noteResolvedOverview(configured);
+      return configured;
+    }
+    const isLocalDev = typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.startsWith('192.168.') ||
+      window.location.port === '5173'
+    );
+    if (isLocalDev) {
+      for (const url of ['/pirom_pdplan/api/check-storage-status?statusFilename=AUTO', '/api/check-storage-status?statusFilename=AUTO']) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            const json = await res.json();
+            const name = json?.files?.statusOverview?.exists ? json.files.statusOverview.name : null;
+            if (name) { this.noteResolvedOverview(name); return name; }
+          }
+        } catch (e) { /* try next candidate */ }
+      }
+    }
+    const endpoint = this.getEndpointUrl();
+    if (endpoint && endpoint.startsWith('http') && !endpoint.includes('drive.google.com/drive/folders')) {
+      try {
+        const sep = endpoint.includes('?') ? '&' : '?';
+        const res = await fetch(`${endpoint}${sep}action=check-cloud-status&t=${Date.now()}`);
+        if (res.ok) {
+          const json = await res.json();
+          const name = json?.files?.statusOverview?.exists ? json.files.statusOverview.name : null;
+          if (name) { this.noteResolvedOverview(name); return name; }
+        }
+      } catch (e) { /* cloud endpoint unreachable, leave unresolved */ }
+    }
+    return null;
   }
 
   setStatusOverviewFilename(filename) {
@@ -1513,6 +1559,7 @@ export class StorageSyncManager {
           if (cachedMaterials.dwgToPdMap) this.state.dwgToPdMap = cachedMaterials.dwgToPdMap;
           if (cachedMaterials.pdOpStatusMap) this.state.pdOpStatusMap = cachedMaterials.pdOpStatusMap;
           this.updateAssemblyTreeAfterMaterials();
+          if (cachedMaterials.filename && cachedMaterials.filename.toUpperCase() !== 'AUTO') this.noteResolvedOverview(cachedMaterials.filename);
           console.log(`[PlanMaterials] Loaded ${Object.keys(cachedMaterials.planMaterials).length} PDs from Local Cache`);
           return this.state.planMaterials;
         }

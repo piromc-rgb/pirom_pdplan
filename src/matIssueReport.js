@@ -5,7 +5,9 @@
 const WAITING_LABELS = ['คลังยังไม่มีของให้เบิก', 'ของมาพร้อมเบิก', 'เบิกบางส่วน'];
 const TONE_STYLES = {
   warn: 'border:1px solid #d97706;color:#b45309;background:rgba(245,158,11,0.15);',
-  info: 'border:1px solid #0284c7;color:#0369a1;background:rgba(2,132,199,0.15);'
+  info: 'border:1px solid #0284c7;color:#0369a1;background:rgba(2,132,199,0.15);',
+  notready: 'border:1.5px solid #b91c1c;color:#7f1d1d;background:rgba(185,28,28,0.12);',
+  ready: 'border:1.5px solid #15803d;color:#14532d;background:rgba(21,128,61,0.12);'
 };
 
 const escapeHtml = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -64,6 +66,16 @@ export class MatIssueReportController {
         if (!status) { skippedNoWarehouse++; continue; }
         if (!WAITING_LABELS.includes(status.label)) continue;
 
+        // Overall Mat readiness: same rule as the PD detail modal (based on Op01 status and PD Order Status)
+        const sortedForOp1 = matRows.slice().sort((a, b) => (Number(a.stepNum) || 0) - (Number(b.stepNum) || 0));
+        const op1Status = String(sortedForOp1[0]?.operStatus || '').trim().toLowerCase();
+        const orderStatusVal = String(sortedForOp1[0]?.orderStatus || '').trim().toLowerCase();
+        const isOp1Planned = op1Status === 'planned';
+        const isOrderPrinted = orderStatusVal === 'printed';
+        let displayStatus = status;
+        if (isOp1Planned && isOrderPrinted) displayStatus = { label: 'ไม่พร้อมผลิต', tone: 'notready' };
+        else if (!isOp1Planned && !isOrderPrinted) displayStatus = { label: 'พร้อมผลิต', tone: 'ready' };
+
         const firstStep = Math.min(...matRows.map(r => Number(r.stepNum) || 0));
         const hour = stepStart.has(`${pdId}|${firstStep}`) ? stepStart.get(`${pdId}|${firstStep}`) : (pdStart.has(pdId) ? pdStart.get(pdId) : Infinity);
         let entry = byMat.get(mat);
@@ -72,7 +84,7 @@ export class MatIssueReportController {
           byMat.set(mat, entry);
         }
         const qty = Math.max(...matRows.map(r => Number(r.estimatedQty) || 0), agg.toIssue);
-        entry.pds.push({ pdId, status, hour, firstStep, qty, toIssue: agg.toIssue, warehouse: agg.toIssueWh, ...(pdInfo.get(pdId) || {}) });
+        entry.pds.push({ pdId, status: displayStatus, warehouseStatus: status, hour, firstStep, qty, toIssue: agg.toIssue, warehouse: agg.toIssueWh, ...(pdInfo.get(pdId) || {}) });
         entry.earliest = Math.min(entry.earliest, hour);
       }
     }
@@ -99,17 +111,18 @@ export class MatIssueReportController {
     let ready = 0;
     shown.forEach(m => m.pds.forEach(p => {
       pdSet.add(p.pdId);
-      if (p.status.label === 'คลังยังไม่มีของให้เบิก') noStock++;
-      else if (p.status.label === 'ของมาพร้อมเบิก') ready++;
+      const whLabel = (p.warehouseStatus || p.status).label;
+      if (whLabel === 'คลังยังไม่มีของให้เบิก') noStock++;
+      else if (whLabel === 'ของมาพร้อมเบิก') ready++;
     }));
 
     const chip = (label, value, color) => `<div style="flex:1;min-width:120px;padding:6px 10px;border-radius:6px;background:#f8fafc;border-left:3px solid ${color};"><div style="font-size:10.5px;color:#64748b;">${label}</div><div style="font-size:16px;font-weight:800;color:#0f172a;">${value}</div></div>`;
     const fmtQty = (v) => Number(Number(v || 0).toFixed(2)).toLocaleString('en-US');
-    const statusBadge = (st) => `<span style="font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:4px;${TONE_STYLES[st.tone] || TONE_STYLES.info}">${escapeHtml(st.label)}</span>`;
+    const statusBadge = (st) => `<span class="${st.tone === 'notready' ? 'mat-status-blink' : ''}" style="font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:4px;${TONE_STYLES[st.tone] || TONE_STYLES.info}">${escapeHtml(st.label)}</span>`;
     // Repeated text (Mat., total, and the status when identical) is merged into one cell spanning the Mat.'s PD rows
     // PD needing a Mat. within the next 7 days (or overdue) that the warehouse cannot issue yet -> red
     const urgentLimit = Date.now() + 7 * 24 * 3600 * 1000;
-    const isUrgent = (p) => p.status.label === 'คลังยังไม่มีของให้เบิก' && isFinite(p.hour) && this.state.workingHourToDate(p.hour).getTime() <= urgentLimit;
+    const isUrgent = (p) => (p.warehouseStatus || p.status).label === 'คลังยังไม่มีของให้เบิก' && isFinite(p.hour) && this.state.workingHourToDate(p.hour).getTime() <= urgentLimit;
     const rowsHtml = shown.map((m) => {
       const n = m.pds.length;
       const sameStatus = m.pds.every(p => p.status.label === m.pds[0].status.label);
@@ -142,6 +155,7 @@ export class MatIssueReportController {
         <select id="select-mat-report-limit" style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;">${limitOptions}</select>
         <span style="color:#64748b;">จากทั้งหมด ${report.mats.length} รายการ Mat. ที่รอเบิก</span>
         <button type="button" id="btn-export-mat-report" style="margin-left:auto;padding:5px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;">Export CSV</button>
+        <button type="button" id="btn-export-gsheet-mat-report" style="padding:5px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;">📤 Export to Google Sheet</button>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;">
         ${chip('Mat. ที่แสดง', shown.length, '#2563eb')}
@@ -163,6 +177,7 @@ export class MatIssueReportController {
       this.render();
     });
     overlay.querySelector('#btn-export-mat-report')?.addEventListener('click', () => this.exportCsv(shown));
+    overlay.querySelector('#btn-export-gsheet-mat-report')?.addEventListener('click', () => this.exportToGoogleSheet(shown));
     // Double-click a PD number to open its PD detail modal on top of this report
     overlay.querySelectorAll('.mat-report-pd').forEach(el => el.addEventListener('dblclick', () => {
       const pdModal = document.getElementById('pd-plan-modal');
@@ -193,20 +208,47 @@ export class MatIssueReportController {
       <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:1000px;width:100%;max-height:90vh;overflow:auto;padding:16px 18px;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">${innerHtml}</div>`;
   }
 
-  exportCsv(mats) {
+  buildCsvLines(mats) {
     const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const lines = [['Mat.', 'รายละเอียด', 'สถานะ', 'จำนวนรวมที่ใช้', 'PD ที่ใช้', 'ชื่องาน', 'จำนวน', 'วันที่ต้องการ', 'Op แรกที่ใช้', 'ค้างเบิก', 'คลังพร้อมจ่าย'].map(q).join(',')];
     mats.forEach(m => m.pds.forEach(p => {
       lines.push([m.mat, m.desc, p.status.label, m.totalQty, p.pdId, p.partName, p.qty, this.formatHour(p.hour), p.firstStep, p.toIssue, p.warehouse ?? ''].map(q).join(','));
     }));
+    return lines;
+  }
+
+  downloadCsvBlob(lines, filename) {
     const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Mat_รอเบิก_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  exportCsv(mats) {
+    this.downloadCsvBlob(this.buildCsvLines(mats), `Mat_รอเบิก_${new Date().toISOString().slice(0, 10)}.csv`);
+  }
+
+  // Google Sheets has no public no-auth "upload this CSV" endpoint, so this downloads a Sheets-ready
+  // CSV and opens a blank spreadsheet where the user can finish with File > Import > Upload.
+  exportToGoogleSheet(mats) {
+    this.downloadCsvBlob(this.buildCsvLines(mats), `Mat_รอเบิก_${new Date().toISOString().slice(0, 10)}.csv`);
+    window.open('https://sheets.google.com/create', '_blank', 'noopener');
+    this.showToast('📥 ดาวน์โหลด CSV แล้ว — ไปที่แท็บ Google Sheets ที่เปิดขึ้น แล้วใช้ File > Import > Upload เพื่อนำเข้าไฟล์');
+  }
+
+  showToast(message) {
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:25px;right:25px;z-index:100010;padding:12px 20px;border-radius:8px;border:1px solid #22c55e;background:rgba(15,23,42,0.92);color:#fff;font-size:12.5px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,0.5);transition:opacity 0.3s ease;max-width:360px;';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => toast.remove(), 300);
+    }, 4000);
   }
 }

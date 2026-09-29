@@ -4013,8 +4013,27 @@ export class GanttController {
               const issueStatus = this.state.getMaterialIssueStatus(item);
               const usedOldMaterial = this.state.isOldMaterialUsed((item.operations || []).map(o => ({ ...o, actualQty: item.actualQty, toIssue: item.toIssue })));
 
+              // Overall Mat readiness: based on Op01 (first operation) status and PD Order Status
+              const sortedForOp1 = (item.operations || []).slice().sort((a, b) => (Number(a.stepNum) || 0) - (Number(b.stepNum) || 0));
+              const op1Status = String(sortedForOp1[0]?.operStatus || '').trim().toLowerCase();
+              const orderStatusVal = String(item.orderStatus || '').trim().toLowerCase();
+              const isOp1Planned = op1Status === 'planned';
+              const isOrderPrinted = orderStatusVal === 'printed';
+
               // Status based on toIssue and actualQty
-              if (usedOldMaterial) {
+              if (isOp1Planned && isOrderPrinted) {
+                statusCell = `
+                  <span class="mat-status-blink" style="font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 4px; border: 1.5px solid #b91c1c; color: #7f1d1d; background: rgba(185, 28, 28, 0.12); white-space: nowrap;" title="Op01 ยังเป็น Planned และ Order Status เป็น Printed">
+                    ไม่พร้อมผลิต
+                  </span>
+                `;
+              } else if (!isOp1Planned && !isOrderPrinted) {
+                statusCell = `
+                  <span style="font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 4px; border: 1.5px solid #15803d; color: #14532d; background: rgba(21, 128, 61, 0.12); white-space: nowrap;">
+                    พร้อมผลิต
+                  </span>
+                `;
+              } else if (usedOldMaterial) {
                 statusCell = `
                   <span style="font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 4px; border: 1.5px solid #7c3aed; color: #5b21b6; background: rgba(124, 58, 237, 0.12); white-space: nowrap;" title="Op แรกเริ่มทำงานแล้ว แต่ไม่มีการเบิกวัสดุ (Actual Qty = 0, ค้างเบิก ${item.toIssue}) — ใช้วัสดุเก่าที่มีอยู่">
                     ♻️ ใช้วัสดุเก่า

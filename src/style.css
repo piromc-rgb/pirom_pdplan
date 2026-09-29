@@ -152,7 +152,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 70px;
+  height: 56px;
   padding: 0 20px;
   background-color: var(--bg-darker);
   border-bottom: 1px solid var(--border-glass);
@@ -408,21 +408,23 @@ body.dark-theme .user-mode-item.item-plan.active {
 
 .scheduler-controls {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 15px;
 }
 
 .model-select-wrapper {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
 }
 
 .model-select-wrapper label {
   font-size: 10px;
   text-transform: uppercase;
   color: var(--text-secondary);
-  margin-bottom: 2px;
   letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
 .model-select-wrapper select {
@@ -506,6 +508,15 @@ body.dark-theme .user-mode-item.item-plan.active {
   animation: pulse-flash 1.5s infinite alternate;
 }
 
+.mat-status-blink {
+  animation: mat-status-blink 1s infinite;
+}
+
+@keyframes mat-status-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 @keyframes pulse-flash {
   from { opacity: 0.7; transform: scale(0.9); }
   to { opacity: 1; transform: scale(1.1); }
@@ -545,14 +556,14 @@ body.dark-theme .user-mode-item.item-plan.active {
   display: grid;
   grid-template-columns: var(--sidebar-left-width, 280px) 1fr 280px;
   gap: 15px;
-  height: calc(100vh - 70px - 40px); /* 70px header, 40px kiosk closed title */
+  height: calc(100vh - 56px - 40px); /* 56px header, 40px kiosk closed title */
   padding: 15px;
   overflow: hidden;
   transition: height 0.3s ease-in-out;
 }
 
 #app-container:has(.kiosk-drawer:not(.closed)) .main-layout {
-  height: calc(100vh - 70px - 340px); /* Kiosk open height is 340px */
+  height: calc(100vh - 56px - 340px); /* Kiosk open height is 340px */
 }
 
 /* Glassmorphism card template */

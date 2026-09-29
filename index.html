@@ -4,15 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V1.4.1 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V1.5 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-DYPDCbOy.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CippIlG4.css">
+    <script type="module" crossorigin src="./assets/index-DSot3bcg.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Duh4M5Tf.css">
   </head>
   <body>
     <div id="app-container">
@@ -165,7 +165,10 @@
               <span id="work-mode-text">โหมด: วางแผน</span>
             </button>
           </div>
-          <div id="header-datetime" style="font-size: 10px; color: var(--text-secondary); font-family: monospace; padding-left: 2px;"></div>
+          <div id="header-datetime" style="font-size: 10px; color: var(--text-secondary); font-family: monospace; padding-left: 2px;">
+            <span id="header-datetime-text"></span>
+            <span id="header-status-overview-file" style="margin-left: 6px; color: var(--accent-orange, #d97706); font-weight: 700;"></span>
+          </div>
         </div>
         
         <!-- Controls & Models -->
@@ -346,6 +349,11 @@
               <button id="btn-toggle-resources-header" class="btn-action-small" title="Toggle Resources Sidebar" style="margin: 0; padding: 4px 8px; font-size: 10.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 6px; cursor: pointer; font-weight: bold;">
                 👥 Resources
               </button>
+              <div class="timeline-nav-controls" style="display: flex; flex-direction: row; align-items: center; gap: 6px; flex-wrap: nowrap; margin-left: 8px;">
+                <button id="btn-timeline-goto-date" class="btn-action-small" title="Scroll to a specific date" style="margin: 0; white-space: nowrap; background: rgba(255, 165, 0, 0.15); border: 1px solid var(--accent-orange); color: var(--text-primary);">Goto Date</button>
+                <input type="date" id="timeline-goto-date-input" style="display: none; font-size: 11px; padding: 2px 4px; border-radius: 4px; border: 1px solid var(--accent-orange); background: var(--bg-card); color: var(--text-primary);">
+                <span id="board-date-range-display" style="font-size: 11px; font-weight: bold; color: var(--accent-teal); margin-left: 4px; font-family: monospace; letter-spacing: 0.5px; white-space: nowrap;"></span>
+              </div>
             </div>
             <!-- Action Controls (Undo/Redo, Clear Board) -->
             <div class="gantt-actions-toolbar">
@@ -426,11 +434,6 @@
                   </svg>
                   <span>Production Order List</span>
                 </button>
-                <div class="timeline-nav-controls" style="display: flex; flex-direction: row; align-items: center; gap: 6px; flex-wrap: nowrap;">
-                  <button id="btn-timeline-goto-date" class="btn-action-small" title="Scroll to a specific date" style="margin: 0; white-space: nowrap; background: rgba(255, 165, 0, 0.15); border: 1px solid var(--accent-orange); color: var(--text-primary);">Goto Date</button>
-                  <input type="date" id="timeline-goto-date-input" style="display: none; font-size: 11px; padding: 2px 4px; border-radius: 4px; border: 1px solid var(--accent-orange); background: var(--bg-card); color: var(--text-primary);">
-                  <span id="board-date-range-display" style="font-size: 11px; font-weight: bold; color: var(--accent-teal); margin-left: 4px; font-family: monospace; letter-spacing: 0.5px; white-space: nowrap;"></span>
-                </div>
               </div>
             </div>
             <div id="gantt-legend" class="gantt-legend hidden" style="display: none;">

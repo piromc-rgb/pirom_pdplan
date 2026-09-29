@@ -118,9 +118,9 @@ class App {
   }
 
   initHeaderDateTime() {
-    const headerDateTime = document.getElementById('header-datetime');
+    const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.4.1';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.5';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -881,11 +881,18 @@ class App {
       this.gantt.render();
     };
 
+    // Clicking Backlog/Assembly in the header should also bring the left sidebar back
+    // if it was previously collapsed (via the ◀ button or "Hide Backlog" in Options) -
+    // otherwise the tab switches internally but the whole panel stays display:none.
+    const showLeftSidebar = () => {
+      document.querySelector('.main-layout')?.classList.remove('hide-backlog');
+    };
+
     if (btnTabBacklog) {
-      btnTabBacklog.addEventListener('click', () => { leftSidebarMode = 'backlog'; applyLeftSidebarMode(); });
+      btnTabBacklog.addEventListener('click', () => { leftSidebarMode = 'backlog'; showLeftSidebar(); applyLeftSidebarMode(); });
     }
     if (btnTabAssembly) {
-      btnTabAssembly.addEventListener('click', () => { leftSidebarMode = 'assembly'; applyLeftSidebarMode(); });
+      btnTabAssembly.addEventListener('click', () => { leftSidebarMode = 'assembly'; showLeftSidebar(); applyLeftSidebarMode(); });
     }
     if (btnTabResources) {
       btnTabResources.addEventListener('click', toggleResourcesSidebar);
