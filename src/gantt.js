@@ -446,6 +446,12 @@ export class GanttController {
         this.showPDPlanModal(e.detail.woId);
       }
     });
+
+    // Double click the "PRODUCTION ORDER" column header to search for a PD
+    document.getElementById('row-label-header')?.addEventListener('dblclick', (e) => {
+      if (e.target.closest('#gantt-label-col-resizer')) return;
+      if (this.state.ganttMode === 'pd') this.showPdSearchModal();
+    });
   }
 
   showToast(message) {
@@ -1268,9 +1274,8 @@ export class GanttController {
           });
         }
 
-        // Debounce single/double click so a single click still opens the PD edit
-        // modal, while a double click (fired after two clicks land) instead opens
-        // the Production Order search dialog.
+        // Single click opens the PD edit modal after a short debounce; a double
+        // click opens the same modal immediately (cancelling the pending click).
         let pdLabelClickTimeout = null;
         label.addEventListener('click', (e) => {
           if (e.target.closest('.pd-collapse-toggle')) return;
@@ -1292,7 +1297,7 @@ export class GanttController {
             clearTimeout(pdLabelClickTimeout);
             pdLabelClickTimeout = null;
           }
-          this.showPdSearchModal();
+          this.showPDPlanModal(woId);
         });
 
         const track = row.querySelector('.gantt-row-track');
@@ -1418,6 +1423,7 @@ export class GanttController {
         } else {
           // Render normal job cards on timeline for this WO
           woJobs.forEach(job => {
+            if (job.erpCompleted) return; // step finished per Status Overview: no task bar
             const jobEnd = job.startHour + job.estHours;
             const timelineEnd = config.startOffset + config.totalHours;
             
@@ -1924,7 +1930,7 @@ export class GanttController {
 
       // Filter jobs/steps assigned to this machine and matching selected priorities
       const machineJobs = (jobsByMachine.get(machineName) || []).filter(j => {
-        return isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobCustomerVisible(j, this.state) && isJobPdRangeVisible(j, this.state);
+        return !j.erpCompleted && isJobPriorityVisible(j, this.state) && isJobProjectVisible(j, this.state) && isJobCustomerVisible(j, this.state) && isJobPdRangeVisible(j, this.state);
       });
 
       // When zoomed out (day/week/month/quarter/year), adjacent same-priority jobs
@@ -3787,20 +3793,20 @@ export class GanttController {
         : initStatus;
       const lowerStatus = rawStatus.toLowerCase();
       let statusBadgeHtml = '';
-      if (lowerStatus === 'completed') {
-        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(22, 163, 74, 0.15); color: #22c55e; border: 1px solid #22c55e;">${rawStatus}</span>`;
-      } else if (lowerStatus === 'running' || lowerStatus === 'active') {
-        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(57, 255, 20, 0.12); color: var(--accent-green); border: 1px solid var(--accent-green);">${rawStatus}</span>`;
+      if (lowerStatus === 'completed' || lowerStatus === 'closed') {
+        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(22, 163, 74, 0.15); color: #14532d; border: 1px solid #22c55e;">${rawStatus}</span>`;
+      } else if (lowerStatus === 'running' || lowerStatus === 'active' || lowerStatus === 'started') {
+        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(57, 255, 20, 0.12); color: #3f6212; border: 1px solid var(--accent-green);">${rawStatus}</span>`;
       } else if (lowerStatus === 'paused') {
-        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(255, 153, 0, 0.12); color: var(--accent-orange); border: 1px solid var(--accent-orange);">${rawStatus}</span>`;
+        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(255, 153, 0, 0.12); color: #9a3412; border: 1px solid var(--accent-orange);">${rawStatus}</span>`;
       } else if (lowerStatus === 'ready to start') {
-        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(0, 242, 254, 0.12); color: var(--accent-teal); border: 1px solid var(--accent-teal);">${rawStatus}</span>`;
+        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(0, 242, 254, 0.12); color: #0c4a6e; border: 1px solid var(--accent-teal);">${rawStatus}</span>`;
       } else if (lowerStatus === 'planned') {
-        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(0, 242, 254, 0.12); color: var(--accent-teal); border: 1px solid var(--accent-teal);">${rawStatus}</span>`;
+        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(0, 242, 254, 0.12); color: #0c4a6e; border: 1px solid var(--accent-teal);">${rawStatus}</span>`;
       } else if (stepData.isScheduled) {
-        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(0, 242, 254, 0.1); color: var(--accent-teal); border: 1px solid var(--accent-teal);">${rawStatus}</span>`;
+        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(0, 242, 254, 0.1); color: #0c4a6e; border: 1px solid var(--accent-teal);">${rawStatus}</span>`;
       } else {
-        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(148, 163, 184, 0.1); color: var(--text-secondary); border: 1px solid var(--border-glass);">${rawStatus}</span>`;
+        statusBadgeHtml = `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; background: rgba(148, 163, 184, 0.1); color: #334155; border: 1px solid var(--border-glass);">${rawStatus}</span>`;
       }
 
       let timeScheduleHtml = `<span style="color: var(--text-secondary); font-style: italic; font-size: 10px; white-space: nowrap;">In Backlog</span>`;
@@ -3913,6 +3919,9 @@ export class GanttController {
             if ((item.toIssue || 0) > (existing.toIssue || 0)) {
               existing.toIssue = item.toIssue;
             }
+            if (item.toIssueWh !== undefined && (existing.toIssueWh === undefined || item.toIssueWh > existing.toIssueWh)) {
+              existing.toIssueWh = item.toIssueWh;
+            }
             if (item.operStatus && !existing.operStatus) {
               existing.operStatus = item.operStatus;
             }
@@ -4001,8 +4010,28 @@ export class GanttController {
                 </span>
               `;
 
+              const issueStatus = this.state.getMaterialIssueStatus(item);
+              const usedOldMaterial = this.state.isOldMaterialUsed((item.operations || []).map(o => ({ ...o, actualQty: item.actualQty, toIssue: item.toIssue })));
+
               // Status based on toIssue and actualQty
-              if (item.toIssue === 0 && (item.actualQty > 0 || item.estimatedQty > 0)) {
+              if (usedOldMaterial) {
+                statusCell = `
+                  <span style="font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 4px; border: 1.5px solid #7c3aed; color: #5b21b6; background: rgba(124, 58, 237, 0.12); white-space: nowrap;" title="Op แรกเริ่มทำงานแล้ว แต่ไม่มีการเบิกวัสดุ (Actual Qty = 0, ค้างเบิก ${item.toIssue}) — ใช้วัสดุเก่าที่มีอยู่">
+                    ♻️ ใช้วัสดุเก่า
+                  </span>
+                `;
+              } else if (issueStatus) {
+                const tones = {
+                  ok: 'border: 1.5px solid #16a34a; color: #15803d; background: rgba(22, 163, 74, 0.15);',
+                  warn: 'border: 1.5px solid #d97706; color: #b45309; background: rgba(245, 158, 11, 0.15);',
+                  info: 'border: 1.5px solid #0284c7; color: #0369a1; background: rgba(2, 132, 199, 0.15);'
+                };
+                statusCell = `
+                  <span style="font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 4px; ${tones[issueStatus.tone]} white-space: nowrap;">
+                    ${issueStatus.label}
+                  </span>
+                `;
+              } else if (item.toIssue === 0 && (item.actualQty > 0 || item.estimatedQty > 0)) {
                 statusCell = `
                   <span style="font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 4px; border: 1.5px solid #16a34a; color: #15803d; background: rgba(22, 163, 74, 0.15); white-space: nowrap;" title="จ่ายครบตามจำนวนแล้ว">
                     ✓ จ่ายครบแล้ว

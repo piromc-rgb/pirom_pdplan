@@ -2539,10 +2539,13 @@ class CentralState {
 
     (this.scheduledJobs || []).forEach(j => {
       const woId = j.woId || j.id;
-      const st = this.getStepOverviewStatus(woId, j.stepNum, j.machine, j.dwgNo, j);
+      // A step flagged as completed by the ERP must be re-evaluated from the latest file, not from its own forced status
+      const probe = j.erpCompleted ? { ...j, status: j.statusBeforeErp || 'Scheduled' } : j;
+      const st = this.getStepOverviewStatus(woId, j.stepNum, j.machine, j.dwgNo, probe);
       if (st && st !== 'Unscheduled' && st !== 'Scheduled') {
         j.opStatus = st;
       }
+      this.applyErpCompletion(j, st);
     });
     (this.workOrders || []).forEach(wo => {
       (wo.steps || []).forEach(s => {
@@ -2552,6 +2555,81 @@ class CentralState {
         }
       });
     });
+  }
+
+  // Issue status of a raw material from "Mat.To Issue by Warehouse" and "Mat.Actual Quantity".
+  // Returns null when the warehouse column is unavailable (data from an older cache), so callers can fall back.
+  getMaterialIssueStatus(item) {
+    if (!item || item.toIssueWh === undefined || item.toIssueWh === null) return null;
+    const warehouse = Number(item.toIssueWh) || 0;
+    const actual = Number(item.actualQty) || 0;
+    const remaining = Number(item.toIssue) || 0;
+    // Already issued and nothing left to issue: the warehouse column drops to 0 afterwards, so check this first
+    if (actual > 0 && remaining <= 0) return { label: 'เบิกแล้ว', tone: 'ok' };
+    if (warehouse <= 0) return actual > 0 ? { label: 'เบิกบางส่วน', tone: 'info' } : { label: 'คลังยังไม่มีของให้เบิก', tone: 'warn' };
+    if (actual <= 0) return { label: 'ของมาพร้อมเบิก', tone: 'info' };
+    if (actual >= warehouse) return { label: 'เบิกแล้ว', tone: 'ok' };
+    return { label: 'เบิกบางส่วน', tone: 'info' };
+  }
+
+  // Warehouse issue status of the raw materials (10-char codes) used by one step of a PD.
+  // Several materials collapse into the least-ready one; returns null when the step has no raw material data.
+  getStepMaterialIssueSummary(pdId, stepNum) {
+    const rows = (this.planMaterials || {})[pdId];
+    if (!Array.isArray(rows)) return null;
+    const raw = rows.filter(r => String(r.mat || '').trim().length === 10);
+    const matCodes = [...new Set(raw.filter(r => Number(r.stepNum) === Number(stepNum)).map(r => r.mat))];
+    if (matCodes.length === 0) return null;
+
+    const severity = { warn: 3, info: 2, ok: 1, old: 1 };
+    const results = [];
+    for (const mat of matCodes) {
+      const matRows = raw.filter(r => r.mat === mat);
+      const hasWh = matRows.some(r => r.toIssueWh !== undefined);
+      const agg = {
+        actualQty: Math.max(...matRows.map(r => Number(r.actualQty) || 0)),
+        toIssue: Math.max(...matRows.map(r => Number(r.toIssue) || 0)),
+        toIssueWh: hasWh ? Math.max(...matRows.map(r => Number(r.toIssueWh) || 0)) : undefined
+      };
+      if (this.isOldMaterialUsed(matRows.map(r => ({ ...r, actualQty: agg.actualQty, toIssue: agg.toIssue })))) {
+        results.push({ label: 'ใช้วัสดุเก่า', tone: 'old' });
+      } else {
+        const st = this.getMaterialIssueStatus(agg);
+        if (st) results.push(st);
+      }
+    }
+    if (results.length === 0) return null;
+    const worst = results.reduce((a, b) => (severity[b.tone] > severity[a.tone] ? b : a));
+    const sameCount = results.filter(r => r.label === worst.label).length;
+    return { label: worst.label, tone: worst.tone, count: sameCount, total: results.length };
+  }
+
+  // A material with nothing issued (Actual Qty 0, still "to issue") whose first operation is no longer Planned (Ready to Start, Active, Completed, ...)
+  // was evidently made from old (existing) stock: entries = rows of one material in one PD ({stepNum, operStatus, actualQty, toIssue})
+  isOldMaterialUsed(entries) {
+    if (!Array.isArray(entries) || entries.length === 0) return false;
+    const actual = Math.max(...entries.map(e => Number(e.actualQty) || 0));
+    const toIssue = Math.max(...entries.map(e => Number(e.toIssue) || 0));
+    if (actual > 0 || toIssue <= 0) return false;
+    const first = [...entries].sort((a, b) => (Number(a.stepNum) || 0) - (Number(b.stepNum) || 0))[0];
+    const st = String(first.operStatus || '').trim().toLowerCase();
+    return st !== '' && st !== 'planned';
+  }
+
+  // ERP "Completed" steps are treated as done (status = Completed, bar hidden); undone again if a newer file says otherwise
+  applyErpCompletion(job, overviewStatus) {
+    const lowerStatus = String(overviewStatus || '').toLowerCase();
+    if (lowerStatus === 'completed' || lowerStatus === 'closed') {
+      if (job.status !== 'Completed') {
+        job.erpCompleted = true;
+        job.statusBeforeErp = job.status || 'Scheduled';
+        job.status = 'Completed';
+      }
+    } else if (job.erpCompleted) {
+      job.status = job.statusBeforeErp || 'Scheduled';
+      delete job.erpCompleted;
+      delete job.statusBeforeErp;
+    }
   }
 
   getStepOverviewStatus(woId, stepNum, machine = '', dwgNo = '', stepOrJob = null) {

@@ -4,15 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V1.3 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V1.4 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-CTCt4nyF.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-BOnFYm8_.css">
+    <script type="module" crossorigin src="./assets/index-DTZZRu2T.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CippIlG4.css">
   </head>
   <body>
     <div id="app-container">
@@ -225,6 +225,15 @@
                 </svg>
                 <span>ตรวจ QC Log</span>
               </button>
+
+              <button id="btn-mat-issue-report" class="btn btn-glowing" title="สรุป Mat. ที่รอเบิกและที่คลังยังไม่มีของ พร้อม PD ที่ใช้ เรียงตามแผนการผลิต" style="width: 100%; justify-content: flex-start; padding: 8px 12px; font-size: 11.5px; border-radius: 7px; margin: 0; background: linear-gradient(135deg, #b45309, #d97706); color: #fff;">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                  <line x1="12" y1="22.08" x2="12" y2="12"/>
+                </svg>
+                <span>ตรวจสอบ Mat รอเบิก</span>
+              </button>
             </div>
           </div>
         </div>
@@ -251,7 +260,7 @@
       </header>
 
       <!-- MAIN CONTENT AREA -->
-      <div class="main-layout">
+      <div class="main-layout hide-backlog">
         
         <!-- LEFT SIDEBAR: PRODUCTION ORDER BACKLOG -->
         <aside class="sidebar-left card-glass">
@@ -417,15 +426,10 @@
                   </svg>
                   <span>Production Order List</span>
                 </button>
-                <div class="timeline-nav-controls" style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
-                  <div style="display: flex; align-items: center;">
-                    <button id="btn-timeline-now" class="btn-action-small" title="Scroll to Current Time" style="margin: 0; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-teal); color: var(--text-primary);">Go to Now</button>
-                    <span id="board-date-range-display" style="font-size: 11px; font-weight: bold; color: var(--accent-teal); margin-left: 10px; font-family: monospace; letter-spacing: 0.5px;"></span>
-                  </div>
-                  <div style="display: flex; align-items: center; gap: 6px;">
-                    <button id="btn-timeline-goto-date" class="btn-action-small" title="Scroll to a specific date" style="margin: 0; background: rgba(255, 165, 0, 0.15); border: 1px solid var(--accent-orange); color: var(--text-primary);">Goto Date</button>
-                    <input type="date" id="timeline-goto-date-input" style="display: none; font-size: 11px; padding: 2px 4px; border-radius: 4px; border: 1px solid var(--accent-orange); background: var(--bg-card); color: var(--text-primary);">
-                  </div>
+                <div class="timeline-nav-controls" style="display: flex; flex-direction: row; align-items: center; gap: 6px; flex-wrap: nowrap;">
+                  <button id="btn-timeline-goto-date" class="btn-action-small" title="Scroll to a specific date" style="margin: 0; white-space: nowrap; background: rgba(255, 165, 0, 0.15); border: 1px solid var(--accent-orange); color: var(--text-primary);">Goto Date</button>
+                  <input type="date" id="timeline-goto-date-input" style="display: none; font-size: 11px; padding: 2px 4px; border-radius: 4px; border: 1px solid var(--accent-orange); background: var(--bg-card); color: var(--text-primary);">
+                  <span id="board-date-range-display" style="font-size: 11px; font-weight: bold; color: var(--accent-teal); margin-left: 4px; font-family: monospace; letter-spacing: 0.5px; white-space: nowrap;"></span>
                 </div>
               </div>
             </div>
@@ -766,6 +770,8 @@
               </div>
             </div>
           </div>
+          <!-- Resizer Splitter Handle between Gantt Board and Sidebar Right -->
+          <div class="sidebar-right-resizer" id="sidebar-right-resizer" title="ลากเพื่อปรับขนาดแถบด้านขวา (ดับเบิลคลิกเพื่อรีเซ็ตขนาด)"></div>
         </aside>
 
       </div>
@@ -1788,7 +1794,7 @@
               </div>
             </div>
             <div style="display: flex; gap: 8px;">
-              <input type="text" id="input-status-overview-filename" placeholder="e.g. LN Status Overview.xlsx" style="flex: 1; padding: 8px 12px; font-size: 11.5px; font-family: monospace; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.9); color: var(--text-primary);">
+              <input type="text" id="input-status-overview-filename" placeholder="AUTO = ใช้ไฟล์ Status Overview ใหม่สุดในโฟลเดอร์ (หรือระบุชื่อไฟล์)" style="flex: 1; padding: 8px 12px; font-size: 11.5px; font-family: monospace; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.9); color: var(--text-primary);">
               <input type="file" id="input-file-status-overview-hidden" accept=".xlsx, .xls" style="display: none;">
               <button type="button" id="btn-browse-status-overview-file" class="btn" title="เลือกไฟล์จากเครื่องแล้วบันทึกเป็นค่าเริ่มต้นทันที" style="padding: 6px 12px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.8); color: var(--text-primary); white-space: nowrap; cursor: pointer;">
                 📂 เลือกไฟล์
@@ -1796,7 +1802,7 @@
               <button type="button" id="btn-save-status-overview-file" class="btn btn-glowing" style="padding: 6px 14px; font-size: 11.5px; border-radius: 6px; white-space: nowrap;">
                 💾 บันทึกชื่อไฟล์
               </button>
-              <button type="button" id="btn-reset-status-overview-file" class="btn" title="รีเซ็ตเป็นไฟล์เริ่มต้น (LN Status Overview.xlsx)" style="padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(0,0,0,0.04); color: var(--text-secondary); white-space: nowrap;">
+              <button type="button" id="btn-reset-status-overview-file" class="btn" title="รีเซ็ตเป็น AUTO (ใช้ไฟล์ใหม่สุดในโฟลเดอร์)" style="padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(0,0,0,0.04); color: var(--text-secondary); white-space: nowrap;">
                 ↺ เริ่มต้น
               </button>
             </div>

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const compileVersion = '1.3';
+const compileVersion = '1.4';
 
 function getTempCacheDir() {
   const dir = path.join(os.tmpdir(), 'pirom_pdplan');
@@ -17,6 +17,30 @@ function getTempCacheDir() {
     }
   } catch {}
   return dir;
+}
+
+function isAutoStatusName(name) {
+  const n = String(name || '').trim().toLowerCase();
+  return n === '' || n === 'auto';
+}
+
+// Newest "*Status Overview*.xlsx/.xls" (by mtime) across the given folders
+function findLatestStatusOverview(dirs) {
+  let best = null;
+  for (const dir of dirs) {
+    let entries = [];
+    try { entries = fs.readdirSync(dir); } catch { continue; }
+    for (const name of entries) {
+      if (name.startsWith('~$') || name.startsWith('.')) continue;
+      if (!/status\s*overview/i.test(name) || !/\.xlsx?$/i.test(name)) continue;
+      const full = path.join(dir, name);
+      try {
+        const st = fs.statSync(full);
+        if (st.isFile() && (!best || st.mtimeMs > best.mtimeMs)) best = { path: full, mtimeMs: st.mtimeMs };
+      } catch {}
+    }
+  }
+  return best ? best.path : null;
 }
 
 function getGdriveCandidates() {
@@ -477,7 +501,9 @@ export default defineConfig({
 
           if (cleanUrl === '/api/plan-materials' || cleanUrl.startsWith('/api/plan-materials?')) {
             const urlObj = new URL(req.url, 'http://localhost');
-            const requestedFile = urlObj.searchParams.get('filename') || 'LN Status Overview.xlsx';
+            const rawRequestedFile = urlObj.searchParams.get('filename') || 'AUTO';
+            const latestForPlan = isAutoStatusName(rawRequestedFile) ? findLatestStatusOverview([gdriveDir]) : null;
+            const requestedFile = latestForPlan ? path.basename(latestForPlan) : (isAutoStatusName(rawRequestedFile) ? 'LN Status Overview.xlsx' : rawRequestedFile);
             const force = urlObj.searchParams.get('force') === '1' || urlObj.searchParams.get('refresh') === 'true';
             const gdriveFile = path.join(gdriveDir, requestedFile);
             
@@ -780,7 +806,7 @@ export default defineConfig({
 
           if (cleanUrl === '/api/status-overview' || cleanUrl.startsWith('/api/status-overview?')) {
             const urlObj = new URL(req.url, 'http://localhost');
-            const requestedFile = urlObj.searchParams.get('filename') || 'LN Status Overview.xlsx';
+            const requestedFile = urlObj.searchParams.get('filename') || 'AUTO';
 
             if (req.method === 'POST') {
               const chunks = [];
@@ -800,7 +826,9 @@ export default defineConfig({
               return;
             }
 
+            const latestOverview = isAutoStatusName(requestedFile) ? findLatestStatusOverview([gdriveDir, __dirname]) : null;
             const candidateNames = [
+              ...(latestOverview ? [latestOverview] : []),
               path.join(gdriveDir, requestedFile),
               path.resolve(__dirname, requestedFile),
               path.join(gdriveDir, 'LN Status Overview.xlsx'),
@@ -841,7 +869,9 @@ export default defineConfig({
           if (cleanUrl === '/api/check-storage-status' || cleanUrl.startsWith('/api/check-storage-status?')) {
             const urlObj = new URL(req.url, 'http://localhost');
             const savedCfg = readCloudConfig();
-            const statusFilename = (urlObj.searchParams.get('statusFilename') || savedCfg.statusOverviewFilename || 'LN Status Overview.xlsx').trim();
+            const statusFilenameRaw = (urlObj.searchParams.get('statusFilename') || savedCfg.statusOverviewFilename || 'AUTO').trim();
+            const latestStatusPath = isAutoStatusName(statusFilenameRaw) ? findLatestStatusOverview([gdriveDir, __dirname]) : null;
+            const statusFilename = latestStatusPath ? path.basename(latestStatusPath) : (isAutoStatusName(statusFilenameRaw) ? 'LN Status Overview.xlsx' : statusFilenameRaw);
             const customDwgDir = (urlObj.searchParams.get('dwgDir') || '').trim();
             const driveUrl = (urlObj.searchParams.get('driveUrl') || savedCfg.driveFolderUrl || '').trim();
             const dwgUrl = (urlObj.searchParams.get('dwgUrl') || savedCfg.dwgFolderUrl || '').trim();

@@ -1719,13 +1719,15 @@ export class WorkflowController {
       matDesc: findColIdx(['mat._1', 'mat_1', 'mat desc', 'description'], 15),
       estimatedQty: findColIdx(['mat.estimated quantity', 'estimated quantity', 'est qty'], 18),
       actualQty: findColIdx(['mat.actual quantity', 'actual quantity'], 19),
+      toIssueWh: findColIdx(['mat.to issue by warehouse', 'to issue by warehouse'], 20),
       toIssue: findColIdx(['mat.to issue', 'to issue'], 21),
       operStatus: findColIdx(['operation status', 'oper status', 'op status'], 22),
       orderStatus: findColIdx(['order status'], 23)
     };
 
-    const planMaterials = this.state.planMaterials || {};
-    const pdOpStatusMap = this.state.pdOpStatusMap || {};
+    // Latest Status Overview is the source of truth: rebuild instead of merging into stale data
+    const planMaterials = {};
+    const pdOpStatusMap = {};
     for (let i = 1; i < matRaw2D.length; i++) {
       const row = matRaw2D[i];
       if (!row || row.length === 0) continue;
@@ -1746,6 +1748,7 @@ export class WorkflowController {
       const estQty = parseFloat(row[col.estimatedQty]) || 0;
       const actualQty = parseFloat(row[col.actualQty]) || 0;
       const toIssue = parseFloat(row[col.toIssue]) || 0;
+      const toIssueWh = parseFloat(row[col.toIssueWh]) || 0;
       const operStatus = String(row[col.operStatus] || '').trim();
       const orderStatus = String(row[col.orderStatus] || '').trim();
 
@@ -1770,6 +1773,7 @@ export class WorkflowController {
           estimatedQty: estQty,
           actualQty,
           toIssue,
+          toIssueWh,
           operStatus,
           orderStatus
         });

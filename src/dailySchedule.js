@@ -289,7 +289,13 @@ export class DailyScheduleController {
       }
       
       const readiness = this.getMaterialReadiness(job, prevStep);
-      
+
+      const issueSummary = this.state.getStepMaterialIssueSummary(job.woId, job.stepNum);
+      const issueTones = { ok: '#15803d', warn: '#b45309', info: '#0369a1', old: '#5b21b6' };
+      const issueHtml = issueSummary
+        ? `<span>📦 สถานะเบิกวัสดุ: <strong style="color: ${issueTones[issueSummary.tone]};">${issueSummary.label}${issueSummary.count < issueSummary.total ? ` (${issueSummary.count}/${issueSummary.total} รายการ)` : ''}</strong></span>`
+        : '';
+
       // If we are in weekly/monthly view, prepend the date to the card time block
       let datePrefix = '';
       if (viewMode !== 'daily') {
@@ -336,6 +342,7 @@ export class DailyScheduleController {
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">
             <span>📥 Operation ก่อนหน้า: <strong style="color: var(--text-primary);">${prevWCStr}</strong></span>
             <span>📤 Operation ถัดไป: <strong style="color: var(--text-primary);">${nextWCStr}</strong></span>
+            ${issueHtml}
           </div>
         </div>
 

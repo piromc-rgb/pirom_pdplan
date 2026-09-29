@@ -15,6 +15,7 @@ import { DailyScheduleController } from './dailySchedule.js';
 import { AssemblyTreeController, matchesAssemblyQuery } from './assemblyTree.js';
 import { ContinuityAnalysisController } from './continuityAnalysis.js';
 import { QcCheckController } from './qcCheck.js';
+import { MatIssueReportController } from './matIssueReport.js';
 import { StorageSyncManager } from './storageSync.js';
 
 function getBaseDate() {
@@ -119,7 +120,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.3';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.4';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -142,6 +143,7 @@ class App {
 
   initControllers() {
     this.workflow = new WorkflowController(state);
+    state.workflowController = this.workflow;
     this.gantt = new GanttController(state);
     this.resources = new ResourcesController(state);
     this.kiosk = new KioskController(state);
@@ -151,6 +153,7 @@ class App {
     window.assemblyTree = this.assemblyTree;
     this.continuityAnalysis = new ContinuityAnalysisController(state);
     this.qcCheck = new QcCheckController(state);
+    this.matIssueReport = new MatIssueReportController(state);
     this.storageSync = new StorageSyncManager(state);
     state.storageSync = this.storageSync;
     window.storageSyncManager = this.storageSync;
@@ -1537,7 +1540,6 @@ class App {
     // 8. Timeline Navigation Controls (◀, ▶, Today)
     const btnTimelinePrev = document.getElementById('btn-timeline-prev');
     const btnTimelineNext = document.getElementById('btn-timeline-next');
-    const btnTimelineNow = document.getElementById('btn-timeline-now');
 
     const shiftTimeline = (direction) => {
       const scale = state.activeScale;
@@ -1561,22 +1563,6 @@ class App {
     if (btnTimelineNext) {
       btnTimelineNext.addEventListener('click', () => shiftTimeline(1));
     }
-    if (btnTimelineNow) {
-      btnTimelineNow.addEventListener('click', () => {
-        const now = new Date();
-        const nowWorkingHour = dateToWorkingHour(now);
-        const scale = state.activeScale;
-        const config = state.getScaleConfig(scale);
-
-        // Center the view by placing the current working hour at about 1/3 of the visible board width
-        // so that the user sees some past hours and mostly future hours.
-        const targetOffset = nowWorkingHour - config.totalHours / 3;
-        const snap = config.snapHours;
-        const snappedOffset = Math.round(targetOffset / snap) * snap;
-        state.setTimelineOffset(snappedOffset);
-      });
-    }
-
     const btnTimelineGotoDate = document.getElementById('btn-timeline-goto-date');
     const timelineGotoDateInput = document.getElementById('timeline-goto-date-input');
     if (btnTimelineGotoDate && timelineGotoDateInput) {

@@ -1364,8 +1364,10 @@ export class AssemblyTreeController {
           comp.rawList.forEach((raw, idx) => {
             const rawKey = `${nodeKey}_RAW_${raw.mat || idx}`;
             const isIssued = raw.toIssue === 0 && (raw.actualQty > 0 || raw.estimatedQty > 0 || raw.toIssueWh > 0);
-            const rawStatus = isIssued ? 'released' : (raw.toIssue > 0 ? 'working' : 'released');
-            const statusLabel = isIssued ? '✓ จ่ายครบแล้ว' : (raw.toIssue > 0 ? `⏳ รอเบิก (${raw.toIssue})` : '✓ พร้อมใช้งาน');
+            const usedOld = this.state.isOldMaterialUsed([{ stepNum: raw.firstStepNum, operStatus: raw.firstOperStatus, actualQty: raw.actualQty, toIssue: raw.toIssue }]);
+            const issueStatus = this.state.getMaterialIssueStatus(raw);
+            const rawStatus = usedOld ? 'released' : (issueStatus ? (issueStatus.tone === 'ok' ? 'released' : 'working') : ((isIssued) ? 'released' : (raw.toIssue > 0 ? 'working' : 'released')));
+            const statusLabel = usedOld ? '♻️ ใช้วัสดุเก่า' : (issueStatus ? issueStatus.label : (isIssued ? '✓ จ่ายครบแล้ว' : (raw.toIssue > 0 ? `⏳ รอเบิก (${raw.toIssue})` : '✓ พร้อมใช้งาน')));
 
             const rawNode = {
               id: raw.mat || 'RAW',
@@ -1388,8 +1390,9 @@ export class AssemblyTreeController {
           });
         } else {
           const rawKey = `${nodeKey}_RAW_GROUP`;
-          const allIssued = comp.rawList.every(r => r.toIssue === 0);
-          const issuedCount = comp.rawList.filter(r => r.toIssue === 0).length;
+          const isRawDone = (r) => this.state.isOldMaterialUsed([{ stepNum: r.firstStepNum, operStatus: r.firstOperStatus, actualQty: r.actualQty, toIssue: r.toIssue }]) || (this.state.getMaterialIssueStatus(r) ? this.state.getMaterialIssueStatus(r).tone === 'ok' : r.toIssue === 0);
+          const allIssued = comp.rawList.every(isRawDone);
+          const issuedCount = comp.rawList.filter(isRawDone).length;
           const sampleDesc = comp.rawList.slice(0, 3).map(r => r.matDesc?.split(' ')[0] || r.mat).join(', ') + '...';
           const rawStatus = allIssued ? 'released' : 'working';
           const statusLabel = allIssued ? `✓ จ่ายครบ (${comp.rawList.length} รายการ)` : `จ่ายแล้ว ${issuedCount}/${comp.rawList.length}`;
@@ -1508,11 +1511,13 @@ export class AssemblyTreeController {
             wcList: m.wc ? [m.wc] : [],
             stepNum: m.stepNum,
             stepList: m.stepNum ? [m.stepNum] : [],
+            firstStepNum: Number(m.stepNum) || 0,
+            firstOperStatus: m.operStatus || '',
             operDesc: m.operDesc || '',
             estimatedQty: Number(m.estimatedQty) || 0,
             actualQty: Number(m.actualQty) || 0,
             toIssue: Number(m.toIssue) || 0,
-            toIssueWh: Number(m.toIssueWh) || 0,
+            toIssueWh: m.toIssueWh === undefined ? undefined : (Number(m.toIssueWh) || 0),
             operStatus: m.operStatus || '',
             orderStatus: m.orderStatus || '',
             isChildPd,
@@ -1524,8 +1529,13 @@ export class AssemblyTreeController {
           existing.estimatedQty = Math.max(existing.estimatedQty, Number(m.estimatedQty) || 0);
           existing.actualQty = Math.max(existing.actualQty, Number(m.actualQty) || 0);
           existing.toIssue = Math.max(existing.toIssue, Number(m.toIssue) || 0);
+          if (m.toIssueWh !== undefined) existing.toIssueWh = Math.max(existing.toIssueWh || 0, Number(m.toIssueWh) || 0);
           if (m.wc && !existing.wcList.includes(m.wc)) existing.wcList.push(m.wc);
           if (m.stepNum && !existing.stepList.includes(m.stepNum)) existing.stepList.push(m.stepNum);
+          if (m.stepNum && Number(m.stepNum) < existing.firstStepNum) {
+            existing.firstStepNum = Number(m.stepNum);
+            existing.firstOperStatus = m.operStatus || '';
+          }
           if (m.matDesc && !existing.matDesc) existing.matDesc = m.matDesc;
           if (m.operStatus && !existing.operStatus) existing.operStatus = m.operStatus;
         }

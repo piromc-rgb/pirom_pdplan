@@ -17,7 +17,8 @@ const STORAGE_LAST_SYNC_KEY = 'PDPLAN_LAST_SYNC_TIME';
 const STORAGE_AUTO_SYNC_KEY = 'PDPLAN_AUTO_SYNC';
 const STORAGE_USER_MODE_KEY = 'PDPLAN_USER_MODE';
 const STORAGE_DWG_FOLDER_KEY = 'PDPLAN_DWG_FOLDER_URL';
-export const DEFAULT_STATUS_OVERVIEW_FILENAME = 'LN Status Overview.xlsx';
+export const DEFAULT_STATUS_OVERVIEW_FILENAME = 'AUTO';
+const STATUS_OVERVIEW_AUTO_MIGRATION_KEY = 'pdplan_so_auto_v1';
 const STORAGE_STATUS_OVERVIEW_FILE_KEY = 'PDPLAN_STATUS_OVERVIEW_FILENAME';
 
 export class StorageSyncManager {
@@ -462,7 +463,24 @@ export class StorageSyncManager {
   }
 
   getStatusOverviewFilename() {
+    try {
+      // One-time: drop a previously pinned file name so AUTO (newest file) takes over
+      if (!localStorage.getItem(STATUS_OVERVIEW_AUTO_MIGRATION_KEY)) {
+        localStorage.setItem(STATUS_OVERVIEW_AUTO_MIGRATION_KEY, '1');
+        localStorage.removeItem(STORAGE_STATUS_OVERVIEW_FILE_KEY);
+      }
+    } catch (e) {}
     return localStorage.getItem(STORAGE_STATUS_OVERVIEW_FILE_KEY) || DEFAULT_STATUS_OVERVIEW_FILENAME;
+  }
+
+  isStatusOverviewAuto() {
+    return String(this.getStatusOverviewFilename() || '').trim().toUpperCase() === 'AUTO';
+  }
+
+  noteResolvedOverview(name) {
+    this.resolvedOverviewName = name;
+    const badge = document.getElementById('badge-status-overview-file');
+    if (badge && name) badge.textContent = this.isStatusOverviewAuto() ? `AUTO → ${name}` : name;
   }
 
   setStatusOverviewFilename(filename) {
@@ -536,7 +554,8 @@ export class StorageSyncManager {
     const endpoint = this.getEndpointUrl();
     this.syncStatus = 'syncing';
     this.updateStatusBadge();
-    this.fetchPlanMaterials();
+    // EDIT mode refreshes after the plan payload is applied (so the update summary can diff against the loaded jobs)
+    if (this.getUserMode() !== 'plan') this.fetchPlanMaterials();
 
     // 1. ตรวจสอบกรณีผู้ใช้นำลิงก์ Google Drive Folder ธรรมดามาวางแทน Web App URL
     if (endpoint && endpoint.includes('drive.google.com')) {
@@ -611,8 +630,8 @@ export class StorageSyncManager {
           } else {
             this.showToast(`☁️ โหลด Plan, Machine Settings (${wcCount} เครื่อง) และ Completed PDs (${completedCount} รายการ) จาก Cloud เรียบร้อย`, 'info');
           }
-          if (!this.state.planMaterials || Object.keys(this.state.planMaterials).length === 0) {
-            this.fetchPlanMaterials();
+          if (this.getUserMode() === 'plan' || !this.state.planMaterials || Object.keys(this.state.planMaterials).length === 0) {
+            this.fetchPlanMaterials(this.getUserMode() === 'plan');
           }
           return true;
         } else {
@@ -653,7 +672,7 @@ export class StorageSyncManager {
                 const completedCount = Object.keys(this.state.completedPdHistory || {}).length;
                 this.showToast(`✅ โหลดข้อมูลจากไฟล์ Plan.json, machine_settings.json (${wcCount} เครื่อง) และ completed_pds.json (${completedCount} รายการ) ในเครื่องสำเร็จ`, 'success');
               }
-              this.fetchPlanMaterials();
+              this.fetchPlanMaterials(this.getUserMode() === 'plan');
               return true;
             }
           }
@@ -678,7 +697,7 @@ export class StorageSyncManager {
           const completedCount = Object.keys(this.state.completedPdHistory || {}).length;
           this.showToast(`💾 โหลดข้อมูลจาก Local Cache: Plan (${jobCount} Tasks), machine_settings (${wcCount} เครื่อง), completed_pds (${completedCount} รายการ)`, 'info');
         }
-        this.fetchPlanMaterials();
+        this.fetchPlanMaterials(this.getUserMode() === 'plan');
         return true;
       } catch (e) {
         console.error('Error reading cached plan:', e);
@@ -1299,10 +1318,11 @@ export class StorageSyncManager {
   async fetchStatusOverview(options = {}) {
     const force = typeof options === 'boolean' ? options : Boolean(options.force);
     const silent = typeof options === 'object' ? Boolean(options.silent) : false;
+    const noUpload = typeof options === 'object' ? Boolean(options.noUpload) : false;
     const filename = this.getStatusOverviewFilename();
 
-    // 1. ถ้าไม่สั่ง force ให้ดึงจาก Local Cache ทันที เพื่อความเร็วสูงสุด (0ms - 10ms)
-    if (!force) {
+    // 1. ถ้าไม่สั่ง force ให้ดึงจาก Local Cache ทันที (โหมด AUTO ต้องเช็คไฟล์ใหม่สุดจาก server เสมอ)
+    if (!force && !this.isStatusOverviewAuto()) {
       const cached = await this.getOverviewFromCache(filename);
       if (cached && cached.arrayBuffer) {
         if (!silent) {
@@ -1344,6 +1364,7 @@ export class StorageSyncManager {
               try { fn = decodeURIComponent(xfn); } catch(e) {}
             }
             fetchedResult = { arrayBuffer: buffer, filename: fn, source: 'local_server' };
+            this.noteResolvedOverview(fn);
             break;
           }
         } catch (err) {
@@ -1376,6 +1397,7 @@ export class StorageSyncManager {
                 lastModified: json.lastModified,
                 source: 'cloud'
               };
+              this.noteResolvedOverview(fetchedResult.filename);
             }
           }
         } catch (err) {
@@ -1401,7 +1423,7 @@ export class StorageSyncManager {
       const isPlanMode = this.getUserMode() === 'plan';
       if (isPlanMode) {
         // ในโหมดวางแผน: อัปเดตข้อมูลขึ้น Cloud (หากไฟล์ดึงมาจาก Local Dev Server หรือผู้ใช้เลือกใหม่)
-        if (fetchedResult.source !== 'cloud') {
+        if (fetchedResult.source !== 'cloud' && !noUpload) {
           this.uploadStatusOverviewToCloud(fetchedResult.filename, fetchedResult.arrayBuffer);
         }
         if (!silent) {
@@ -1443,12 +1465,45 @@ export class StorageSyncManager {
     ) {
       return this.state.planMaterials;
     }
-    if (this._fetchPlanMaterialsPromise && !force) {
+    if (this._fetchPlanMaterialsPromise && (!force || this._fetchPlanMaterialsIsForce)) {
       return this._fetchPlanMaterialsPromise;
     }
 
+    this._fetchPlanMaterialsIsForce = force;
     this._fetchPlanMaterialsPromise = (async () => {
       const filename = this.getStatusOverviewFilename();
+
+      // 0. Forced refresh: parse the selected/newest Status Overview directly (only the Plan + Mat sheet)
+      if (force) {
+        try {
+          const overview = await this.fetchStatusOverview({ force: true, silent: true, noUpload: true });
+          if (overview && overview.arrayBuffer && typeof XLSX !== 'undefined' &&
+              this.state.workflowController && typeof this.state.workflowController.parseAndStoreMaterials === 'function') {
+            const bytes = new Uint8Array(overview.arrayBuffer);
+            const isMatSheet = (name) => {
+              const n = (name || '').trim().toLowerCase();
+              return n === 'plan + mat' || n === 'plan+mat' || (n.includes('plan') && n.includes('mat'));
+            };
+            const matSheetName = XLSX.read(bytes, { type: 'array', bookSheets: true }).SheetNames.find(isMatSheet);
+            if (matSheetName) {
+              const workbook = XLSX.read(bytes, { type: 'array', sheets: matSheetName });
+              const matRaw2D = XLSX.utils.sheet_to_json(workbook.Sheets[matSheetName], { header: 1, defval: '' });
+              let cachedBefore = null;
+              if (!this.state.planMaterials || Object.keys(this.state.planMaterials).length === 0) {
+                try { cachedBefore = await this.getPlanMaterialsFromCache(); } catch (e) {}
+              }
+              const before = this.snapshotOverviewState(cachedBefore);
+              this.state.workflowController.parseAndStoreMaterials(matRaw2D);
+              this.updateAssemblyTreeAfterMaterials();
+              await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, overview.filename || filename, this.state.pdOpStatusMap);
+              this.reportOverviewUpdate(before, overview.filename || filename);
+              return this.state.planMaterials;
+            }
+          }
+        } catch (err) {
+          console.warn('Direct parse of Status Overview failed, using cache:', err);
+        }
+      }
 
       // 1. ตรวจสอบจาก Local Cache ใน IndexedDB ก่อนเสมอ (เร็วระดับ ms ไม่ต้อง parse 17MB)
       if (!force) {
@@ -1564,6 +1619,179 @@ export class StorageSyncManager {
     } finally {
       this._fetchPlanMaterialsPromise = null;
     }
+  }
+
+  snapshotOverviewState(cached = null) {
+    const jobStatus = new Map();
+    for (const job of this.state.scheduledJobs || []) jobStatus.set(job, String(job.opStatus || ''));
+    const erpDone = new Set((this.state.scheduledJobs || []).filter(j => j.erpCompleted));
+    const mats = new Map();
+    const inMemory = this.state.planMaterials && Object.keys(this.state.planMaterials).length > 0;
+    const baseMaterials = inMemory ? this.state.planMaterials : (cached && cached.planMaterials) || {};
+    const baseline = inMemory ? { source: 'memory' } : (cached ? { source: 'cache', cachedAt: cached.cachedAt, filename: cached.filename } : null);
+    for (const [pdId, list] of Object.entries(baseMaterials)) {
+      if (!Array.isArray(list)) continue;
+      for (const m of list) {
+        mats.set(`${pdId}|${m.stepNum}|${m.mat}`, {
+          actualQty: m.actualQty, toIssue: m.toIssue, operStatus: m.operStatus || '', orderStatus: m.orderStatus || ''
+        });
+      }
+    }
+    return { jobStatus, mats, baseline, erpDone };
+  }
+
+  buildOverviewUpdateSummary(before, filename) {
+    const planPds = new Set();
+    const opChanges = [];
+    for (const [job, oldStatus] of before.jobStatus) {
+      const pdId = job.woId || job.id;
+      planPds.add(pdId);
+      const newStatus = String(job.opStatus || '');
+      if (newStatus !== oldStatus) {
+        opChanges.push({ pdId, step: job.stepNum, wc: job.machine, from: oldStatus || '-', to: newStatus || '-' });
+      }
+    }
+    let barsHidden = 0;
+    let barsRestored = 0;
+    for (const job of before.jobStatus.keys()) {
+      if (job.erpCompleted && !before.erpDone.has(job)) barsHidden++;
+      else if (!job.erpCompleted && before.erpDone.has(job)) barsRestored++;
+    }
+    const transitions = {};
+    for (const c of opChanges) {
+      const key = `${c.from} → ${c.to}`;
+      transitions[key] = (transitions[key] || 0) + 1;
+    }
+    const changedPds = new Set(opChanges.map(c => c.pdId));
+    const inFile = (pdId) => (this.state.pdOpStatusMap && this.state.pdOpStatusMap[pdId]) || (this.state.planMaterials && this.state.planMaterials[pdId]);
+    const missingPds = [...planPds].filter(pdId => !inFile(pdId));
+
+    const newMats = new Map();
+    for (const [pdId, list] of Object.entries(this.state.planMaterials || {})) {
+      if (!Array.isArray(list)) continue;
+      for (const m of list) newMats.set(`${pdId}|${m.stepNum}|${m.mat}`, m);
+    }
+    const hadBaseline = before.mats.size > 0;
+    const matChanges = [];
+    let matAdded = 0;
+    let matRemoved = 0;
+    let matIssued = 0;
+    let matWaiting = 0;
+    if (hadBaseline) {
+      for (const [key, m] of newMats) {
+        const old = before.mats.get(key);
+        if (!old) { matAdded++; continue; }
+        if (old.actualQty !== m.actualQty || old.toIssue !== m.toIssue || old.orderStatus !== (m.orderStatus || '')) {
+          const [pdId, step, mat] = key.split('|');
+          matChanges.push({ pdId, step, mat, old, now: m });
+          if ((old.toIssue || 0) > 0 && (m.toIssue || 0) === 0) matIssued++;
+          else if ((old.toIssue || 0) === 0 && (m.toIssue || 0) > 0) matWaiting++;
+        }
+      }
+      for (const key of before.mats.keys()) if (!newMats.has(key)) matRemoved++;
+    }
+    return {
+      filename,
+      time: new Date(),
+      pdInPlan: planPds.size,
+      jobCount: before.jobStatus.size,
+      opChanges,
+      barsHidden,
+      barsRestored,
+      transitions,
+      changedPds: changedPds.size,
+      missingPds,
+      matPdCount: Object.keys(this.state.planMaterials || {}).length,
+      matRowCount: newMats.size,
+      hadBaseline,
+      matChanges,
+      matAdded,
+      matRemoved,
+      matIssued,
+      matWaiting,
+      baseline: before.baseline
+    };
+  }
+
+  reportOverviewUpdate(before, filename) {
+    let summary;
+    try {
+      summary = this.buildOverviewUpdateSummary(before, filename);
+    } catch (err) {
+      console.warn('Failed to build Status Overview update summary:', err);
+      this.showToast(`🔄 อัปเดตข้อมูล Production Order จากไฟล์ ${filename || ''} แล้ว`, 'info');
+      return;
+    }
+    this.lastOverviewUpdateSummary = summary;
+    const hasChange = summary.opChanges.length > 0 || summary.barsHidden > 0 || summary.barsRestored > 0 || summary.matChanges.length > 0 || summary.matAdded > 0 || summary.matRemoved > 0;
+    if (!hasChange) {
+      this.showToast(`🔄 อัปเดตจาก ${filename}: ไม่มี Operation/Mat ที่เปลี่ยนแปลง (${summary.pdInPlan} PD ในแผน)`, 'info');
+      return;
+    }
+    this.showOverviewUpdateSummary(summary);
+  }
+
+  showOverviewUpdateSummary(summary) {
+    document.getElementById('overview-update-summary-modal')?.remove();
+    const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const MAX_ROWS = 60;
+    const transitionRows = Object.entries(summary.transitions)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `<div style="display:flex;justify-content:space-between;padding:2px 0;"><span>${esc(k)}</span><strong>${n}</strong></div>`)
+      .join('') || '<div style="color:#64748b;">ไม่มี</div>';
+    const opRows = summary.opChanges.slice(0, MAX_ROWS)
+      .map(c => `<tr><td>${esc(c.pdId)}</td><td>${esc(c.step)}</td><td>${esc(c.wc)}</td><td>${esc(c.from)}</td><td>${esc(c.to)}</td></tr>`)
+      .join('');
+    const opMore = summary.opChanges.length > MAX_ROWS ? `<div style="color:#64748b;margin-top:4px;">… และอีก ${summary.opChanges.length - MAX_ROWS} รายการ</div>` : '';
+    const fmtNum = (v) => (typeof v === 'number' ? Number(v.toFixed(2)) : v);
+    const cell = (a, b) => (a === b ? esc(fmtNum(b)) : `${esc(fmtNum(a))} → <strong>${esc(fmtNum(b))}</strong>`);
+    const matRows = summary.matChanges.slice(0, MAX_ROWS)
+      .map(c => `<tr><td>${esc(c.pdId)}</td><td>${esc(c.step)}</td><td>${esc(c.mat)}</td><td>${cell(c.old.actualQty, c.now.actualQty)}</td><td>${cell(c.old.toIssue, c.now.toIssue)}</td><td>${cell(c.old.orderStatus || '-', c.now.orderStatus || '-')}</td></tr>`)
+      .join('');
+    const matMore = summary.matChanges.length > MAX_ROWS ? `<div style="color:#64748b;margin-top:4px;">… และอีก ${summary.matChanges.length - MAX_ROWS} รายการ</div>` : '';
+    const missing = summary.missingPds.length
+      ? `<div style="margin-top:10px;"><strong>PD ในแผนที่ไม่พบในไฟล์ใหม่ (${summary.missingPds.length}):</strong> <span style="color:#64748b;">${esc(summary.missingPds.slice(0, 20).join(', '))}${summary.missingPds.length > 20 ? ' …' : ''}</span></div>`
+      : '';
+    const baselineNote = summary.baseline && summary.baseline.source === 'cache'
+      ? `เทียบกับข้อมูล Mat. ที่บันทึกไว้เมื่อ ${esc(summary.baseline.cachedAt ? new Date(summary.baseline.cachedAt).toLocaleString('th-TH') : '-')} (ไฟล์ ${esc(summary.baseline.filename || '-')})`
+      : 'เทียบกับข้อมูล Mat. ก่อนหน้าในหน่วยความจำ';
+    const matBlock = summary.hadBaseline
+      ? `<div style="margin-top:12px;"><strong>Mat. เปลี่ยนแปลง:</strong> ${summary.matChanges.length} รายการ · เพิ่มใหม่ ${summary.matAdded} · หายไป ${summary.matRemoved}</div>
+         <div style="color:#64748b;font-size:11.5px;">${baselineNote}</div>
+         ${(summary.matIssued || summary.matWaiting) ? `<div style="margin:6px 0;padding:6px 8px;background:#f8fafc;border-radius:6px;">
+           <div style="display:flex;justify-content:space-between;"><span>รอเบิก → จ่ายครบแล้ว (To Issue เป็น 0)</span><strong>${summary.matIssued}</strong></div>
+           <div style="display:flex;justify-content:space-between;"><span>จ่ายครบแล้ว → รอเบิกอีกครั้ง</span><strong>${summary.matWaiting}</strong></div></div>` : ''}
+         ${matRows ? `<div style="overflow:auto;max-height:220px;margin-top:4px;"><table class="ovs-table"><thead><tr><th>PD</th><th>Op</th><th>Mat.</th><th>Actual Qty</th><th>To Issue</th><th>Order Status</th></tr></thead><tbody>${matRows}</tbody></table></div>${matMore}` : '<div style="margin-top:4px;color:#64748b;">ไม่มี Mat. ที่ Actual Qty / To Issue / Order Status เปลี่ยน</div>'}`
+      : `<div style="margin-top:12px;color:#64748b;">Mat.: โหลดข้อมูลใหม่ ${summary.matRowCount} รายการ ใน ${summary.matPdCount} PD (ยังไม่มีข้อมูล Mat. เดิมที่บันทึกไว้ให้เทียบ — ครั้งถัดไปจะเทียบให้)</div>`;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'overview-update-summary-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.innerHTML = `
+      <style>
+        #overview-update-summary-modal .ovs-table{width:100%;border-collapse:collapse;font-size:11.5px;}
+        #overview-update-summary-modal .ovs-table th,#overview-update-summary-modal .ovs-table td{border-bottom:1px solid rgba(0,0,0,0.08);padding:3px 6px;text-align:left;white-space:nowrap;}
+        #overview-update-summary-modal .ovs-table th{position:sticky;top:0;background:#f1f5f9;}
+      </style>
+      <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:720px;width:100%;max-height:88vh;overflow:auto;padding:16px 18px;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <div style="font-size:15px;font-weight:700;">🔄 สรุปผลการอัปเดตจาก Status Overview</div>
+          <button type="button" id="btn-close-overview-summary" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
+        </div>
+        <div style="color:#64748b;margin:2px 0 10px;font-family:monospace;">${esc(summary.filename)} · ${esc(summary.time.toLocaleString('th-TH'))}</div>
+        <div><strong>Operation ที่เปลี่ยน status:</strong> ${summary.opChanges.length} จาก ${summary.jobCount} งานในแผน · ${summary.changedPds} PD (จาก ${summary.pdInPlan} PD ในแผน)</div>
+        <div style="margin:6px 0;padding:6px 8px;background:#f8fafc;border-radius:6px;">${transitionRows}</div>
+        ${(summary.barsHidden || summary.barsRestored) ? `<div style="margin:6px 0;">🫥 Task bar บน board: <strong>ซ่อน ${summary.barsHidden}</strong> step ที่ ERP แจ้งว่าเสร็จแล้ว${summary.barsRestored ? ` · <strong>แสดงกลับ ${summary.barsRestored}</strong> step` : ''}</div>` : ''}
+        ${opRows ? `<div style="overflow:auto;max-height:220px;"><table class="ovs-table"><thead><tr><th>PD</th><th>Op</th><th>WC</th><th>เดิม</th><th>ใหม่</th></tr></thead><tbody>${opRows}</tbody></table></div>${opMore}` : ''}
+        ${matBlock}
+        ${missing}
+        <div style="text-align:right;margin-top:12px;"><button type="button" id="btn-ok-overview-summary" style="padding:6px 16px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:600;cursor:pointer;">ปิด</button></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector('#btn-close-overview-summary').addEventListener('click', close);
+    overlay.querySelector('#btn-ok-overview-summary').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   }
 
   updateAssemblyTreeAfterMaterials() {
@@ -1827,7 +2055,7 @@ export class StorageSyncManager {
 
     document.getElementById('btn-reset-status-overview-file')?.addEventListener('click', () => {
       this.setStatusOverviewFilename(DEFAULT_STATUS_OVERVIEW_FILENAME);
-      this.showToast(`↺ รีเซ็ตชื่อไฟล์เป็น ${DEFAULT_STATUS_OVERVIEW_FILENAME}`, 'info');
+      this.showToast('↺ รีเซ็ตเป็น AUTO (ใช้ไฟล์ใหม่สุดในโฟลเดอร์)', 'info');
       this.fetchPlanMaterials(true);
     });
 
@@ -1848,6 +2076,7 @@ export class StorageSyncManager {
         if (this.state.workflowController && typeof this.state.workflowController.saveExcelToDB === 'function') {
           await this.state.workflowController.saveExcelToDB(file.name, buffer);
         }
+        let parsedChosenFile = false;
         if (typeof XLSX !== 'undefined') {
           try {
             const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
@@ -1859,13 +2088,16 @@ export class StorageSyncManager {
               const matSheet = workbook.Sheets[matSheetName];
               const matRaw = XLSX.utils.sheet_to_json(matSheet, { header: 1, defval: '' });
               this.state.workflowController.parseAndStoreMaterials(matRaw);
+              this.updateAssemblyTreeAfterMaterials();
+              parsedChosenFile = true;
               await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, file.name, this.state.pdOpStatusMap);
             }
           } catch (err) {
             console.warn('Error parsing chosen status overview file:', err);
           }
         }
-        this.fetchPlanMaterials(true);
+        // Do not re-fetch from server/cache after a successful local parse: stale data would overwrite the chosen file
+        if (!parsedChosenFile) this.fetchPlanMaterials(true);
 
         // 2. ถ้าอยู่ในโหมดวางแผน ค่อย Up ข้อมูลเก็บไว้ใน cloud
         if (this.getUserMode() === 'plan') {
@@ -2241,7 +2473,11 @@ export class StorageSyncManager {
     const inputStatusFile = document.getElementById('input-status-overview-filename');
     if (inputStatusFile) inputStatusFile.value = currentStatusFile;
     const badgeStatusFile = document.getElementById('badge-status-overview-file');
-    if (badgeStatusFile) badgeStatusFile.textContent = currentStatusFile;
+    if (badgeStatusFile) {
+      badgeStatusFile.textContent = this.isStatusOverviewAuto() && this.resolvedOverviewName
+        ? `AUTO → ${this.resolvedOverviewName}`
+        : currentStatusFile;
+    }
 
     // DWG Folder UI update
     const inputDwgFolder = document.getElementById('input-dwg-folder-url');

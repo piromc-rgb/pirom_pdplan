@@ -68,6 +68,27 @@ function readJsonFile(folder, filename) {
 }
 
 /**
+ * หาไฟล์ Status Overview (.xlsx/.xls) ที่ใหม่ที่สุดในโฟลเดอร์ (ใช้เมื่อชื่อไฟล์เป็น AUTO หรือว่าง)
+ */
+function isAutoStatusName_(name) {
+  const n = String(name || '').trim().toLowerCase();
+  return n === '' || n === 'auto';
+}
+
+function findLatestStatusOverviewFile_(folder) {
+  const all = folder.getFiles();
+  let best = null;
+  while (all.hasNext()) {
+    const f = all.next();
+    const fname = f.getName();
+    if (fname.indexOf('~$') === 0) continue;
+    if (!/status\s*overview/i.test(fname) || !/\.xlsx?$/i.test(fname)) continue;
+    if (!best || f.getLastUpdated().getTime() > best.getLastUpdated().getTime()) best = f;
+  }
+  return best;
+}
+
+/**
  * จัดการคำขอแบบ GET (ดึงข้อมูล Plan.json, machine_settings.json, completed_pds.json, LN Status Overview)
  */
 function doGet(e) {
@@ -80,7 +101,10 @@ function doGet(e) {
       const allFiles = folder.getFiles();
       let overviewFile = null;
       let fallbackFile = null;
-      while (allFiles.hasNext()) {
+      if (isAutoStatusName_(targetName)) {
+        overviewFile = findLatestStatusOverviewFile_(folder);
+      }
+      while (!overviewFile && allFiles.hasNext()) {
         const f = allFiles.next();
         const fname = f.getName();
         if (targetName && (fname === targetName || fname.toLowerCase() === targetName.toLowerCase())) {
@@ -136,7 +160,9 @@ function doGet(e) {
 
     // 3.5 ตรวจสอบสถานะไฟล์ทั้งหมดและโฟลเดอร์ DWG บน Google Drive Cloud โดยตรง (สำหรับเครื่องที่ไม่มี Drive G:)
     if (e && e.parameter && e.parameter.action === 'check-cloud-status') {
-      const statusFn = (e.parameter.statusFilename || 'LN Status Overview.xlsx').trim();
+      const statusFnRaw = (e.parameter.statusFilename || 'AUTO').trim();
+      const latestOverviewFile = isAutoStatusName_(statusFnRaw) ? findLatestStatusOverviewFile_(folder) : null;
+      const statusFn = latestOverviewFile ? latestOverviewFile.getName() : (isAutoStatusName_(statusFnRaw) ? 'LN Status Overview.xlsx' : statusFnRaw);
       const customDwgFolderId = (e.parameter.dwgFolderId && String(e.parameter.dwgFolderId).trim()) || TARGET_DWG_FOLDER_ID;
       const inspectDriveFile = (fname, fallbackSubstr) => {
         const iter = folder.getFilesByName(fname);
