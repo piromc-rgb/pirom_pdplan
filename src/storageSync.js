@@ -1218,14 +1218,16 @@ export class StorageSyncManager {
   /**
    * บันทึกข้อมูลวัสดุ BOM Plan + Mat ที่ประมวลผลแล้วลง Local Cache
    */
-  async savePlanMaterialsToCache(planMaterials, dwgToPdMap = {}, filename = '', pdOpStatusMap = null) {
+  async savePlanMaterialsToCache(planMaterials, dwgToPdMap = {}, filename = '', pdOpStatusMap = null, materialInventory = null) {
     if (!planMaterials || Object.keys(planMaterials).length === 0) return false;
     const cachedAt = Date.now();
     const resolvedOpStatusMap = pdOpStatusMap || this.state?.pdOpStatusMap || {};
+    const resolvedInventory = materialInventory || this.state?.materialInventory || {};
     this._materialsCache = {
       planMaterials,
       dwgToPdMap: dwgToPdMap || {},
       pdOpStatusMap: resolvedOpStatusMap,
+      materialInventory: resolvedInventory,
       cachedAt,
       filename: filename || this.getStatusOverviewFilename()
     };
@@ -1239,6 +1241,7 @@ export class StorageSyncManager {
           planMaterials,
           dwgToPdMap: dwgToPdMap || {},
           pdOpStatusMap: resolvedOpStatusMap,
+          materialInventory: resolvedInventory,
           cachedAt,
           filename: filename || this.getStatusOverviewFilename()
         }, 'planMaterialsCache');
@@ -1541,7 +1544,7 @@ export class StorageSyncManager {
               const before = this.snapshotOverviewState(cachedBefore);
               this.state.workflowController.parseAndStoreMaterials(matRaw2D);
               this.updateAssemblyTreeAfterMaterials();
-              await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, overview.filename || filename, this.state.pdOpStatusMap);
+              await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, overview.filename || filename, this.state.pdOpStatusMap, this.state.materialInventory);
               this.reportOverviewUpdate(before, overview.filename || filename);
               return this.state.planMaterials;
             }
@@ -1558,6 +1561,7 @@ export class StorageSyncManager {
           this.state.planMaterials = cachedMaterials.planMaterials;
           if (cachedMaterials.dwgToPdMap) this.state.dwgToPdMap = cachedMaterials.dwgToPdMap;
           if (cachedMaterials.pdOpStatusMap) this.state.pdOpStatusMap = cachedMaterials.pdOpStatusMap;
+          if (cachedMaterials.materialInventory) this.state.materialInventory = cachedMaterials.materialInventory;
           this.updateAssemblyTreeAfterMaterials();
           if (cachedMaterials.filename && cachedMaterials.filename.toUpperCase() !== 'AUTO') this.noteResolvedOverview(cachedMaterials.filename);
           console.log(`[PlanMaterials] Loaded ${Object.keys(cachedMaterials.planMaterials).length} PDs from Local Cache`);
@@ -1594,9 +1598,10 @@ export class StorageSyncManager {
               this.state.planMaterials = json.planMaterials;
               if (json.dwgToPdMap) this.state.dwgToPdMap = json.dwgToPdMap;
               if (json.pdOpStatusMap) this.state.pdOpStatusMap = json.pdOpStatusMap;
+              if (json.materialInventory) this.state.materialInventory = json.materialInventory;
               this.updateAssemblyTreeAfterMaterials();
               // บันทึกลง Local Cache (IndexedDB) ทันที — ไม่ส่งไฟล์ 14MB ขึ้น Cloud เพื่อประสิทธิภาพสูงสุด
-              await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, filename, this.state.pdOpStatusMap);
+              await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, filename, this.state.pdOpStatusMap, this.state.materialInventory);
               return this.state.planMaterials;
             }
           }
@@ -1619,9 +1624,10 @@ export class StorageSyncManager {
               this.state.planMaterials = json.data.planMaterials;
               if (json.data.dwgToPdMap) this.state.dwgToPdMap = json.data.dwgToPdMap;
               if (json.data.pdOpStatusMap) this.state.pdOpStatusMap = json.data.pdOpStatusMap;
+              if (json.data.materialInventory) this.state.materialInventory = json.data.materialInventory;
               this.updateAssemblyTreeAfterMaterials();
               // บันทึก Local Cache ทันที
-              await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, filename, this.state.pdOpStatusMap);
+              await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, filename, this.state.pdOpStatusMap, this.state.materialInventory);
               return this.state.planMaterials;
             }
           }

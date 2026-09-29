@@ -4,15 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V1.5 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V1.6 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-DSot3bcg.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-Duh4M5Tf.css">
+    <script type="module" crossorigin src="./assets/index-CeDNuvBH.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-LEdFo3Vj.css">
   </head>
   <body>
     <div id="app-container">
@@ -140,6 +140,10 @@
                     <span>📋 ดูรายการที่ Group ในแผนปัจจุบัน</span>
                   </button>
                 </div>
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);" title="ตรวจ Op01 ของแต่ละ PD ตอนกด AI Auto-Optimize: PD ที่ Mat ยังไม่พร้อมผลิตจะไม่ถูกจัดแผน และจะถูกย้ายกลับไป Backlog ถ้าอยู่บนบอร์ดอยู่แล้ว">
+                  <span>วางแผนเฉพาะงานที่ Mat พร้อมผลิต (Op01)</span>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-mat-ready-only" checked><span class="ios-toggle-slider"></span></span>
+                </label>
                 <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary); border-top: 1px solid var(--border-glass); margin-top: 4px; padding-top: 8px;" title="เปิด/ปิดการ Sync ข้อมูล Cloud อัตโนมัติ: โหลดข้อมูลเมื่อเปิดแอป และบันทึกข้อมูลเมื่อปิดแอป">
                   <div style="display: flex; flex-direction: column; gap: 2px;">
                     <span style="font-weight: 600;">Sync ข้อมูล Cloud</span>
@@ -272,8 +276,8 @@
               <h3 id="backlog-header-title" style="font-size: 12px; font-family: var(--font-display); color: var(--accent-teal); text-transform: uppercase; margin: 0;">PD BACKLOG</h3>
               <button id="btn-collapse-backlog-x" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass);" title="Collapse Sidebar">◀</button>
             </div>
-            <button id="btn-add-pd" class="btn btn-glowing" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; border-radius: 6px; cursor: pointer; box-shadow: var(--shadow-neon);">
-              <span>➕ Add Production Order</span>
+            <button id="btn-add-pd" class="btn btn-glowing" title="สรุปความต้องการวัตถุดิบ (Mat.) ของ PD ทุกตัวที่ยังอยู่ใน Backlog" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; border-radius: 6px; cursor: pointer; box-shadow: var(--shadow-neon);">
+              <span>📋 สรุปความต้องการ Mat.</span>
             </button>
             <button id="btn-import-excel" class="btn" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 4px;">
               <span>📥 Import from Excel</span>
@@ -283,20 +287,20 @@
             </button>
           </div>
           
-          <div class="tab-content" id="backlog-tab-content" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; margin-top: 10px;">
+          <div class="tab-content" id="backlog-tab-content" style="flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; margin-top: 10px;">
             <p class="section-hint" style="font-size: 9.5px; color: var(--text-secondary); margin-bottom: 8px;">Drag cards to the Gantt timeline grid to schedule them:</p>
-            <div class="scrollable-list" id="backlog-list" style="flex: 1; overflow-y: auto;">
+            <div class="scrollable-list" id="backlog-list" style="flex: 1; min-height: 0; overflow-y: auto;">
               <!-- Rendered dynamically -->
             </div>
           </div>
 
-          <div class="tab-content hidden" id="assembly-list-tab-content" style="flex: 1; display: none; flex-direction: column; overflow: hidden; margin-top: 10px;">
+          <div class="tab-content hidden" id="assembly-list-tab-content" style="flex: 1; min-height: 0; display: none; flex-direction: column; overflow: hidden; margin-top: 10px;">
             <label style="display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--text-secondary); cursor: pointer; user-select: none; margin-bottom: 8px;" title="ซ่อน Assembly ที่ไม่มีงานตรงกับตัวกรอง Priority / Project / Customer / Work Center ที่เลือกอยู่ในแท็บ Resources">
               <input type="checkbox" id="chk-assembly-follow-filters" checked style="width: auto; margin: 0; cursor: pointer;">
               แสดงตามตัวกรอง (Priority / Project / Customer / Work Center)
             </label>
             <input type="text" id="assembly-list-search-input" placeholder="ค้นหา PD / ชื่องาน..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); outline: none; margin-bottom: 8px;">
-            <div class="scrollable-list" id="assembly-set-list" style="flex: 1; overflow-y: auto;">
+            <div class="scrollable-list" id="assembly-set-list" style="flex: 1; min-height: 0; overflow-y: auto;">
               <!-- Rendered dynamically: all root Assembly Sets -->
             </div>
           </div>

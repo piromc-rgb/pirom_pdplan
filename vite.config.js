@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const compileVersion = '1.5';
+const compileVersion = '1.6';
 
 function getTempCacheDir() {
   const dir = path.join(os.tmpdir(), 'pirom_pdplan');

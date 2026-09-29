@@ -581,6 +581,7 @@ body.dark-theme .user-mode-item.item-plan.active {
 /* LEFT SIDEBAR: PIPELINE */
 .sidebar-left {
   height: 100%;
+  min-height: 0;
   position: relative;
   overflow: visible !important;
 }

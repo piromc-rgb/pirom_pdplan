@@ -2572,18 +2572,26 @@ class CentralState {
     return { label: 'เบิกบางส่วน', tone: 'info' };
   }
 
-  // Warehouse issue status of the raw materials (10-char codes) used by one step of a PD.
-  // Several materials collapse into the least-ready one; returns null when the step has no raw material data.
-  getStepMaterialIssueSummary(pdId, stepNum) {
+  // Overall Mat readiness rule shared by the PD detail modal, Mat รอเบิก report, and Work Center
+  // schedule/PDF: "ไม่พร้อมผลิต" when Op01 (the material's first operation) is still Planned and the
+  // PD's Order Status is Printed; "พร้อมผลิต" when neither holds. Returns null for the two mixed
+  // cases so callers fall back to their own (warehouse-stock-based) status.
+  getMatReadinessStatus(op1Status, orderStatus) {
+    const isOp1Planned = String(op1Status || '').trim().toLowerCase() === 'planned';
+    const isOrderPrinted = String(orderStatus || '').trim().toLowerCase() === 'printed';
+    if (isOp1Planned && isOrderPrinted) return { label: 'ไม่พร้อมผลิต', tone: 'notready' };
+    if (!isOp1Planned && !isOrderPrinted) return { label: 'พร้อมผลิต', tone: 'ready' };
+    return null;
+  }
+
+  // Per-material status + qty for the raw materials (10-char codes) used by one step of a PD.
+  // Shared by getStepMaterialIssueSummary (worst-of collapse) and getStepMaterialsList (full detail).
+  _getMatEntriesForStep(pdId, stepNum) {
     const rows = (this.planMaterials || {})[pdId];
-    if (!Array.isArray(rows)) return null;
+    if (!Array.isArray(rows)) return [];
     const raw = rows.filter(r => String(r.mat || '').trim().length === 10);
     const matCodes = [...new Set(raw.filter(r => Number(r.stepNum) === Number(stepNum)).map(r => r.mat))];
-    if (matCodes.length === 0) return null;
-
-    const severity = { warn: 3, info: 2, ok: 1, old: 1 };
-    const results = [];
-    for (const mat of matCodes) {
+    return matCodes.map(mat => {
       const matRows = raw.filter(r => r.mat === mat);
       const hasWh = matRows.some(r => r.toIssueWh !== undefined);
       const agg = {
@@ -2591,17 +2599,43 @@ class CentralState {
         toIssue: Math.max(...matRows.map(r => Number(r.toIssue) || 0)),
         toIssueWh: hasWh ? Math.max(...matRows.map(r => Number(r.toIssueWh) || 0)) : undefined
       };
-      if (this.isOldMaterialUsed(matRows.map(r => ({ ...r, actualQty: agg.actualQty, toIssue: agg.toIssue })))) {
-        results.push({ label: 'ใช้วัสดุเก่า', tone: 'old' });
-      } else {
-        const st = this.getMaterialIssueStatus(agg);
-        if (st) results.push(st);
+      const qty = Math.max(...matRows.map(r => Number(r.estimatedQty) || 0));
+      const desc = matRows.find(r => r.matDesc)?.matDesc || '';
+      const sortedForOp1 = matRows.slice().sort((a, b) => (Number(a.stepNum) || 0) - (Number(b.stepNum) || 0));
+      let status = this.getMatReadinessStatus(sortedForOp1[0]?.operStatus, sortedForOp1[0]?.orderStatus);
+      if (!status) {
+        if (this.isOldMaterialUsed(matRows.map(r => ({ ...r, actualQty: agg.actualQty, toIssue: agg.toIssue })))) {
+          status = { label: 'ใช้วัสดุเก่า', tone: 'old' };
+        } else {
+          status = this.getMaterialIssueStatus(agg);
+        }
       }
-    }
+      // Allocation Date comes from "Material to issue.xlsx" (same storage location as the Status
+      // Overview file), matched by PD+step+Mat during sync; only present while still pending issue.
+      const thisStepRow = matRows.find(r => Number(r.stepNum) === Number(stepNum) && r.allocationDate);
+      const allocationDate = thisStepRow ? thisStepRow.allocationDate : null;
+      return { mat, desc, qty, status, allocationDate, warehouseQty: agg.toIssueWh };
+    });
+  }
+
+  // Warehouse issue status of the raw materials (10-char codes) used by one step of a PD.
+  // Several materials collapse into the least-ready one; returns null when the step has no raw material data.
+  getStepMaterialIssueSummary(pdId, stepNum) {
+    const entries = this._getMatEntriesForStep(pdId, stepNum);
+    if (entries.length === 0) return null;
+    const severity = { notready: 4, warn: 3, info: 2, ok: 1, old: 1, ready: 1 };
+    const results = entries.filter(e => e.status).map(e => e.status);
     if (results.length === 0) return null;
     const worst = results.reduce((a, b) => (severity[b.tone] > severity[a.tone] ? b : a));
     const sameCount = results.filter(r => r.label === worst.label).length;
     return { label: worst.label, tone: worst.tone, count: sameCount, total: results.length };
+  }
+
+  // Raw materials (10-char codes) required at one specific step of a PD, deduped by mat code
+  // (largest estimated qty wins), each with its own readiness/issue status. Used to list
+  // Mat./Qty/Status for Op01 rows on the Work Center PDF.
+  getStepMaterialsList(pdId, stepNum) {
+    return this._getMatEntriesForStep(pdId, stepNum);
   }
 
   // A material with nothing issued (Actual Qty 0, still "to issue") whose first operation is no longer Planned (Ready to Start, Active, Completed, ...)

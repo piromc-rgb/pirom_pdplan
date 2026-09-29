@@ -4,6 +4,9 @@ import { getPriorityWeight } from './scheduler.js';
 export class WorkflowController {
   constructor(state) {
     this.state = state;
+    // Which backlog cards have their full Routing Steps list expanded (collapsed by default
+    // so the backlog list stays compact/scannable); survives re-renders, not page reloads.
+    this.expandedBacklogCards = new Set();
     this.initElements();
     this.bindEvents();
   }
@@ -45,9 +48,8 @@ export class WorkflowController {
   }
 
   bindEvents() {
-    if (this.btnAddPD) {
-      this.btnAddPD.addEventListener('click', () => this.openAddPDModal());
-    }
+    // btn-add-pd now opens the Backlog Mat. summary (see BacklogMatSummaryController) instead
+    // of the Add Production Order modal; openAddPDModal() is kept for potential future use.
     if (this.btnClearBacklog) {
       this.btnClearBacklog.addEventListener('click', () => this.clearBacklog());
     }
@@ -336,6 +338,7 @@ export class WorkflowController {
         const scaledDue = this.state.getScaledDueHour(wo);
         const dueTimeStr = scaledDue !== null ? this.formatDateOnly(scaledDue, this.state.activeScale) : 'ระบบวางแผนหาให้';
         const targetColor = scaledDue !== null ? 'var(--accent-red)' : 'var(--text-secondary)';
+        const isStepsExpanded = this.expandedBacklogCards.has(wo.id);
 
         backlogCard.innerHTML = `
           <div class="card-top" style="display: flex; justify-content: space-between; align-items: center;">
@@ -368,16 +371,32 @@ export class WorkflowController {
           <div class="card-details delivery-target-container" style="margin-bottom: 8px; color: ${targetColor}; font-size: 9px; font-weight: 600; cursor: pointer;" title="Double-click to edit target date">
             <span>Delivery Target: <strong class="delivery-target-text">${dueTimeStr}</strong></span>
           </div>
-          <div class="backlog-steps-container" style="margin-bottom: 8px;">
-            <div style="font-size: 8px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Routing Steps:</div>
+          <div class="card-details btn-toggle-steps" data-id="${wo.id}" style="margin-bottom: ${isStepsExpanded ? '6px' : '8px'}; cursor: pointer; color: var(--accent-teal); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; user-select: none;">
+            <span>${isStepsExpanded ? '▲' : '▼'} Routing Steps (${wo.steps.length})</span>
+          </div>
+          <div class="backlog-steps-container" style="margin-bottom: 8px; ${isStepsExpanded ? '' : 'display: none;'}">
             ${stepsHtml}
           </div>
           <div class="card-details" style="margin-top: 8px; width: 100%;">
             <button class="btn-simulate-pd" data-id="${wo.id}" style="width: 100%; padding: 6px; font-size: 10px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 6px; font-weight: bold; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 4px;">
-              <span>⚡ Simulate Placement</span>
+              <span>➕ Add to Plan</span>
             </button>
           </div>
         `;
+
+        // Bind Routing Steps expand/collapse toggle
+        const btnToggleSteps = backlogCard.querySelector('.btn-toggle-steps');
+        if (btnToggleSteps) {
+          btnToggleSteps.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (this.expandedBacklogCards.has(wo.id)) {
+              this.expandedBacklogCards.delete(wo.id);
+            } else {
+              this.expandedBacklogCards.add(wo.id);
+            }
+            this.render();
+          });
+        }
 
         // Bind Edit button click and card ID click
         const btnEdit = backlogCard.querySelector('.btn-edit-pd');

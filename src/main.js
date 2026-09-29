@@ -16,6 +16,7 @@ import { AssemblyTreeController, matchesAssemblyQuery } from './assemblyTree.js'
 import { ContinuityAnalysisController } from './continuityAnalysis.js';
 import { QcCheckController } from './qcCheck.js';
 import { MatIssueReportController } from './matIssueReport.js';
+import { BacklogMatSummaryController } from './backlogMatSummary.js';
 import { StorageSyncManager } from './storageSync.js';
 
 function getBaseDate() {
@@ -120,7 +121,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.5';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.6';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -154,6 +155,7 @@ class App {
     this.continuityAnalysis = new ContinuityAnalysisController(state);
     this.qcCheck = new QcCheckController(state);
     this.matIssueReport = new MatIssueReportController(state);
+    this.backlogMatSummary = new BacklogMatSummaryController(state);
     this.storageSync = new StorageSyncManager(state);
     state.storageSync = this.storageSync;
     window.storageSyncManager = this.storageSync;
@@ -1915,6 +1917,18 @@ class App {
       });
     }
 
+    // When AI Auto-Optimize runs: only schedule PDs whose Op01 Mat is ready, moving any
+    // not-ready PDs already on the board back to the backlog. Mirrors the toggle inside the
+    // AI Auto-Optimize modal itself (both read/write the same state.onlyScheduleMatReadyOp1).
+    const toggleMatReadyOnly = document.getElementById('toggle-mat-ready-only');
+    if (toggleMatReadyOnly) {
+      toggleMatReadyOnly.checked = state.onlyScheduleMatReadyOp1 !== false;
+      toggleMatReadyOnly.addEventListener('change', () => {
+        state.onlyScheduleMatReadyOp1 = toggleMatReadyOnly.checked;
+        state.savePlanToFile();
+      });
+    }
+
     const toggleCloudSync = document.getElementById('toggle-cloud-sync');
     if (toggleCloudSync) {
       const isSyncEnabled = this.storageSync ? this.storageSync.isAutoSyncEnabled() : (localStorage.getItem('PDPLAN_AUTO_SYNC') !== 'false');
@@ -2013,6 +2027,7 @@ class App {
       if (toggleMergeBars) toggleMergeBars.checked = state.mergeBarsEnabled !== false;
       if (toggleMachineOffload) toggleMachineOffload.checked = state.allowMachineOffload !== false;
       if (toggleGroupSameItem) toggleGroupSameItem.checked = state.groupSameItem !== false;
+      if (toggleMatReadyOnly) toggleMatReadyOnly.checked = state.onlyScheduleMatReadyOp1 !== false;
     };
 
     state.subscribe(() => {
@@ -2129,17 +2144,23 @@ class App {
         <div class="modal-body" style="max-height: 420px; overflow-y: auto; padding: 15px 5px 15px 0;">
           
           <!-- Mode Banner -->
-          <div style="background: rgba(0, 242, 254, 0.04); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
-            <div>
-              <div style="font-weight: bold; font-size: 11.5px; color: var(--accent-teal); margin-bottom: 2px;">
-                ⚡ วางแผนผลิตอัตโนมัติ (Multi-PD Simulation Placement)
-              </div>
-              <div style="font-size: 9.5px; color: var(--text-secondary);">
-                จัดสรรงานต่อเนื่องจากวันเวลาปัจจุบัน โดยหาช่วงเวลาว่างที่เร็วที่สุดของแต่ละเครื่องจักร
-              </div>
+          <div style="background: rgba(0, 242, 254, 0.04); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px;">
+            <div style="font-weight: bold; font-size: 11.5px; color: var(--accent-teal); margin-bottom: 2px;">
+              ⚡ วางแผนผลิตอัตโนมัติ (Multi-PD Simulation Placement)
             </div>
-            <div style="font-size: 9.5px; color: var(--accent-green); background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); padding: 3px 8px; border-radius: 4px; font-weight: bold; white-space: nowrap;">
-              ⏱️ ต่อเนื่องจากปัจจุบัน
+            <div style="font-size: 9.5px; color: var(--text-secondary); margin-bottom: 8px;">
+              จัดสรรงานโดยหาช่วงเวลาว่างที่เร็วที่สุดของแต่ละเครื่องจักร นับจากเวลาเริ่มต้นที่กำหนดด้านล่าง
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 10.5px; cursor: pointer;">
+                <input type="radio" name="ai-start-mode" id="ai-start-mode-now" value="now" checked style="accent-color: var(--accent-teal); cursor: pointer;">
+                <span style="color: var(--accent-green); font-weight: bold;">⏱️ ต่อเนื่องจากปัจจุบัน</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 10.5px; cursor: pointer;">
+                <input type="radio" name="ai-start-mode" id="ai-start-mode-custom" value="custom" style="accent-color: var(--accent-teal); cursor: pointer;">
+                <span>📅 ระบุวันที่ / เวลาเริ่มต้น:</span>
+                <input type="datetime-local" id="ai-start-datetime" value="${defaultDateTimeVal}" disabled style="font-size: 10.5px; padding: 3px 6px; border-radius: 4px; border: 1px solid var(--border-glass); background: var(--bg-darkest); color: var(--text-primary);">
+              </label>
             </div>
           </div>
 
@@ -2155,6 +2176,22 @@ class App {
             </div>
             <span class="ios-toggle">
               <input type="checkbox" id="modal-toggle-group-same-item" ${state.groupSameItem !== false ? 'checked' : ''}>
+              <span class="ios-toggle-slider"></span>
+            </span>
+          </div>
+
+          <!-- Strategy Option: Only schedule PDs whose Op01 Mat is ready -->
+          <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-weight: 600; font-size: 11px; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                <span>📦</span> วางแผนเฉพาะงานที่ Mat พร้อมผลิต (Op01)
+              </div>
+              <div style="font-size: 9px; color: var(--text-secondary); margin-top: 1px;">
+                ตรวจ Op01 ของแต่ละ PD: PD ที่ Mat ยังไม่พร้อมผลิต (ไม่พร้อมผลิต) จะไม่ถูกจัดแผน — ถ้าอยู่บนบอร์ดอยู่แล้วจะถูกย้ายกลับไป Backlog
+              </div>
+            </div>
+            <span class="ios-toggle">
+              <input type="checkbox" id="modal-toggle-mat-ready-only" ${state.onlyScheduleMatReadyOp1 !== false ? 'checked' : ''}>
               <span class="ios-toggle-slider"></span>
             </span>
           </div>
@@ -2192,6 +2229,21 @@ class App {
       });
     }
 
+    // Start-time mode: "continue from now" (default) or a custom date/time - clicking into
+    // the date/time field also switches the radio to "custom" for convenience.
+    const radioStartNow = modal.querySelector('#ai-start-mode-now');
+    const radioStartCustom = modal.querySelector('#ai-start-mode-custom');
+    const customStartInput = modal.querySelector('#ai-start-datetime');
+    const syncStartInputEnabled = () => { customStartInput.disabled = !radioStartCustom.checked; };
+    if (radioStartNow) radioStartNow.addEventListener('change', syncStartInputEnabled);
+    if (radioStartCustom) radioStartCustom.addEventListener('change', syncStartInputEnabled);
+    if (customStartInput) {
+      customStartInput.addEventListener('focus', () => {
+        radioStartCustom.checked = true;
+        syncStartInputEnabled();
+      });
+    }
+
     modal.querySelector('#btn-cancel-select').addEventListener('click', () => {
       modal.remove();
     });
@@ -2207,22 +2259,92 @@ class App {
         state.savePlanToFile();
       }
 
+      const modalMatReadyOnly = modal.querySelector('#modal-toggle-mat-ready-only');
+      const onlyMatReadyOp1 = modalMatReadyOnly ? modalMatReadyOnly.checked : false;
+      if (modalMatReadyOnly) {
+        state.onlyScheduleMatReadyOp1 = onlyMatReadyOp1;
+        state.savePlanToFile();
+      }
+
+      let startDate = null;
+      if (radioStartCustom && radioStartCustom.checked && customStartInput && customStartInput.value) {
+        const parsed = new Date(customStartInput.value);
+        if (!isNaN(parsed.getTime())) startDate = parsed;
+      }
+
       modal.remove();
-      this.runAIOptimizationWithSelection(button, selectedIds);
+      this.runAIOptimizationWithSelection(button, selectedIds, startDate, onlyMatReadyOp1);
     });
   }
 
-  runAIOptimizationWithSelection(button, selectedWOIds) {
+  runAIOptimizationWithSelection(button, selectedWOIds, startDate, onlyMatReadyOp1) {
     button.disabled = true;
 
     // 1. Gather context data
     const originallyScheduledWOIds = new Set(state.scheduledJobs.map(j => j.woId).filter(Boolean));
-    
-    const now = new Date();
+
+    const now = startDate instanceof Date && !isNaN(startDate.getTime()) ? startDate : new Date();
     const nowWorkingHour = state.dateToWorkingHour(now);
-    
-    const backlogToOptimize = state.workOrders.filter(wo => selectedWOIds.includes(wo.id));
-    
+
+    let backlogToOptimize = state.workOrders.filter(wo => selectedWOIds.includes(wo.id));
+    let scheduledJobsForOptimizer = state.scheduledJobs;
+    // WOs evicted from the board back to the backlog because their Op01 Mat isn't ready
+    // (only populated when the "วางแผนเฉพาะงานที่ Mat พร้อมผลิต (Op01)" option is on).
+    const evictedWorkOrders = [];
+
+    if (onlyMatReadyOp1) {
+      const isOp1MatNotReady = (woId, steps) => {
+        const stepNum = steps && steps.length > 0 ? Math.min(...steps.map(s => Number(s.stepNum) || 10)) : null;
+        if (stepNum === null) return false;
+        const matList = state.getStepMaterialsList(woId, stepNum);
+        return matList.some(m => m.status && m.status.tone === 'notready');
+      };
+
+      // Backlog WOs whose Op01 Mat isn't ready simply stay out of this run (left in backlog).
+      backlogToOptimize = backlogToOptimize.filter(wo => !isOp1MatNotReady(wo.id, wo.steps));
+
+      // Board WOs (not completed/locked) whose Op01 Mat isn't ready get evicted back to backlog.
+      const isJobFixed = (j) => j.status === 'Completed' || Boolean(state.lockedProjects && state.lockedProjects[j.project || 'General']);
+      const boardWoIds = [...new Set(state.scheduledJobs.map(j => j.woId || j.id))];
+      const woIdsToEvict = new Set();
+      boardWoIds.forEach(woId => {
+        const jobs = state.scheduledJobs.filter(j => (j.woId || j.id) === woId);
+        if (jobs.some(isJobFixed)) return;
+        if (isOp1MatNotReady(woId, jobs)) woIdsToEvict.add(woId);
+      });
+
+      if (woIdsToEvict.size > 0) {
+        scheduledJobsForOptimizer = state.scheduledJobs.filter(j => !woIdsToEvict.has(j.woId || j.id));
+        woIdsToEvict.forEach(woId => {
+          const jobs = state.scheduledJobs.filter(j => (j.woId || j.id) === woId).sort((a, b) => (a.stepNum || 0) - (b.stepNum || 0));
+          const first = jobs[0];
+          evictedWorkOrders.push({
+            id: woId,
+            customer: first.customer || 'General',
+            project: first.project || 'General',
+            dwgNo: first.dwgNo || '',
+            partName: first.partName || '',
+            qty: first.qty || 1,
+            priority: first.priority || 'Normal',
+            status: 'Unscheduled',
+            delayReason: '',
+            dueHour: first.dueHour ?? null,
+            steps: jobs.map(j => ({
+              id: j.id,
+              stepNum: j.stepNum || 10,
+              name: j.stepName || j.name || j.partName || 'Operation',
+              machine: j.originalMachine || j.machine,
+              cycleMinutes: j.cycleMinutes !== undefined ? j.cycleMinutes : 1.0,
+              setupMinutes: j.setupMinutes !== undefined ? j.setupMinutes : 0.0,
+              estHours: j.estHours,
+              status: 'Unscheduled',
+              startHour: null
+            }))
+          });
+        });
+      }
+    }
+
     // Count total operations
     let totalBacklogOps = 0;
     backlogToOptimize.forEach(wo => {
@@ -2232,10 +2354,10 @@ class App {
     const workCenterCount = Object.keys(state.workCenters || {}).length;
 
     // Run AI scheduler engine in background starting strictly from nowWorkingHour
-    console.log('[AI Auto] now:', now, 'nowWorkingHour:', nowWorkingHour, 'groupSameItem:', state.groupSameItem);
+    console.log('[AI Auto] now:', now, 'nowWorkingHour:', nowWorkingHour, 'groupSameItem:', state.groupSameItem, 'evictedForMatNotReady:', evictedWorkOrders.length);
     const optimized = Scheduler.runAISimulation(
       backlogToOptimize,
-      state.scheduledJobs,
+      scheduledJobsForOptimizer,
       state.activeScale,
       nowWorkingHour,
       state.workCenters,
@@ -2498,6 +2620,14 @@ class App {
           if (!selectedWOSet.has(wo.id)) return true;
           return !(scheduledWoIds.has(wo.id) || nestedWoIds.has(wo.id));
         });
+
+        // Put PDs whose Op01 Mat wasn't ready back into the backlog
+        if (evictedWorkOrders.length > 0) {
+          state.workOrders.push(...evictedWorkOrders);
+          if (this.gantt && typeof this.gantt.showToast === 'function') {
+            this.gantt.showToast(`📦 ย้าย ${evictedWorkOrders.length} PD ที่ Mat Op01 ยังไม่พร้อมผลิต กลับไปที่ Backlog`);
+          }
+        }
 
         // If updateTargets is true, update dueHour of late jobs (only those originally on board)
         if (updateTargets && lateJobsOnBoard.length > 0) {
@@ -4307,11 +4437,11 @@ class App {
   if (typeof App !== 'undefined' && App.prototype) {
     if (typeof App.prototype.runAIOptimizationWithSelection === 'function' && !App.prototype.runAIOptimizationWithSelection._iosSpinWrapped) {
       const origRunAI = App.prototype.runAIOptimizationWithSelection;
-      App.prototype.runAIOptimizationWithSelection = function(btn, selectedIds) {
+      App.prototype.runAIOptimizationWithSelection = function(btn, selectedIds, startDate, onlyMatReadyOp1) {
         const tok = showIosSpinner(650);
         yieldForSpinnerPaint(() => {
           try {
-            origRunAI.call(this, btn, selectedIds);
+            origRunAI.call(this, btn, selectedIds, startDate, onlyMatReadyOp1);
           } finally {
             setTimeout(() => hideIosSpinner(tok), 2100);
           }

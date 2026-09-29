@@ -142,7 +142,27 @@ export class DailyScheduleController {
     return `${hh}:${mm} น.`;
   }
 
-  getMaterialReadiness(job, prevStep) {
+  // Prefers the PD detail's actual Mat status (issueSummary, same source as the PD modal, Mat รอเบิก
+  // report, and the "สถานะเบิกวัสดุ" line below) when this step has tracked raw materials; falls back
+  // to the previous-step scheduling heuristic only for steps with no material tracking data at all.
+  getMaterialReadiness(job, prevStep, issueSummary) {
+    if (issueSummary) {
+      const toneStyle = {
+        notready: { color: 'var(--accent-red)', bgColor: 'rgba(255, 51, 51, 0.1)', borderColor: 'var(--accent-red)' },
+        warn: { color: 'var(--accent-orange)', bgColor: 'rgba(255, 165, 0, 0.1)', borderColor: 'var(--accent-orange)' },
+        old: { color: '#7c3aed', bgColor: 'rgba(124, 58, 237, 0.1)', borderColor: '#7c3aed' },
+        info: { color: '#0284c7', bgColor: 'rgba(2, 132, 199, 0.1)', borderColor: '#0284c7' },
+        ok: { color: 'var(--accent-teal)', bgColor: 'rgba(0, 242, 254, 0.1)', borderColor: 'var(--accent-teal)' },
+        ready: { color: 'var(--accent-teal)', bgColor: 'rgba(0, 242, 254, 0.1)', borderColor: 'var(--accent-teal)' }
+      };
+      const colors = toneStyle[issueSummary.tone] || toneStyle.info;
+      return {
+        status: issueSummary.tone,
+        text: issueSummary.label + (issueSummary.count < issueSummary.total ? ` (${issueSummary.count}/${issueSummary.total} รายการ)` : ''),
+        ...colors
+      };
+    }
+
     if (!prevStep) {
       return {
         status: 'Ready',
@@ -288,12 +308,11 @@ export class DailyScheduleController {
         }
       }
       
-      const readiness = this.getMaterialReadiness(job, prevStep);
-
       const issueSummary = this.state.getStepMaterialIssueSummary(job.woId, job.stepNum);
-      const issueTones = { ok: '#15803d', warn: '#b45309', info: '#0369a1', old: '#5b21b6' };
+      const readiness = this.getMaterialReadiness(job, prevStep, issueSummary);
+      const issueTones = { ok: '#15803d', warn: '#b45309', info: '#0369a1', old: '#5b21b6', notready: '#7f1d1d', ready: '#14532d' };
       const issueHtml = issueSummary
-        ? `<span>📦 สถานะเบิกวัสดุ: <strong style="color: ${issueTones[issueSummary.tone]};">${issueSummary.label}${issueSummary.count < issueSummary.total ? ` (${issueSummary.count}/${issueSummary.total} รายการ)` : ''}</strong></span>`
+        ? `<span>📦 สถานะเบิกวัสดุ: <strong class="${issueSummary.tone === 'notready' ? 'mat-status-blink' : ''}" style="color: ${issueTones[issueSummary.tone]};">${issueSummary.label}${issueSummary.count < issueSummary.total ? ` (${issueSummary.count}/${issueSummary.total} รายการ)` : ''}</strong></span>`
         : '';
 
       // If we are in weekly/monthly view, prepend the date to the card time block
@@ -345,15 +364,9 @@ export class DailyScheduleController {
             ${issueHtml}
           </div>
         </div>
-
-        <!-- Mark this PD finished and take it off the board -->
-        <div style="flex: 0 0 90px; display: flex; align-items: center; justify-content: center; border-left: 1px dashed var(--border-glass); padding-left: 10px;">
-          <button class="btn-mark-pd-completed" title="บันทึกว่า ${job.woId} ผลิตจริงเสร็จแล้ว - จะไม่ถูกนำกลับเข้าแผนอีก" style="font-size: 9.5px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--accent-green, #16a34a); background: rgba(22, 163, 74, 0.1); color: var(--accent-green, #16a34a); cursor: pointer; font-weight: 700; white-space: nowrap;">✅ ผลิตเสร็จแล้ว</button>
-        </div>
       `;
 
       card.addEventListener('dblclick', (e) => {
-        if (e.target.closest('.btn-mark-pd-completed')) return;
         const currentMachine = this.selectedMachine;
         const currentDate = new Date(this.selectedDate);
         const currentViewMode = this.viewModeSelect ? this.viewModeSelect.value : 'daily';
@@ -368,21 +381,6 @@ export class DailyScheduleController {
           }
         }));
       });
-
-      const btnMarkCompleted = card.querySelector('.btn-mark-pd-completed');
-      if (btnMarkCompleted) {
-        btnMarkCompleted.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const childPds = typeof this.state.getDescendantPdIds === 'function' ? this.state.getDescendantPdIds(job.woId) : [];
-          const confirmMsg = childPds.length > 0
-            ? `บันทึกว่า ${job.woId} พร้อม PD ลูกทั้งหมดอีก ${childPds.length} รายการ (${childPds.slice(0, 10).join(', ')}${childPds.length > 10 ? '...' : ''}) ผลิตจริงเสร็จแล้วใช่หรือไม่?\n(PD แม่และ PD ลูกทั้งหมดจะถูกนำออกจากแผน และจะไม่ถูกนำกลับเข้ามาอีก)`
-            : `บันทึกว่า ${job.woId} ผลิตจริงเสร็จแล้วใช่หรือไม่?\n(PD นี้จะถูกนำออกจากแผน และจะไม่ถูกนำกลับเข้ามาอีก)`;
-          if (confirm(confirmMsg)) {
-            this.state.markPdCompletedAndRemove(job.woId);
-            this.render();
-          }
-        });
-      }
 
       this.timelineContainer.appendChild(card);
     });
@@ -433,7 +431,12 @@ export class DailyScheduleController {
     
     // Create print content
     let jobsHtml = '';
-    const colSpanVal = viewMode !== 'daily' ? 10 : 9;
+    const colSpanVal = viewMode !== 'daily' ? 9 : 8;
+    // Op01 material sub-row splits the same colspan into 5 aligned cells: starts right at the
+    // ลำดับ/เวลา border, a checkbox under "เวลา", Mat code(s) under "เลขที่ PD",
+    // Qty under "เลขที่ SO", then description + status spanning the rest.
+    const matColA = viewMode !== 'daily' ? 2 : 1; // ลำดับ + [วันที่]
+    const matColD = colSpanVal - matColA - 3; // รหัสแบบ + ชื่อชิ้นงาน + จำนวนชิ้น + Next Op
     
     if (targetJobs.length === 0) {
       jobsHtml = `<tr><td colspan="${colSpanVal}" style="text-align: center; padding: 20px;">ไม่มีแผนงานผลิตในระยะเวลานี้</td></tr>`;
@@ -482,47 +485,63 @@ export class DailyScheduleController {
           }
         }
         
-        const readiness = this.getMaterialReadiness(job, prevStep);
-        
         // Conditional Date cell HTML
         let dateTdHtml = '';
         if (viewMode !== 'daily') {
           const daysShort = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
           const dateLabelStr = `${daysShort[dateStart.getDay()]} ${dateStart.getDate()}/${dateStart.getMonth()+1}`;
-          dateTdHtml = `<td style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;">${dateLabelStr}</td>`;
+          dateTdHtml = `<td style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold; white-space: nowrap;">${dateLabelStr}</td>`;
         }
 
         jobsHtml += `
           <tr>
-            <td style="border: 1px solid #000; padding: 6px; text-align: center;">${index + 1}</td>
+            <td style="border: 1px solid #000; padding: 6px; text-align: center; white-space: nowrap;">${index + 1}</td>
             ${dateTdHtml}
-            <td style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;">${timeStartStr} - ${timeEndStr}</td>
-            <td style="border: 1px solid #000; padding: 6px; font-weight: bold;">${job.woId}</td>
-            <td style="border: 1px solid #000; padding: 6px; font-weight: bold;">${job.project || 'N/A'}</td>
-            <td style="border: 1px solid #000; padding: 6px;">${job.customer || 'N/A'}</td>
+            <td style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold; white-space: nowrap;">${timeStartStr} - ${timeEndStr}</td>
+            <td style="border: 1px solid #000; padding: 6px; font-weight: bold; white-space: nowrap;">${job.woId}</td>
+            <td style="border: 1px solid #000; padding: 6px; font-weight: bold; white-space: nowrap;">${job.project || 'N/A'}</td>
+            <td style="border: 1px solid #000; padding: 6px; text-align: center; font-family: monospace; white-space: nowrap;">${job.dwgNo || 'N/A'}</td>
             <td style="border: 1px solid #000; padding: 6px;">${job.partName}</td>
-            <td style="border: 1px solid #000; padding: 6px; text-align: center; font-family: monospace;">${job.dwgNo || 'N/A'}</td>
-            <td style="border: 1px solid #000; padding: 6px; text-align: center;">${job.qty}</td>
+            <td style="border: 1px solid #000; padding: 6px; text-align: center; white-space: nowrap;">${job.qty}</td>
             <td style="border: 1px solid #000; padding: 6px;">${nextWCStr}</td>
-            <td style="border: 1px solid #000; padding: 6px; font-size: 10px; color: #111;">${readiness.text}</td>
           </tr>
         `;
+
+        // Op01 (first operation of the PD): list the raw materials it needs, since this is where
+        // stock actually gets issued/consumed - not shown for later steps. Cells line up with the
+        // main columns: Mat code starts at the ลำดับ/เวลา border, Qty under "เลขที่ SO".
+        if (!prevStep) {
+          const matList = this.state.getStepMaterialsList(job.woId, job.stepNum);
+          if (matList.length > 0) {
+            const checkboxStr = matList.map(() => '☐').join(' &nbsp;|&nbsp; ');
+            const matCodesStr = matList.map(m => m.mat).join(' | ');
+            const qtyStr = matList.map(m => m.qty).join(' | ');
+            const descStr = matList.map(m => `${m.desc || ''}${m.status ? ' — ' + m.status.label : ''}`.trim()).join(' | ');
+            jobsHtml += `
+              <tr style="background: #f7f7f7; font-size: 10px;">
+                <td colspan="${matColA}" style="border: 1px solid #000; padding: 4px 8px;"></td>
+                <td style="border: 1px solid #000; padding: 4px 8px; text-align: center; font-size: 13px; white-space: nowrap;">${checkboxStr}</td>
+                <td style="border: 1px solid #000; padding: 4px 8px; font-family: monospace; white-space: nowrap;">${matCodesStr}</td>
+                <td style="border: 1px solid #000; padding: 4px 8px; text-align: center; white-space: nowrap;">${qtyStr}</td>
+                <td colspan="${matColD}" style="border: 1px solid #000; padding: 4px 8px;">${descStr}</td>
+              </tr>
+            `;
+          }
+        }
       });
     }
 
     const tableHeadersHtml = `
       <tr>
-        <th style="width: 5%; text-align: center;">ลำดับ</th>
-        ${viewMode !== 'daily' ? '<th style="width: 8%; text-align: center;">วันที่</th>' : ''}
-        <th style="width: 14%; text-align: center;">ช่วงเวลาทำงาน</th>
-        <th style="width: 10%;">เลขที่ PD</th>
-        <th style="width: 10%;">เลขที่ SO</th>
-        <th style="width: 14%;">Customer</th>
-        <th style="width: 18%;">ชื่อชิ้นงาน (Part Name)</th>
-        <th style="width: 9%; text-align: center;">รหัสแบบ (Dwg)</th>
-        <th style="width: 6%; text-align: center;">จำนวน</th>
-        <th style="width: 8%;">ขั้นตอนถัดไป</th>
-        <th style="width: 8%;">วัตถุดิบ</th>
+        <th style="white-space: nowrap; text-align: center;">ลำดับ</th>
+        ${viewMode !== 'daily' ? '<th style="white-space: nowrap; text-align: center;">วันที่</th>' : ''}
+        <th style="white-space: nowrap; text-align: center;">เวลา</th>
+        <th style="white-space: nowrap;">เลขที่ PD</th>
+        <th style="white-space: nowrap;">เลขที่ SO</th>
+        <th style="white-space: nowrap; text-align: center;">รหัสแบบ (Dwg)</th>
+        <th>ชื่อชิ้นงาน</th>
+        <th style="white-space: nowrap; text-align: center;">จำนวนชิ้น</th>
+        <th>Next Op</th>
       </tr>
     `;
 
@@ -543,7 +562,7 @@ export class DailyScheduleController {
             .sig-line { border-bottom: 1px solid #000; width: 80%; margin: 30px auto 5px auto; }
             @media print {
               body { padding: 0; }
-              @page { margin: 1.5cm; }
+              @page { size: landscape; margin: 1.5cm; }
             }
           </style>
         </head>

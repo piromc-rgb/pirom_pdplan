@@ -66,15 +66,10 @@ export class MatIssueReportController {
         if (!status) { skippedNoWarehouse++; continue; }
         if (!WAITING_LABELS.includes(status.label)) continue;
 
-        // Overall Mat readiness: same rule as the PD detail modal (based on Op01 status and PD Order Status)
+        // Overall Mat readiness: same shared rule as the PD detail modal (based on Op01 status and PD Order Status)
         const sortedForOp1 = matRows.slice().sort((a, b) => (Number(a.stepNum) || 0) - (Number(b.stepNum) || 0));
-        const op1Status = String(sortedForOp1[0]?.operStatus || '').trim().toLowerCase();
-        const orderStatusVal = String(sortedForOp1[0]?.orderStatus || '').trim().toLowerCase();
-        const isOp1Planned = op1Status === 'planned';
-        const isOrderPrinted = orderStatusVal === 'printed';
-        let displayStatus = status;
-        if (isOp1Planned && isOrderPrinted) displayStatus = { label: 'ไม่พร้อมผลิต', tone: 'notready' };
-        else if (!isOp1Planned && !isOrderPrinted) displayStatus = { label: 'พร้อมผลิต', tone: 'ready' };
+        const readiness = state.getMatReadinessStatus(sortedForOp1[0]?.operStatus, sortedForOp1[0]?.orderStatus);
+        const displayStatus = readiness || status;
 
         const firstStep = Math.min(...matRows.map(r => Number(r.stepNum) || 0));
         const hour = stepStart.has(`${pdId}|${firstStep}`) ? stepStart.get(`${pdId}|${firstStep}`) : (pdStart.has(pdId) ? pdStart.get(pdId) : Infinity);
@@ -119,6 +114,11 @@ export class MatIssueReportController {
     const chip = (label, value, color) => `<div style="flex:1;min-width:120px;padding:6px 10px;border-radius:6px;background:#f8fafc;border-left:3px solid ${color};"><div style="font-size:10.5px;color:#64748b;">${label}</div><div style="font-size:16px;font-weight:800;color:#0f172a;">${value}</div></div>`;
     const fmtQty = (v) => Number(Number(v || 0).toFixed(2)).toLocaleString('en-US');
     const statusBadge = (st) => `<span class="${st.tone === 'notready' ? 'mat-status-blink' : ''}" style="font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:4px;${TONE_STYLES[st.tone] || TONE_STYLES.info}">${escapeHtml(st.label)}</span>`;
+    const fmtWarehouseQty = (v) => (v === undefined || v === null) ? '<span style="color:#94a3b8;">-</span>' : fmtQty(v);
+    const sufficiencyOf = (p) => {
+      if (p.warehouse === undefined || p.warehouse === null) return null;
+      return Number(p.warehouse) >= Number(p.qty || 0) ? { label: 'พอเบิก', tone: 'ready' } : { label: 'ไม่พอ', tone: 'notready' };
+    };
     // Repeated text (Mat., total, and the status when identical) is merged into one cell spanning the Mat.'s PD rows
     // PD needing a Mat. within the next 7 days (or overdue) that the warehouse cannot issue yet -> red
     const urgentLimit = Date.now() + 7 * 24 * 3600 * 1000;
@@ -135,6 +135,8 @@ export class MatIssueReportController {
         <td title="${escapeHtml(p.partName)} (ดับเบิลคลิกเพื่อดูรายละเอียด PD)"><strong class="mat-report-pd" data-pd="${escapeHtml(p.pdId)}" style="cursor:pointer;user-select:none;color:${isUrgent(p) ? '#dc2626' : '#2563eb'};">${escapeHtml(p.pdId)}</strong></td>
         <td style="text-align:right;">${fmtQty(p.qty)}</td>
         <td>${escapeHtml(this.formatHour(p.hour))}</td>
+        <td style="text-align:right;">${fmtWarehouseQty(p.warehouse)}</td>
+        <td>${sufficiencyOf(p) ? statusBadge(sufficiencyOf(p)) : '<span style="color:#94a3b8;">-</span>'}</td>
       </tr>`;
       }).join('');
     }).join('');
@@ -149,7 +151,8 @@ export class MatIssueReportController {
         <div style="font-size:15px;font-weight:700;">ตรวจสอบ Mat รอเบิก</div>
         <button type="button" id="btn-close-mat-report" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
       </div>
-      <div style="color:#64748b;margin:2px 0 10px;font-size:11.5px;">เรียงตามวันที่แผนผลิตต้องใช้ (เร็วสุดก่อน) · ไม่รวม Mat. ที่ "ใช้วัสดุเก่า" และที่เบิกแล้ว · สร้างเมื่อ ${escapeHtml(report.generatedAt.toLocaleString('th-TH'))}</div>
+      <div style="color:#64748b;margin:2px 0 2px;font-size:11.5px;">เรียงตามวันที่แผนผลิตต้องใช้ (เร็วสุดก่อน) · ไม่รวม Mat. ที่ "ใช้วัสดุเก่า" และที่เบิกแล้ว · สร้างเมื่อ ${escapeHtml(report.generatedAt.toLocaleString('th-TH'))}</div>
+      <div style="color:#94a3b8;margin:0 0 10px;font-size:10.5px;">จำนวนในคลัง/พอเบิก-ไม่พอ: ดึงจากไฟล์ Status Overview (.xlsx) ชีต "Plan + Mat" คอลัมน์ Mat.To Issue by Warehouse</div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <label style="font-weight:600;">แสดง</label>
         <select id="select-mat-report-limit" style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;">${limitOptions}</select>
@@ -166,7 +169,7 @@ export class MatIssueReportController {
       ${warning}
       ${shown.length === 0 ? '<div style="padding:24px;text-align:center;color:#64748b;">ไม่มี Mat. ที่รอเบิก</div>' : `
       <div style="overflow:auto;max-height:52vh;border:1px solid rgba(0,0,0,0.08);border-radius:6px;">
-        <table class="mat-report-table"><thead><tr><th>Mat.</th><th>สถานะ</th><th style="text-align:right;">จำนวนรวมที่ใช้</th><th>PD ที่ใช้</th><th style="text-align:right;">จำนวน</th><th>วันที่ต้องการ</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+        <table class="mat-report-table"><thead><tr><th>Mat.</th><th>สถานะ</th><th style="text-align:right;">จำนวนรวมที่ใช้</th><th>PD ที่ใช้</th><th style="text-align:right;">จำนวน</th><th>วันที่ต้องการ</th><th style="text-align:right;">จำนวนในคลัง</th><th>พอเบิก/ไม่พอ</th></tr></thead><tbody>${rowsHtml}</tbody></table>
       </div>`}
     `);
 
@@ -198,21 +201,24 @@ export class MatIssueReportController {
     overlay.innerHTML = `
       <style>
         #mat-issue-report-modal .mat-report-table{width:100%;border-collapse:collapse;font-size:12px;}
-        #mat-issue-report-modal .mat-report-table th{position:sticky;top:0;background:#f1f5f9;text-align:left;padding:6px 8px;border-bottom:1px solid rgba(0,0,0,0.12);}
+        #mat-issue-report-modal .mat-report-table thead{position:relative;z-index:2;isolation:isolate;}
+        #mat-issue-report-modal .mat-report-table th{position:sticky;top:0;z-index:2;background:#f1f5f9;text-align:left;padding:6px 8px;border-bottom:1px solid rgba(0,0,0,0.12);}
         #mat-issue-report-modal .mat-report-table td{vertical-align:middle;padding:5px 8px;border-bottom:1px solid rgba(0,0,0,0.06);white-space:nowrap;}
         #mat-issue-report-modal .mat-report-table th{white-space:nowrap;}
         #mat-issue-report-modal .mat-report-table td[rowspan]{vertical-align:top;}
         #mat-issue-report-modal .mat-report-table td.mat-cell{max-width:330px;overflow:hidden;text-overflow:ellipsis;}
         #mat-issue-report-modal .mat-report-table tr.mat-first-row td{border-top:2px solid rgba(0,0,0,0.14);}
       </style>
-      <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:1000px;width:100%;max-height:90vh;overflow:auto;padding:16px 18px;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">${innerHtml}</div>`;
+      <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:1300px;width:100%;max-height:90vh;overflow:auto;padding:16px 18px;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">${innerHtml}</div>`;
   }
 
   buildCsvLines(mats) {
     const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const lines = [['Mat.', 'รายละเอียด', 'สถานะ', 'จำนวนรวมที่ใช้', 'PD ที่ใช้', 'ชื่องาน', 'จำนวน', 'วันที่ต้องการ', 'Op แรกที่ใช้', 'ค้างเบิก', 'คลังพร้อมจ่าย'].map(q).join(',')];
+    const lines = [['Mat.', 'รายละเอียด', 'สถานะ', 'จำนวนรวมที่ใช้', 'PD ที่ใช้', 'ชื่องาน', 'จำนวน', 'วันที่ต้องการ', 'Op แรกที่ใช้', 'ค้างเบิก', 'จำนวนในคลัง', 'พอเบิก/ไม่พอ'].map(q).join(',')];
     mats.forEach(m => m.pds.forEach(p => {
-      lines.push([m.mat, m.desc, p.status.label, m.totalQty, p.pdId, p.partName, p.qty, this.formatHour(p.hour), p.firstStep, p.toIssue, p.warehouse ?? ''].map(q).join(','));
+      const hasWh = p.warehouse !== undefined && p.warehouse !== null;
+      const sufficiency = hasWh ? (Number(p.warehouse) >= Number(p.qty || 0) ? 'พอเบิก' : 'ไม่พอ') : '';
+      lines.push([m.mat, m.desc, p.status.label, m.totalQty, p.pdId, p.partName, p.qty, this.formatHour(p.hour), p.firstStep, p.toIssue, hasWh ? p.warehouse : '', sufficiency].map(q).join(','));
     }));
     return lines;
   }

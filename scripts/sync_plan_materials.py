@@ -44,6 +44,75 @@ def get_temp_cache_path():
     return os.path.join(temp_dir, "plan_materials_cache.json")
 
 
+def parse_material_to_issue(gdrive_dir, base_dir):
+    """Reads Allocation Date per (PD, Position/stepNum, Item/mat), and Inventory on Hand per
+    Item/mat, from "Material to issue.xlsx" (same storage location as the Status Overview file).
+    Returns (allocation_map, inventory_map):
+      allocation_map: "{pd_id}|{step_num}|{mat}" -> ISO allocation date string
+      inventory_map: mat -> Inventory on Hand quantity (float)
+    Both are {} if the file/library is missing.
+    """
+    filename = "Material to issue.xlsx"
+    gdrive_path = os.path.join(gdrive_dir, filename) if gdrive_dir else None
+    local_path = os.path.join(base_dir, filename)
+
+    if gdrive_path and os.path.exists(gdrive_path):
+        try:
+            if not os.path.exists(local_path) or os.path.getmtime(gdrive_path) > os.path.getmtime(local_path):
+                shutil.copy2(gdrive_path, local_path)
+                print(f"Updated {local_path} from Google Drive")
+        except Exception as e:
+            print(f"Warning: could not sync {filename} from Google Drive: {e}")
+
+    source_path = local_path if os.path.exists(local_path) else gdrive_path
+    if not source_path or not os.path.exists(source_path):
+        print(f"Warning: {filename} not found (checked {local_path} and Google Drive), skipping Allocation Date/Inventory merge")
+        return {}, {}
+
+    try:
+        import openpyxl
+    except ImportError:
+        print("Warning: openpyxl not available, skipping Allocation Date/Inventory merge")
+        return {}, {}
+
+    print(f"Reading Allocation Date and Inventory on Hand from {source_path}...")
+    try:
+        wb = openpyxl.load_workbook(source_path, data_only=True, read_only=True)
+    except Exception as e:
+        print(f"Warning: could not open {filename}: {e}")
+        return {}, {}
+
+    ws = wb["data"] if "data" in wb.sheetnames else wb[wb.sheetnames[0]]
+    allocation_map = {}
+    inventory_map = {}
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        pd_id = row[4] if len(row) > 4 else None
+        if not pd_id or not str(pd_id).strip().startswith("PD"):
+            continue
+        try:
+            step_num = int(float(row[5]))
+        except (TypeError, ValueError):
+            step_num = 10
+        mat = str(row[7] or "").strip() if len(row) > 7 else ""
+        if not mat:
+            continue
+        alloc_date = row[10] if len(row) > 10 else None
+        if alloc_date is not None:
+            alloc_str = alloc_date.isoformat() if hasattr(alloc_date, "isoformat") else str(alloc_date)
+            allocation_map[f"{pd_id}|{step_num}|{mat}"] = alloc_str
+        # Column S (index 18) = Inventory on Hand — a company-wide stock level for the material,
+        # not per-PD, so it's keyed by mat alone (last value wins across duplicate rows).
+        inv_raw = row[18] if len(row) > 18 else None
+        if inv_raw is not None:
+            try:
+                inventory_map[mat] = float(inv_raw)
+            except (TypeError, ValueError):
+                pass
+    wb.close()
+    print(f"Loaded {len(allocation_map)} Allocation Date entries and {len(inventory_map)} Inventory on Hand entries from {filename}")
+    return allocation_map, inventory_map
+
+
 def sync_plan_materials(target_filename="LN Status Overview.xlsx"):
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     gdrive_dir = find_gdrive_dir()
@@ -182,6 +251,20 @@ def sync_plan_materials(target_filename="LN Status Overview.xlsx"):
                     "orderStatus": order_status
                 })
 
+        # Merge Allocation Date from "Material to issue.xlsx" (same storage location) into
+        # each (PD, stepNum, Mat) entry above; Inventory on Hand is kept separately (per-mat, not per-PD).
+        allocation_map, inventory_map = parse_material_to_issue(gdrive_dir, base_dir)
+        if allocation_map:
+            matched = 0
+            for pd_id, mat_list in plan_materials.items():
+                for m in mat_list:
+                    key = f"{pd_id}|{m['stepNum']}|{m['mat']}"
+                    alloc = allocation_map.get(key)
+                    if alloc:
+                        m["allocationDate"] = alloc
+                        matched += 1
+            print(f"Matched Allocation Date for {matched} of {sum(len(v) for v in plan_materials.values())} Plan+Mat rows")
+
         # Sheet 5 (Data)
         sheet5_data = parse_sheet("xl/worksheets/sheet5.xml")
         dwg_to_pd_map = {}
@@ -268,7 +351,8 @@ def sync_plan_materials(target_filename="LN Status Overview.xlsx"):
         output_obj = {
             "planMaterials": plan_materials,
             "dwgToPdMap": dwg_to_pd_map,
-            "pdOpStatusMap": pd_op_status_map
+            "pdOpStatusMap": pd_op_status_map,
+            "materialInventory": inventory_map
         }
         # 1. Write to OS Temp Local Disk (fastest local I/O, no cloud sync overhead)
         try:
