@@ -119,7 +119,7 @@ export class MatIssueReportController {
         ${first ? `<td class="mat-cell" rowspan="${n}" title="${escapeHtml(m.mat)} ${escapeHtml(m.desc)}"><strong>${escapeHtml(m.mat)}</strong> <span style="color:#475569;">${escapeHtml(m.desc)}</span></td>` : ''}
         ${sameStatus ? (first ? `<td rowspan="${n}">${statusBadge(p.status)}</td>` : '') : `<td>${statusBadge(p.status)}</td>`}
         ${first ? `<td rowspan="${n}" style="text-align:right;">${fmtQty(m.totalQty)}</td>` : ''}
-        <td title="${escapeHtml(p.partName)}"><strong style="color:${isUrgent(p) ? '#dc2626' : '#2563eb'};">${escapeHtml(p.pdId)}</strong></td>
+        <td title="${escapeHtml(p.partName)} (ดับเบิลคลิกเพื่อดูรายละเอียด PD)"><strong class="mat-report-pd" data-pd="${escapeHtml(p.pdId)}" style="cursor:pointer;user-select:none;color:${isUrgent(p) ? '#dc2626' : '#2563eb'};">${escapeHtml(p.pdId)}</strong></td>
         <td style="text-align:right;">${fmtQty(p.qty)}</td>
         <td>${escapeHtml(this.formatHour(p.hour))}</td>
       </tr>`;
@@ -163,6 +163,12 @@ export class MatIssueReportController {
       this.render();
     });
     overlay.querySelector('#btn-export-mat-report')?.addEventListener('click', () => this.exportCsv(shown));
+    // Double-click a PD number to open its PD detail modal on top of this report
+    overlay.querySelectorAll('.mat-report-pd').forEach(el => el.addEventListener('dblclick', () => {
+      const pdModal = document.getElementById('pd-plan-modal');
+      if (pdModal) pdModal.style.zIndex = '100001';
+      window.dispatchEvent(new CustomEvent('open-pd-modal', { detail: { woId: el.dataset.pd } }));
+    }));
   }
 
   showModal(innerHtml) {
