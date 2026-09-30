@@ -10,6 +10,30 @@ const TONE_STYLES = {
   ready: 'border:1.5px solid #15803d;color:#14532d;background:rgba(21,128,61,0.12);'
 };
 
+// Google Sheet holding the planned production date ("วันที่ ที่จะผลิต") of each PD
+const PROD_DATE_SHEET = 'https://docs.google.com/spreadsheets/d/1MwvA8HPTStZiESym9cPWxPuRb6q72wZk3hxKkJJXwgg';
+const PROD_DATE_GID = '2120309268';
+
+const parseCsv = (text) => {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (c === '"') inQuotes = false;
+      else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else if (c !== '\r') field += c;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+};
+
 const escapeHtml = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 export class BacklogMatSummaryController {
@@ -24,8 +48,37 @@ export class BacklogMatSummaryController {
     if (this.btn) this.btn.addEventListener('click', () => this.open());
   }
 
+  // PD No. -> planned production date text (dd/mm/yyyy), read from the public Google Sheet
+  async fetchProdDates() {
+    const urls = [
+      `${PROD_DATE_SHEET}/gviz/tq?tqx=out:csv&gid=${PROD_DATE_GID}`,
+      `${PROD_DATE_SHEET}/export?format=csv&gid=${PROD_DATE_GID}`
+    ];
+    for (const url of urls) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const rows = parseCsv(await res.text());
+        const norm = (v) => String(v || '').replace(/\s+/g, '');
+        const header = (rows[0] || []).map(norm);
+        const pdCol = header.indexOf('ProductionOrder');
+        const dateCol = header.indexOf(norm('วันที่ ที่จะผลิต'));
+        if (pdCol < 0 || dateCol < 0) continue;
+        const map = {};
+        rows.slice(1).forEach(r => {
+          const pd = String(r[pdCol] || '').trim();
+          const d = String(r[dateCol] || '').trim();
+          if (pd && d) map[pd] = d;
+        });
+        return map;
+      } catch (e) { /* try next source */ }
+    }
+    return null;
+  }
+
   async open() {
     this.showModal('<div style="padding:30px;text-align:center;color:#64748b;">กำลังโหลดข้อมูล Mat....</div>');
+    this.prodDates = (await this.fetchProdDates()) || this.prodDates || {};
     const noMats = !this.state.planMaterials || Object.keys(this.state.planMaterials).length === 0;
     if (noMats && this.state.storageSync?.fetchPlanMaterials) {
       try { await this.state.storageSync.fetchPlanMaterials(); } catch (e) { /* report below explains empty data */ }
@@ -51,7 +104,7 @@ export class BacklogMatSummaryController {
           desc: m.desc || '',
           qty: m.qty,
           status: m.status || null,
-          allocationDate: m.allocationDate || null,
+          prodDate: (this.prodDates || {})[wo.id] || null,
           warehouseQty: m.warehouseQty
         });
       });
@@ -109,11 +162,12 @@ export class BacklogMatSummaryController {
     const statusBadge = (st) => st
       ? `<span class="${st.tone === 'notready' ? 'mat-status-blink' : ''}" style="font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:4px;${TONE_STYLES[st.tone] || TONE_STYLES.info}">${escapeHtml(st.label)}</span>`
       : '<span style="color:#94a3b8;">-</span>';
-    const fmtAllocationDate = (v) => {
+    const fmtProdDate = (v) => {
       if (!v) return '<span style="color:#94a3b8;">-</span>';
-      const d = new Date(v);
-      if (isNaN(d.getTime())) return escapeHtml(v);
-      return escapeHtml(d.toLocaleString('th-TH', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }));
+      const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v);
+      if (!m) return escapeHtml(v);
+      const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+      return escapeHtml(d.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' }));
     };
     const sufficiencyOf = (r) => {
       if (r.warehouseQty === undefined || r.warehouseQty === null) return null;
@@ -147,7 +201,7 @@ export class BacklogMatSummaryController {
         <td class="truncate" title="${escapeHtml(r.desc)}">${escapeHtml(r.desc)}</td>
         <td style="text-align:right;">${fmtQty(r.qty)}</td>
         <td>${statusBadge(r.status)}</td>
-        <td>${fmtAllocationDate(r.allocationDate)}</td>
+        <td>${fmtProdDate(r.prodDate)}</td>
         <td style="text-align:right;">${fmtNum(r.warehouseQty)}</td>
         <td>${statusBadge(sufficiencyOf(r))}</td>
       </tr>
@@ -168,7 +222,7 @@ export class BacklogMatSummaryController {
 
     const tableHtml = isMatView
       ? `<table class="backlog-mat-table"><thead><tr><th>Mat.</th><th>รายละเอียด</th><th style="text-align:right;">QTY รวม</th><th style="text-align:right;">Inventory on Hand</th><th>พอเบิก/ไม่พอ</th><th style="text-align:right;">จำนวน PD</th><th>PD ที่ต้องการ</th></tr></thead><tbody>${rowsHtml}</tbody></table>`
-      : `<table class="backlog-mat-table"><thead><tr><th>PD No.</th><th>Dwg No.</th><th>Part Name</th><th>Mat.</th><th>Mat._1</th><th style="text-align:right;">QTY</th><th>Mat. status</th><th>Allocation Date</th><th style="text-align:right;">จำนวนในคลัง</th><th>พอเบิก/ไม่พอ</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+      : `<table class="backlog-mat-table"><thead><tr><th>PD No.</th><th>Dwg No.</th><th>Part Name</th><th>Mat.</th><th>Mat._1</th><th style="text-align:right;">QTY</th><th>Mat. status</th><th>วันที่จะผลิต</th><th style="text-align:right;">จำนวนในคลัง</th><th>พอเบิก/ไม่พอ</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
 
     this.showModal(`
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
@@ -176,7 +230,7 @@ export class BacklogMatSummaryController {
         <button type="button" id="btn-close-backlog-mat-summary" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
       </div>
       <div style="color:#64748b;margin:2px 0 2px;font-size:11.5px;">วัตถุดิบ Op01 ของ PD ทุกตัวที่ยังอยู่ใน Backlog (ยังไม่ถูกจัดลงแผน) · สร้างเมื่อ ${escapeHtml(report.generatedAt.toLocaleString('th-TH'))}</div>
-      <div style="color:#94a3b8;margin:0 0 10px;font-size:10.5px;">จำนวนในคลัง/พอเบิก-ไม่พอ: ดึงจากไฟล์ Status Overview (.xlsx) ชีต "Plan + Mat" คอลัมน์ Mat.To Issue by Warehouse · Allocation Date: ดึงจากไฟล์ Material to issue.xlsx (ที่เก็บเดียวกับ Status Overview) · Inventory on Hand: ดึงจากไฟล์ Material to issue.xlsx เช่นกัน (สต๊อกรวมของบริษัท ไม่ผูกกับ PD ใดโดยเฉพาะ)</div>
+      <div style="color:#94a3b8;margin:0 0 10px;font-size:10.5px;">จำนวนในคลัง/พอเบิก-ไม่พอ: ดึงจากไฟล์ Status Overview (.xlsx) ชีต "Plan + Mat" คอลัมน์ Mat.To Issue by Warehouse · วันที่จะผลิต: ดึงจาก Google Sheet แผนผลิต (คอลัมน์ "วันที่ ที่จะผลิต") · Inventory on Hand: ดึงจากไฟล์ Material to issue.xlsx เช่นกัน (สต๊อกรวมของบริษัท ไม่ผูกกับ PD ใดโดยเฉพาะ)</div>
       <div style="display:flex;gap:6px;margin:6px 0;">
         ${viewToggleBtn('pd', 'จัดกลุ่มตาม PD No')}
         ${viewToggleBtn('mat', 'จัดกลุ่มตาม Mat.')}
@@ -237,11 +291,11 @@ export class BacklogMatSummaryController {
 
   buildCsvLines(rows) {
     const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const lines = [['PD No.', 'Dwg No.', 'Part Name', 'Mat.', 'Mat._1', 'QTY', 'Mat. status', 'Allocation Date', 'จำนวนในคลัง', 'พอเบิก/ไม่พอ'].map(q).join(',')];
+    const lines = [['PD No.', 'Dwg No.', 'Part Name', 'Mat.', 'Mat._1', 'QTY', 'Mat. status', 'วันที่จะผลิต', 'จำนวนในคลัง', 'พอเบิก/ไม่พอ'].map(q).join(',')];
     rows.forEach(r => {
       const hasWh = r.warehouseQty !== undefined && r.warehouseQty !== null;
       const sufficiency = hasWh ? (Number(r.warehouseQty) >= Number(r.qty || 0) ? 'พอเบิก' : 'ไม่พอ') : '';
-      lines.push([r.pdNo, r.dwgNo, r.partName, r.mat, r.desc, r.qty, r.status ? r.status.label : '', r.allocationDate || '', hasWh ? r.warehouseQty : '', sufficiency].map(q).join(','));
+      lines.push([r.pdNo, r.dwgNo, r.partName, r.mat, r.desc, r.qty, r.status ? r.status.label : '', r.prodDate || '', hasWh ? r.warehouseQty : '', sufficiency].map(q).join(','));
     });
     return lines;
   }
