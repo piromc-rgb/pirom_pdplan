@@ -241,7 +241,7 @@
               `}else a=`<span style="font-size: 10.5px; color: #475569; font-style: italic; font-weight: 600;">วัตถุดิบ</span>`,o=`<span style="color: #475569;">-</span>`,s=`<span style="color: #475569;">-</span>`;t.innerHTML=`
               <td style="padding: 4px 8px; font-family: monospace; font-weight: 800; color: #0284c7; white-space: nowrap; font-size: 11px; width: 130px;">
                 <div style="display: inline-flex; align-items: center;">
-                  <span>${n}</span>
+                  <span style="user-select: text; -webkit-user-select: text; cursor: text;">${n}</span>
                   ${i?`<span style="font-size: 9px; font-weight: 800; color: #047857; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 3px; padding: 1px 4px; white-space: nowrap; margin-left: 4px;">10 หลัก</span>`:``}
                 </div>
               </td>

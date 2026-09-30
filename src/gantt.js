@@ -4111,7 +4111,7 @@ export class GanttController {
             tr.innerHTML = `
               <td style="padding: 4px 8px; font-family: monospace; font-weight: 800; color: #0284c7; white-space: nowrap; font-size: 11px; width: 130px;">
                 <div style="display: inline-flex; align-items: center;">
-                  <span>${matCode}</span>
+                  <span style="user-select: text; -webkit-user-select: text; cursor: text;">${matCode}</span>
                   ${matCodeBadge}
                 </div>
               </td>
