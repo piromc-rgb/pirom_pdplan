@@ -2248,7 +2248,7 @@ class App {
       modal.remove();
     });
 
-    modal.querySelector('#btn-submit-select').addEventListener('click', () => {
+    modal.querySelector('#btn-submit-select').addEventListener('click', async () => {
       const selectedIds = Array.from(checkboxes)
         .filter(cb => cb.checked)
         .map(cb => cb.value);
@@ -2273,6 +2273,22 @@ class App {
       }
 
       modal.remove();
+
+      // Re-sync the latest Status Overview first so the "Mat ready" check uses fresh material
+      // status; backlog PDs are only pulled onto the board when their Op01 Mat is ready.
+      if (onlyMatReadyOp1 && state.storageSync && typeof state.storageSync.fetchPlanMaterials === 'function') {
+        button.disabled = true;
+        if (state.ganttController) state.ganttController.showToast('🔄 กำลัง Sync Status Overview ล่าสุดเพื่อตรวจสถานะ Mat....');
+        try {
+          await state.storageSync.fetchPlanMaterials(true);
+        } catch (e) {
+          console.warn('Status Overview sync before AI optimize failed:', e);
+          if (state.ganttController) state.ganttController.showToast('⚠️ Sync Status Overview ไม่สำเร็จ — ใช้ข้อมูล Mat. ที่โหลดไว้ล่าสุดแทน');
+        } finally {
+          button.disabled = false;
+        }
+      }
+
       this.runAIOptimizationWithSelection(button, selectedIds, startDate, onlyMatReadyOp1);
     });
   }
