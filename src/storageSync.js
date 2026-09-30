@@ -46,6 +46,7 @@ export class StorageSyncManager {
     this._materialsCache = null;
     
     this.initUI();
+    this.startMaterialToIssueWatcher();
   }
 
   initUI() {
@@ -1504,6 +1505,80 @@ export class StorageSyncManager {
    * หรืออ่านตรงจาก Sheet "Plan + Mat" ในไฟล์ Status Overview
    * มีระบบ Local Cache เพื่อความรวดเร็ว และหากอยู่ในโหมดวางแผนจะ Up ข้อมูลขึ้น Cloud
    */
+  // Local-dev only: polls the server for the mtime of "Material to issue.xlsx"; when a newer file
+  // shows up, Allocation Date / Inventory on Hand are re-read from it automatically.
+  startMaterialToIssueWatcher(intervalMs = 60000) {
+    if (typeof window === 'undefined' || this._mtiWatcher) return;
+    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.startsWith('192.168.') || window.location.port === '5173';
+    if (!isLocalDev) return;
+    const KEY = 'chaken_mat_to_issue_mtime';
+    const check = async () => {
+      if (this._mtiChecking) return;
+      this._mtiChecking = true;
+      try {
+        const res = await fetch('/pirom_pdplan/api/check-storage-status?statusFilename=AUTO');
+        if (!res.ok) return;
+        const info = (await res.json())?.files?.materialToIssue;
+        if (!info || !info.exists || !info.updatedAt) return;
+        const seen = localStorage.getItem(KEY);
+        if (seen === info.updatedAt) return;
+        if (!this.state.planMaterials || Object.keys(this.state.planMaterials).length === 0) return; // loaded later with fresh data anyway
+        const count = await this.syncAllocationDates(false);
+        if (count !== null) {
+          localStorage.setItem(KEY, info.updatedAt);
+          if (seen) this.showToast('🔄 พบไฟล์ Material to issue.xlsx ใหม่ อัปเดต Allocation Date เรียบร้อย', 'success');
+          window.dispatchEvent(new CustomEvent('plan-materials-updated'));
+        }
+      } catch (e) { /* server unreachable, retry next tick */ }
+      finally { this._mtiChecking = false; }
+    };
+    setTimeout(check, 8000);
+    this._mtiWatcher = setInterval(check, intervalMs);
+  }
+
+  // Re-reads Allocation Date (+ Inventory on Hand) from "Material to issue.xlsx" via the server-side
+  // sync script and merges only those fields into the already-loaded Plan + Mat data.
+  // Returns the number of Plan+Mat rows that now carry an Allocation Date (or null if unavailable).
+  async syncAllocationDates(force = true) {
+    const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) || '/pirom_pdplan/';
+    const cleanBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    const filename = this.getStatusOverviewFilename();
+    const urls = [
+      `${cleanBase}/api/plan-materials?filename=${encodeURIComponent(filename)}${force ? '&force=1' : ''}`,
+      `${cleanBase}/plan_materials_cache.json`
+    ];
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, { cache: 'reload' });
+        if (!res.ok) continue;
+        const json = await res.json();
+        const fresh = json && (json.planMaterials || (json.data && json.data.planMaterials));
+        if (!fresh) continue;
+        const freshInv = json.materialInventory || (json.data && json.data.materialInventory);
+        if (!this.state.planMaterials || Object.keys(this.state.planMaterials).length === 0) {
+          this.state.planMaterials = fresh;
+        } else {
+          Object.entries(this.state.planMaterials).forEach(([pdId, rows]) => {
+            if (!Array.isArray(rows)) return;
+            const freshRows = Array.isArray(fresh[pdId]) ? fresh[pdId] : [];
+            rows.forEach(r => {
+              const f = freshRows.find(x => Number(x.stepNum) === Number(r.stepNum) && x.mat === r.mat);
+              if (f && f.allocationDate) r.allocationDate = f.allocationDate;
+              else delete r.allocationDate;
+            });
+          });
+        }
+        if (freshInv) this.state.materialInventory = freshInv;
+        await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, filename, this.state.pdOpStatusMap, this.state.materialInventory);
+        return Object.values(this.state.planMaterials).flat().filter(r => r && r.allocationDate).length;
+      } catch (e) {
+        // try next source
+      }
+    }
+    return null;
+  }
+
   async fetchPlanMaterials(force = false) {
     if (
       !force &&

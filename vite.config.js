@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const compileVersion = '1.6';
+const compileVersion = '1.7';
 
 function getTempCacheDir() {
   const dir = path.join(os.tmpdir(), 'pirom_pdplan');
@@ -517,6 +517,13 @@ export default defineConfig({
                   fs.copyFileSync(checkPath, localXlsx);
                   needRefresh = true;
                 }
+                // "Material to issue.xlsx" (Allocation Date / Inventory) newer than the built cache -> rebuild it
+                try {
+                  const mtiTimes = ['Material to issue.xlsx'].flatMap(n => [path.join(gdriveDir, n), path.resolve(__dirname, n)])
+                    .filter(f => fs.existsSync(f)).map(f => fs.statSync(f).mtimeMs);
+                  const cacheTimes = [tempMatCachePath, localMatCachePath].filter(f => fs.existsSync(f)).map(f => fs.statSync(f).mtimeMs);
+                  if (mtiTimes.length && cacheTimes.length && Math.max(...mtiTimes) > Math.max(...cacheTimes)) needRefresh = true;
+                } catch {}
                 if (force || needRefresh || (!fs.existsSync(tempMatCachePath) && !fs.existsSync(localMatCachePath))) {
                   const { execSync } = await import('child_process');
                   const scriptPath = path.resolve(__dirname, 'scripts', 'sync_plan_materials.py');
@@ -942,6 +949,12 @@ export default defineConfig({
               path.resolve(__dirname, 'LN Status Overview.xlsx')
             ]);
             const matCacheInfo = inspectFile([tempMatCachePath, localMatCachePath]);
+            const matToIssueInfo = (() => {
+              const a = inspectFile([path.join(gdriveDir, 'Material to issue.xlsx')]);
+              const b = inspectFile([path.resolve(__dirname, 'Material to issue.xlsx')]);
+              if (a.exists && b.exists) return new Date(a.updatedAt) >= new Date(b.updatedAt) ? a : b;
+              return a.exists ? a : b;
+            })();
 
             // Count PDF files in DWG directories
             const dwgDirsToCheck = [];
@@ -1080,7 +1093,8 @@ export default defineConfig({
                 machineSettings: machineInfo,
                 completedPds: completedInfo,
                 statusOverview: overviewInfo,
-                planMaterialsCache: matCacheInfo
+                planMaterialsCache: matCacheInfo,
+                materialToIssue: matToIssueInfo
               }
             }));
             return;

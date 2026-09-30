@@ -12,16 +12,48 @@ const TONE_STYLES = {
 
 const escapeHtml = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// Column definitions (header label + sort value getter) for the two views.
+const PD_VIEW_COLS = [
+  { key: 'pdNo', label: 'PD No.', get: r => r.pdNo },
+  { key: 'dwgNo', label: 'Dwg No.', get: r => r.dwgNo },
+  { key: 'partName', label: 'Part Name', get: r => r.partName },
+  { key: 'mat', label: 'Mat.', get: r => r.mat },
+  { key: 'desc', label: 'Mat._1', get: r => r.desc },
+  { key: 'qty', label: 'QTY', right: true, get: r => Number(r.qty) || 0 },
+  { key: 'status', label: 'Mat. status', get: r => r.status ? r.status.label : null },
+  { key: 'alloc', label: 'Allocation Date', get: r => { const t = r.allocationDate ? new Date(r.allocationDate).getTime() : NaN; return isNaN(t) ? null : t; } },
+  { key: 'wh', label: 'จำนวนในคลัง', right: true, get: r => (r.warehouseQty === undefined || r.warehouseQty === null) ? null : Number(r.warehouseQty) },
+  { key: 'suff', label: 'พอเบิก/ไม่พอ', get: r => (r.warehouseQty === undefined || r.warehouseQty === null) ? null : (Number(r.warehouseQty) >= Number(r.qty || 0) ? 'พอเบิก' : 'ไม่พอ') }
+];
+const MAT_VIEW_COLS = [
+  { key: 'mat', label: 'Mat.', get: r => r.mat },
+  { key: 'desc', label: 'รายละเอียด', get: r => r.desc },
+  { key: 'qty', label: 'QTY รวม', right: true, get: r => r.qty },
+  { key: 'inv', label: 'Inventory on Hand', right: true, get: r => r.inventory === null ? null : Number(r.inventory) },
+  { key: 'suff', label: 'พอเบิก/ไม่พอ', get: r => r.sufficiency ? r.sufficiency.label : null },
+  { key: 'pdCount', label: 'จำนวน PD', right: true, get: r => r.pdList.length },
+  { key: 'pds', label: 'PD ที่ต้องการ', get: r => r.pdList[0] || null }
+];
+
 export class BacklogMatSummaryController {
   constructor(state) {
     this.state = state;
     this.limit = 100;
     this.viewMode = 'pd'; // 'pd' = group by PD No (current view) · 'mat' = group by Mat.
     this.report = null;
+    this.sort = { pd: null, mat: null }; // per view: { key, dir: 1|-1 } · set by double-clicking a column header
     // Repurposes the former "Add Production Order" button (id kept as btn-add-pd so the
     // existing show/hide-during-Assembly-browsing wiring elsewhere keeps working unchanged).
     this.btn = typeof document !== 'undefined' ? document.getElementById('btn-add-pd') : null;
     if (this.btn) this.btn.addEventListener('click', () => this.open());
+    // Auto-refresh an open popup when Allocation Date data is re-read (e.g. newer Material to issue.xlsx)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('plan-materials-updated', () => {
+        if (!document.getElementById('backlog-mat-summary-modal') || !this.report) return;
+        this.report = this.buildReport();
+        this.render();
+      });
+    }
   }
 
   async open() {
@@ -101,7 +133,20 @@ export class BacklogMatSummaryController {
   render() {
     const report = this.report;
     const isMatView = this.viewMode === 'mat';
-    const allRows = isMatView ? this.buildMatGroupedRows() : report.rows;
+    const allRows = isMatView ? this.buildMatGroupedRows() : [...report.rows];
+    const cols = isMatView ? MAT_VIEW_COLS : PD_VIEW_COLS;
+    const activeSort = this.sort[this.viewMode];
+    const sortCol = activeSort ? cols.find(c => c.key === activeSort.key) : null;
+    if (sortCol) {
+      allRows.sort((a, b) => {
+        const va = sortCol.get(a), vb = sortCol.get(b);
+        const aEmpty = va === null || va === undefined || va === '';
+        const bEmpty = vb === null || vb === undefined || vb === '';
+        if (aEmpty || bEmpty) return aEmpty === bEmpty ? 0 : (aEmpty ? 1 : -1); // blanks always last
+        const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), undefined, { numeric: true });
+        return cmp * activeSort.dir;
+      });
+    }
     const shown = this.limit === 0 ? allRows : allRows.slice(0, this.limit);
 
     const chip = (label, value, color) => `<div style="flex:1;min-width:120px;padding:6px 10px;border-radius:6px;background:#f8fafc;border-left:3px solid ${color};"><div style="font-size:10.5px;color:#64748b;">${label}</div><div style="font-size:16px;font-weight:800;color:#0f172a;">${value}</div></div>`;
@@ -166,9 +211,11 @@ export class BacklogMatSummaryController {
       ? `${chip('Mat. ที่แสดง', shown.length, '#2563eb')}${chip('PD ที่เกี่ยวข้อง', pdSet.size, '#7c3aed')}`
       : `${chip('รายการที่แสดง', shown.length, '#2563eb')}${chip('PD ที่เกี่ยวข้อง', pdSet.size, '#7c3aed')}`;
 
-    const tableHtml = isMatView
-      ? `<table class="backlog-mat-table"><thead><tr><th>Mat.</th><th>รายละเอียด</th><th style="text-align:right;">QTY รวม</th><th style="text-align:right;">Inventory on Hand</th><th>พอเบิก/ไม่พอ</th><th style="text-align:right;">จำนวน PD</th><th>PD ที่ต้องการ</th></tr></thead><tbody>${rowsHtml}</tbody></table>`
-      : `<table class="backlog-mat-table"><thead><tr><th>PD No.</th><th>Dwg No.</th><th>Part Name</th><th>Mat.</th><th>Mat._1</th><th style="text-align:right;">QTY</th><th>Mat. status</th><th>Allocation Date</th><th style="text-align:right;">จำนวนในคลัง</th><th>พอเบิก/ไม่พอ</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+    const headHtml = cols.map(c => {
+      const arrow = activeSort && activeSort.key === c.key ? (activeSort.dir === 1 ? ' ▲' : ' ▼') : '';
+      return `<th class="backlog-mat-th" data-key="${c.key}" title="ดับเบิลคลิกเพื่อเรียงข้อมูล" style="cursor:pointer;user-select:none;${c.right ? 'text-align:right;' : ''}">${c.label}${arrow}</th>`;
+    }).join('');
+    const tableHtml = `<table class="backlog-mat-table"><thead><tr>${headHtml}</tr></thead><tbody>${rowsHtml}</tbody></table>`;
 
     this.showModal(`
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
@@ -180,6 +227,7 @@ export class BacklogMatSummaryController {
       <div style="display:flex;gap:6px;margin:6px 0;">
         ${viewToggleBtn('pd', 'จัดกลุ่มตาม PD No')}
         ${viewToggleBtn('mat', 'จัดกลุ่มตาม Mat.')}
+        <button type="button" id="btn-sync-backlog-mat-alloc" title="ดึง Allocation Date ใหม่จากไฟล์ Material to issue.xlsx" style="padding:5px 12px;border:1px solid #2563eb;color:#1d4ed8;border-radius:6px;background:#eff6ff;cursor:pointer;">🔄 Sync Allocation Date</button>
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <label style="font-weight:600;">แสดง</label>
@@ -207,6 +255,23 @@ export class BacklogMatSummaryController {
       this.viewMode = el.dataset.view;
       this.render();
     }));
+    overlay.querySelectorAll('.backlog-mat-th').forEach(el => el.addEventListener('dblclick', () => {
+      const cur = this.sort[this.viewMode];
+      const key = el.dataset.key;
+      // asc -> desc -> back to default order
+      if (!cur || cur.key !== key) this.sort[this.viewMode] = { key, dir: 1 };
+      else if (cur.dir === 1) this.sort[this.viewMode] = { key, dir: -1 };
+      else this.sort[this.viewMode] = null;
+      this.render();
+    }));
+    overlay.querySelector('#btn-sync-backlog-mat-alloc')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = '⏳ กำลัง Sync...';
+      try { await this.state.storageSync?.syncAllocationDates(); } catch (err) { console.error('Sync Allocation Date failed', err); }
+      this.report = this.buildReport();
+      this.render();
+    });
     overlay.querySelector('#btn-export-backlog-mat-summary')?.addEventListener('click', () => this.exportCsv(shown, isMatView));
     overlay.querySelectorAll('.backlog-mat-pd').forEach(el => el.addEventListener('dblclick', () => {
       const pdModal = document.getElementById('pd-plan-modal');
