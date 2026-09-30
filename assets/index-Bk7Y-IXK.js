@@ -303,19 +303,17 @@ Are you sure you want to delete all Production Orders in the Backlog?`)&&(this.s
             <span style="font-size: 8.5px; color: var(--accent-teal); font-weight: 500;">${e.dwgNo?`DWG: ${e.dwgNo}`:``}</span>
             <span style="font-size: 10px; color: var(--text-secondary); white-space: nowrap; margin-left: auto;">Qty: <strong>${e.qty}</strong></span>
           </div>
-          <div class="card-details" style="margin-bottom: 4px;">
+          <div class="card-details" style="margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
             <span>Project: <strong>${e.project||`General`}</strong></span>
+            <button class="btn-simulate-pd" data-id="${e.id}" style="width: auto; padding: 3px 10px; font-size: 10px; white-space: nowrap; margin-left: auto; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 6px; font-weight: bold; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 4px;">
+              <span>➕ Add to Plan</span>
+            </button>
           </div>
           <div class="card-details btn-toggle-steps" data-id="${e.id}" style="margin-bottom: ${l?`6px`:`8px`}; cursor: pointer; color: var(--accent-teal); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; user-select: none;">
             <span>${l?`▲`:`▼`} Routing Steps (${e.steps.length})</span>
           </div>
           <div class="backlog-steps-container" style="margin-bottom: 8px; ${l?``:`display: none;`}">
             ${r}
-          </div>
-          <div class="card-details" style="margin-top: 8px; width: 100%;">
-            <button class="btn-simulate-pd" data-id="${e.id}" style="width: 100%; padding: 6px; font-size: 10px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 6px; font-weight: bold; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 4px;">
-              <span>➕ Add to Plan</span>
-            </button>
           </div>
         `;let u=t.querySelector(`.btn-toggle-steps`);u&&u.addEventListener(`click`,t=>{t.stopPropagation(),this.expandedBacklogCards.has(e.id)?this.expandedBacklogCards.delete(e.id):this.expandedBacklogCards.add(e.id),this.render()});let d=t.querySelector(`.btn-edit-pd`);d&&d.addEventListener(`click`,t=>{t.stopPropagation(),window.dispatchEvent(new CustomEvent(`open-pd-modal`,{detail:{woId:e.id}}))});let f=t.querySelector(`.card-id`);f&&f.addEventListener(`click`,t=>{t.stopPropagation(),window.dispatchEvent(new CustomEvent(`open-pd-modal`,{detail:{woId:e.id}}))}),t.querySelector(`.btn-delete-pd`).addEventListener(`click`,t=>{t.stopPropagation();let n=typeof this.state.getDescendantPdIds==`function`?this.state.getDescendantPdIds(e.id):[],r=n.length>0?`คุณต้องการลบ Production Order: ${e.id} พร้อม PD ลูกทั้งหมดอีก ${n.length} รายการ (${n.slice(0,10).join(`, `)}${n.length>10?`...`:``}) ออกจากระบบใช่หรือไม่?`:`คุณต้องการลบ Production Order: ${e.id} ออกจาก Backlog ใช่หรือไม่?`;confirm(r)&&this.state.deleteProductionOrder(e.id)}),t.querySelector(`.btn-simulate-pd`).addEventListener(`click`,t=>{t.stopPropagation(),this.runPDSimulation(e.id)});let p=t.querySelector(`.delivery-target-container`);p&&p.addEventListener(`dblclick`,t=>{if(t.stopPropagation(),p.querySelector(`input`))return;let n=this.state.workingHourToDate(c),r=`${n.getFullYear()}-${(n.getMonth()+1).toString().padStart(2,`0`)}-${n.getDate().toString().padStart(2,`0`)}`;p.innerHTML=`
               <span style="display: flex; align-items: center; gap: 4px; width: 100%; color: #3b82f6;">
