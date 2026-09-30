@@ -362,14 +362,10 @@ export class WorkflowController {
           </div>
           <div class="card-part">${wo.partName} ${wo.dwgNo ? `<span style="font-size: 8.5px; color: var(--accent-teal); font-weight: 500; display: block; margin-top: 2px;">DWG: ${wo.dwgNo}</span>` : ''}</div>
           <div class="card-details" style="margin-bottom: 4px;">
-            <span>Customer: <strong>${wo.customer}</strong></span>
             <span>Project: <strong>${wo.project || 'General'}</strong></span>
           </div>
           <div class="card-details" style="margin-bottom: 4px;">
             <span>Qty: <strong>${wo.qty}</strong></span>
-          </div>
-          <div class="card-details delivery-target-container" style="margin-bottom: 8px; color: ${targetColor}; font-size: 9px; font-weight: 600; cursor: pointer;" title="Double-click to edit target date">
-            <span>Delivery Target: <strong class="delivery-target-text">${dueTimeStr}</strong></span>
           </div>
           <div class="card-details btn-toggle-steps" data-id="${wo.id}" style="margin-bottom: ${isStepsExpanded ? '6px' : '8px'}; cursor: pointer; color: var(--accent-teal); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; user-select: none;">
             <span>${isStepsExpanded ? '▲' : '▼'} Routing Steps (${wo.steps.length})</span>
