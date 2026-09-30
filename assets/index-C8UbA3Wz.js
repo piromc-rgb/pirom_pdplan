@@ -298,12 +298,13 @@ Are you sure you want to delete all Production Orders in the Backlog?`)&&(this.s
               <span class="priority-badge ${e.priority.toLowerCase()}">${e.priority}</span>
             </div>
           </div>
-          <div class="card-part">${e.partName} ${e.dwgNo?`<span style="font-size: 8.5px; color: var(--accent-teal); font-weight: 500; display: block; margin-top: 2px;">DWG: ${e.dwgNo}</span>`:``}</div>
-          <div class="card-details" style="margin-bottom: 4px;">
-            <span>Project: <strong>${e.project||`General`}</strong></span>
+          <div class="card-part">${e.partName}</div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px;">
+            <span style="font-size: 8.5px; color: var(--accent-teal); font-weight: 500;">${e.dwgNo?`DWG: ${e.dwgNo}`:``}</span>
+            <span style="font-size: 10px; color: var(--text-secondary); white-space: nowrap; margin-left: auto;">Qty: <strong>${e.qty}</strong></span>
           </div>
           <div class="card-details" style="margin-bottom: 4px;">
-            <span>Qty: <strong>${e.qty}</strong></span>
+            <span>Project: <strong>${e.project||`General`}</strong></span>
           </div>
           <div class="card-details btn-toggle-steps" data-id="${e.id}" style="margin-bottom: ${l?`6px`:`8px`}; cursor: pointer; color: var(--accent-teal); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; user-select: none;">
             <span>${l?`▲`:`▼`} Routing Steps (${e.steps.length})</span>

@@ -360,12 +360,13 @@ export class WorkflowController {
               <span class="priority-badge ${wo.priority.toLowerCase()}">${wo.priority}</span>
             </div>
           </div>
-          <div class="card-part">${wo.partName} ${wo.dwgNo ? `<span style="font-size: 8.5px; color: var(--accent-teal); font-weight: 500; display: block; margin-top: 2px;">DWG: ${wo.dwgNo}</span>` : ''}</div>
-          <div class="card-details" style="margin-bottom: 4px;">
-            <span>Project: <strong>${wo.project || 'General'}</strong></span>
+          <div class="card-part">${wo.partName}</div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px;">
+            <span style="font-size: 8.5px; color: var(--accent-teal); font-weight: 500;">${wo.dwgNo ? `DWG: ${wo.dwgNo}` : ''}</span>
+            <span style="font-size: 10px; color: var(--text-secondary); white-space: nowrap; margin-left: auto;">Qty: <strong>${wo.qty}</strong></span>
           </div>
           <div class="card-details" style="margin-bottom: 4px;">
-            <span>Qty: <strong>${wo.qty}</strong></span>
+            <span>Project: <strong>${wo.project || 'General'}</strong></span>
           </div>
           <div class="card-details btn-toggle-steps" data-id="${wo.id}" style="margin-bottom: ${isStepsExpanded ? '6px' : '8px'}; cursor: pointer; color: var(--accent-teal); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; user-select: none;">
             <span>${isStepsExpanded ? '▲' : '▼'} Routing Steps (${wo.steps.length})</span>
