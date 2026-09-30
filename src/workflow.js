@@ -368,7 +368,7 @@ export class WorkflowController {
           <div class="card-details" style="margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
             <span>Project: <strong>${wo.project || 'General'}</strong></span>
             <button class="btn-simulate-pd" data-id="${wo.id}" style="width: auto; padding: 3px 10px; font-size: 10px; white-space: nowrap; margin-left: auto; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 6px; font-weight: bold; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 4px;">
-              <span>➕ Add to Plan</span>
+              <span>Add to Plan</span>
             </button>
           </div>
           <div class="card-details btn-toggle-steps" data-id="${wo.id}" style="margin-bottom: ${isStepsExpanded ? '6px' : '8px'}; cursor: pointer; color: var(--accent-teal); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; user-select: none;">
