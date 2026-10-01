@@ -108,6 +108,7 @@ class App {
     this.initCompletedPdList();
     this.initGanttLabelColumnResize();
     this.initSidebarLeftResize();
+    this.initSidebarRightResize();
 
     // Default Gantt view: Time Scale Fit (start day left-aligned)
     if (state.scheduledJobs && state.scheduledJobs.length > 0) {
@@ -593,6 +594,92 @@ class App {
       e.stopPropagation();
       applyWidth(280);
       localStorage.setItem(STORAGE_KEY, 280);
+      this.gantt?.drawDependencyLines?.();
+      window.dispatchEvent(new Event('resize'));
+    });
+  }
+
+  initSidebarRightResize() {
+    const resizer = document.getElementById('sidebar-right-resizer');
+    const sidebarEl = document.querySelector('.sidebar-right');
+    if (!resizer || !sidebarEl) return;
+
+    const STORAGE_KEY = 'chaken_sidebar_right_width';
+    const DEFAULT_WIDTH = 280;
+    const MIN_WIDTH = 220;
+
+    const getMaxWidth = () => Math.min(850, Math.floor(window.innerWidth * 0.5));
+
+    const applyWidth = (px) => {
+      document.documentElement.style.setProperty('--sidebar-right-width', `${px}px`);
+    };
+
+    const savedWidth = parseInt(localStorage.getItem(STORAGE_KEY), 10);
+    if (savedWidth && savedWidth >= MIN_WIDTH && savedWidth <= getMaxWidth()) {
+      applyWidth(savedWidth);
+    }
+
+    let startX = 0;
+    let startWidth = 0;
+    let rafId = null;
+
+    const onMouseMove = (e) => {
+      const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
+      // Dragging left widens the right sidebar
+      const newWidth = Math.min(getMaxWidth(), Math.max(MIN_WIDTH, startWidth - (clientX - startX)));
+      applyWidth(newWidth);
+
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          this.gantt?.drawDependencyLines?.();
+          rafId = null;
+        });
+      }
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('touchmove', onMouseMove);
+      document.removeEventListener('touchend', onMouseUp);
+      resizer.classList.remove('resizing');
+      document.body.classList.remove('sidebar-right-resizing');
+
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      this.gantt?.drawDependencyLines?.();
+      window.dispatchEvent(new Event('resize'));
+
+      const finalWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-right-width'), 10);
+      if (finalWidth) {
+        localStorage.setItem(STORAGE_KEY, finalWidth);
+      }
+    };
+
+    const onStartDrag = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      startX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
+      startWidth = sidebarEl.getBoundingClientRect().width;
+      resizer.classList.add('resizing');
+      document.body.classList.add('sidebar-right-resizing');
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+      document.addEventListener('touchmove', onMouseMove, { passive: false });
+      document.addEventListener('touchend', onMouseUp);
+    };
+
+    resizer.addEventListener('mousedown', onStartDrag);
+    resizer.addEventListener('touchstart', onStartDrag, { passive: false });
+
+    // Double-click resets to default width
+    resizer.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      applyWidth(DEFAULT_WIDTH);
+      localStorage.setItem(STORAGE_KEY, DEFAULT_WIDTH);
       this.gantt?.drawDependencyLines?.();
       window.dispatchEvent(new Event('resize'));
     });
