@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-D8zcONJj.js"></script>
+    <script type="module" crossorigin src="./assets/index-CFa3roND.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-T1l8V0Oo.css">
   </head>
   <body>
@@ -171,7 +171,10 @@
           </div>
           <div id="header-datetime" style="font-size: 10px; color: var(--text-secondary); font-family: monospace; padding-left: 2px;">
             <span id="header-datetime-text"></span>
-            <span id="header-status-overview-file" style="margin-left: 6px; color: var(--accent-orange, #d97706); font-weight: 700;"></span>
+            <span id="header-status-overview-file" style="margin-left: 6px; color: var(--accent-orange, #d97706); font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
+              <button type="button" id="btn-reload-status-overview" title="โหลดไฟล์ Status Overview ล่าสุดใหม่" style="background: none; border: 1px solid var(--accent-orange, #d97706); color: inherit; border-radius: 4px; cursor: pointer; padding: 0 4px; font-size: 11px; line-height: 16px;">🔄</button>
+              <span id="header-status-overview-name"></span>
+            </span>
           </div>
         </div>
         
