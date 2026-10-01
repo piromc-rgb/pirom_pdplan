@@ -485,7 +485,27 @@ export class StorageSyncManager {
     const badge = document.getElementById('badge-status-overview-file');
     if (badge) badge.textContent = this.isStatusOverviewAuto() ? `AUTO → ${name}` : name;
     const headerBadge = document.getElementById('header-status-overview-file');
-    if (headerBadge) headerBadge.textContent = `| 📄 ${name}`;
+    if (headerBadge) {
+      headerBadge.textContent = '';
+      headerBadge.appendChild(document.createTextNode('| '));
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = 'btn-reload-status-overview';
+      btn.title = 'โหลดไฟล์ Status Overview ล่าสุดใหม่';
+      btn.textContent = '🔄';
+      btn.style.cssText = 'border:none;background:transparent;cursor:pointer;padding:0 2px;font-size:11px;line-height:1;color:inherit;';
+      btn.addEventListener('click', async () => {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+        btn.textContent = '⏳';
+        try { await this.fetchPlanMaterials(true); }
+        catch (e) { console.warn('Reload Status Overview failed:', e); }
+        finally { btn.disabled = false; btn.style.opacity = ''; btn.textContent = '🔄'; }
+      });
+      headerBadge.appendChild(btn);
+      headerBadge.appendChild(document.createTextNode(` ${name}`));
+    }
   }
 
   // Resolves which Status Overview file is actually active (mainly for the "AUTO" setting,
