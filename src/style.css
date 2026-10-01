@@ -554,9 +554,9 @@ body.dark-theme .user-mode-item.item-plan.active {
 
 /* 2. LAYOUT GRID */
 .main-layout {
+  position: relative;
   display: grid;
   grid-template-columns: var(--sidebar-left-width, 280px) 1fr var(--sidebar-right-width, 280px);
-  position: relative;
   gap: 15px;
   height: calc(100vh - 56px - 40px); /* 56px header, 40px kiosk closed title */
   padding: 15px;
@@ -639,16 +639,14 @@ body.dark-theme .user-mode-item.item-plan.active {
   box-shadow: 0 0 10px rgba(2, 132, 199, 0.7);
 }
 
-body.sidebar-left-resizing {
+body.sidebar-left-resizing,
+body.sidebar-right-resizing {
   user-select: none !important;
   cursor: col-resize !important;
 }
 
-body.sidebar-left-resizing * {
-  cursor: col-resize !important;
-}
-
-/* Sidebar Right Resizer Splitter: sits over the 15px gap between the Gantt board and the Resources panel */
+/* Right Sidebar Resizer Splitter (between Gantt board and Resources panel) - mirrors the left one.
+   Positioned in the 15px gap just left of the right sidebar. */
 .sidebar-right-resizer {
   position: absolute;
   top: 15px;
@@ -663,6 +661,7 @@ body.sidebar-left-resizing * {
   user-select: none;
   touch-action: none;
 }
+
 .sidebar-right-resizer::before {
   content: '';
   position: absolute;
@@ -674,6 +673,7 @@ body.sidebar-left-resizing * {
   border-radius: 2px;
   transition: background 0.15s ease;
 }
+
 .sidebar-right-resizer::after {
   content: '';
   width: 4px;
@@ -683,10 +683,12 @@ body.sidebar-left-resizing * {
   box-shadow: 0 0 2px rgba(0, 0, 0, 0.15);
   transition: height 0.2s ease, width 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
+
 .sidebar-right-resizer:hover::before,
 .sidebar-right-resizer.resizing::before {
   background: rgba(2, 132, 199, 0.15);
 }
+
 .sidebar-right-resizer:hover::after,
 .sidebar-right-resizer.resizing::after {
   height: 72px;
@@ -694,14 +696,12 @@ body.sidebar-left-resizing * {
   background: var(--accent-teal);
   box-shadow: 0 0 10px rgba(2, 132, 199, 0.7);
 }
+
 .main-layout.hide-resources .sidebar-right-resizer {
   display: none !important;
 }
-body.sidebar-right-resizing {
-  user-select: none !important;
-  cursor: col-resize !important;
-}
-body.sidebar-right-resizing * {
+
+body.sidebar-left-resizing * {
   cursor: col-resize !important;
 }
 

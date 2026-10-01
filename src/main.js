@@ -605,10 +605,10 @@ class App {
     if (!resizer || !sidebarEl) return;
 
     const STORAGE_KEY = 'chaken_sidebar_right_width';
-    const MIN_WIDTH = 220;
     const DEFAULT_WIDTH = 280;
+    const MIN_WIDTH = 220;
 
-    const getMaxWidth = () => Math.min(700, Math.floor(window.innerWidth * 0.5));
+    const getMaxWidth = () => Math.min(850, Math.floor(window.innerWidth * 0.5));
 
     const applyWidth = (px) => {
       document.documentElement.style.setProperty('--sidebar-right-width', `${px}px`);
@@ -674,7 +674,7 @@ class App {
     resizer.addEventListener('mousedown', onStartDrag);
     resizer.addEventListener('touchstart', onStartDrag, { passive: false });
 
-    // Double-click resets to default width (280px)
+    // Double-click resets to default width
     resizer.addEventListener('dblclick', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -2335,7 +2335,7 @@ class App {
       modal.remove();
     });
 
-    modal.querySelector('#btn-submit-select').addEventListener('click', () => {
+    modal.querySelector('#btn-submit-select').addEventListener('click', async () => {
       const selectedIds = Array.from(checkboxes)
         .filter(cb => cb.checked)
         .map(cb => cb.value);
@@ -2360,6 +2360,22 @@ class App {
       }
 
       modal.remove();
+
+      // Re-sync the latest Status Overview first so the "Mat ready" check uses fresh material
+      // status; backlog PDs are only pulled onto the board when their Op01 Mat is ready.
+      if (onlyMatReadyOp1 && state.storageSync && typeof state.storageSync.fetchPlanMaterials === 'function') {
+        button.disabled = true;
+        if (state.ganttController) state.ganttController.showToast('🔄 กำลัง Sync Status Overview ล่าสุดเพื่อตรวจสถานะ Mat....');
+        try {
+          await state.storageSync.fetchPlanMaterials(true);
+        } catch (e) {
+          console.warn('Status Overview sync before AI optimize failed:', e);
+          if (state.ganttController) state.ganttController.showToast('⚠️ Sync Status Overview ไม่สำเร็จ — ใช้ข้อมูล Mat. ที่โหลดไว้ล่าสุดแทน');
+        } finally {
+          button.disabled = false;
+        }
+      }
+
       this.runAIOptimizationWithSelection(button, selectedIds, startDate, onlyMatReadyOp1);
     });
   }

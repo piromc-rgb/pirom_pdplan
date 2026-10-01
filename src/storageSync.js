@@ -17,6 +17,8 @@ const STORAGE_LAST_SYNC_KEY = 'PDPLAN_LAST_SYNC_TIME';
 const STORAGE_AUTO_SYNC_KEY = 'PDPLAN_AUTO_SYNC';
 const STORAGE_USER_MODE_KEY = 'PDPLAN_USER_MODE';
 const STORAGE_DWG_FOLDER_KEY = 'PDPLAN_DWG_FOLDER_URL';
+// Tabs (gid) of the production-date Google Sheet used when the local server cannot discover them
+const PROD_DATES_FALLBACK_GIDS = ['2120309268', '949143801', '272068191', '1138800161', '193456236', '700419488', '1634563504', '749124766', '483699239', '69576872', '508816796', '940032116', '109541778', '499581033'];
 const STORAGE_PROD_DATES_SHEET_KEY = 'PDPLAN_PROD_DATES_SHEET_URL';
 export const DEFAULT_PROD_DATES_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1MwvA8HPTStZiESym9cPWxPuRb6q72wZk3hxKkJJXwgg/edit';
 export const DEFAULT_STATUS_OVERVIEW_FILENAME = 'AUTO';
@@ -120,6 +122,28 @@ export class StorageSyncManager {
     this.userModeMenu = document.getElementById('user-mode-menu');
     this.userModeOptionView = document.getElementById('user-mode-option-view');
     this.userModeOptionPlan = document.getElementById('user-mode-option-plan');
+
+    // Header button: force-reload the newest Status Overview file
+    const btnReloadOverview = document.getElementById('btn-reload-status-overview');
+    if (btnReloadOverview) {
+      btnReloadOverview.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (btnReloadOverview.disabled) return;
+        btnReloadOverview.disabled = true;
+        const prevText = btnReloadOverview.textContent;
+        btnReloadOverview.textContent = '⏳';
+        try {
+          await this.fetchPlanMaterials(true);
+          this.showToast(`🔄 โหลด Status Overview ล่าสุดแล้ว${this.resolvedOverviewName ? `: ${this.resolvedOverviewName}` : ''}`);
+        } catch (err) {
+          this.showToast(`⚠️ โหลด Status Overview ไม่สำเร็จ: ${err.message || err}`, 'error');
+        } finally {
+          btnReloadOverview.textContent = prevText;
+          btnReloadOverview.disabled = false;
+        }
+      });
+    }
 
     if (this.btnEditModeSave) {
       this.btnEditModeSave.addEventListener('click', (e) => {
@@ -496,28 +520,8 @@ export class StorageSyncManager {
     this.resolvedOverviewName = name;
     const badge = document.getElementById('badge-status-overview-file');
     if (badge) badge.textContent = this.isStatusOverviewAuto() ? `AUTO → ${name}` : name;
-    const headerBadge = document.getElementById('header-status-overview-file');
-    if (headerBadge) {
-      headerBadge.textContent = '';
-      headerBadge.appendChild(document.createTextNode('| '));
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.id = 'btn-reload-status-overview';
-      btn.title = 'โหลดไฟล์ Status Overview ล่าสุดใหม่';
-      btn.textContent = '🔄';
-      btn.style.cssText = 'border:none;background:transparent;cursor:pointer;padding:0 2px;font-size:11px;line-height:1;color:inherit;';
-      btn.addEventListener('click', async () => {
-        if (btn.disabled) return;
-        btn.disabled = true;
-        btn.style.opacity = '0.5';
-        btn.textContent = '⏳';
-        try { await this.fetchPlanMaterials(true); }
-        catch (e) { console.warn('Reload Status Overview failed:', e); }
-        finally { btn.disabled = false; btn.style.opacity = ''; btn.textContent = '🔄'; }
-      });
-      headerBadge.appendChild(btn);
-      headerBadge.appendChild(document.createTextNode(` ${name}`));
-    }
+    const headerName = document.getElementById('header-status-overview-name');
+    if (headerName) headerName.textContent = name;
   }
 
   // Resolves which Status Overview file is actually active (mainly for the "AUTO" setting,
@@ -1646,23 +1650,88 @@ export class StorageSyncManager {
 
   // Planned production date per "PD|Material" from the shared Google Sheet (via the local dev server).
   // Returns true when the data changed.
+  // Browser-side fallback used when the local server API is unavailable (e.g. GitHub Pages):
+  // reads each known tab through Google's gviz CSV endpoint (CORS-enabled for link-shared sheets).
+  async fetchProductionDatesFromBrowser(sheetUrl) {
+    const idMatch = String(sheetUrl || '').match(/\/d\/([a-zA-Z0-9_-]{20,})/) || String(sheetUrl || '').match(/^([a-zA-Z0-9_-]{20,})$/);
+    if (!idMatch) return null;
+    const sheetId = idMatch[1];
+    const parseCsv = (text) => {
+      const rows = [];
+      let row = [], field = '', inQ = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQ) {
+          if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
+          else if (c === '"') inQ = false;
+          else field += c;
+        } else if (c === '"') inQ = true;
+        else if (c === ',') { row.push(field); field = ''; }
+        else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+        else if (c !== '\r') field += c;
+      }
+      if (field !== '' || row.length) { row.push(field); rows.push(row); }
+      return rows;
+    };
+    const dates = {};
+    const usedTabs = [];
+    await Promise.all(PROD_DATES_FALLBACK_GIDS.map(async (gid) => {
+      try {
+        const res = await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`);
+        if (!res.ok) return;
+        const rows = parseCsv(await res.text());
+        const header = (rows[0] || []).map(h => String(h || '').trim());
+        const iPd = header.indexOf('Production Order');
+        let iMat = header.indexOf('Item');
+        if (iMat < 0) iMat = header.indexOf('Material No.');
+        const iDate = header.findIndex(h => h.replace(/\s+/g, '') === 'วันที่ที่จะผลิต');
+        if (iPd < 0 || iMat < 0 || iDate < 0) return;
+        let n = 0;
+        rows.slice(1).forEach(r => {
+          const pd = String(r[iPd] || '').trim();
+          const mat = String(r[iMat] || '').trim();
+          const m = String(r[iDate] || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+          if (!pd || !mat || !m) return;
+          const iso = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+          const key = `${pd}|${mat}`;
+          if (!dates[key] || iso < dates[key]) dates[key] = iso;
+          n++;
+        });
+        usedTabs.push({ name: String(gid), rows: n });
+      } catch (e) { /* skip tab */ }
+    }));
+    if (Object.keys(dates).length === 0) return null;
+    return { status: 'success', sheetId, count: Object.keys(dates).length, tabs: usedTabs, dates };
+  }
+
   async fetchProductionDates(force = false, sheetUrlOverride = null) {
     if (typeof window === 'undefined') return false;
+    const sheetUrl = (sheetUrlOverride || this.getProdDatesSheetUrl()).trim();
+    let json = null;
     try {
       const params = new URLSearchParams();
-      params.set('sheetUrl', (sheetUrlOverride || this.getProdDatesSheetUrl()).trim());
+      params.set('sheetUrl', sheetUrl);
       if (force) params.set('force', '1');
       const res = await fetch(`/pirom_pdplan/api/production-dates?${params.toString()}`, { cache: 'no-store' });
-      const json = await res.json().catch(() => null);
-      this._lastProdDatesResult = json;
-      if (!res.ok || !json || json.status !== 'success' || !json.dates) return false;
-      const changed = JSON.stringify(this.state.productionDates || {}) !== JSON.stringify(json.dates);
-      this.state.productionDates = json.dates;
-      if (changed) window.dispatchEvent(new CustomEvent('plan-materials-updated'));
-      return changed;
-    } catch (e) {
+      const body = await res.json().catch(() => null);
+      if (res.ok && body && body.status === 'success' && body.dates) json = body;
+      else if (body && body.status === 'error') this._lastProdDatesResult = body; // e.g. invalid link: no fallback
+      if (!json && body && body.status === 'error' && res.status === 400) return false;
+    } catch (e) { /* no local server: fall back to the browser */ }
+    if (!json) {
+      try { json = await this.fetchProductionDatesFromBrowser(sheetUrl); } catch (e) { json = null; }
+    }
+    if (!json) {
+      if (!this._lastProdDatesResult || this._lastProdDatesResult.status === 'success') {
+        this._lastProdDatesResult = { status: 'error', message: 'เชื่อมต่อ Google Sheet ไม่ได้' };
+      }
       return false;
     }
+    this._lastProdDatesResult = json;
+    const changed = JSON.stringify(this.state.productionDates || {}) !== JSON.stringify(json.dates);
+    this.state.productionDates = json.dates;
+    if (changed) window.dispatchEvent(new CustomEvent('plan-materials-updated'));
+    return changed;
   }
 
   async syncProductionDates() {
@@ -1675,6 +1744,11 @@ export class StorageSyncManager {
   // shows up, Allocation Date / Inventory on Hand are re-read from it automatically.
   startMaterialToIssueWatcher(intervalMs = 60000) {
     if (typeof window === 'undefined' || this._mtiWatcher) return;
+    // Planned production dates (Google Sheet): initial load, then refresh every 2 minutes (works on any host)
+    if (!this._prodDatesTimer) {
+      setTimeout(() => this.fetchProductionDates(), 2500);
+      this._prodDatesTimer = setInterval(() => this.fetchProductionDates(), 120000);
+    }
     const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ||
       window.location.hostname.startsWith('192.168.') || window.location.port === '5173';
     if (!isLocalDev) return;
@@ -1701,9 +1775,7 @@ export class StorageSyncManager {
     };
     setTimeout(check, 8000);
     this._mtiWatcher = setInterval(check, intervalMs);
-    // Planned production dates (Google Sheet): initial load, then refresh every 2 minutes
-    setTimeout(() => this.fetchProductionDates(), 2500);
-    setInterval(() => this.fetchProductionDates(), 120000);
+
   }
 
   // Re-reads Allocation Date (+ Inventory on Hand) from "Material to issue.xlsx" via the server-side
