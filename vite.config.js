@@ -7,7 +7,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const compileVersion = '1.7';
+const compileVersion = '1.8';
+const PRODUCTION_DATES_SHEET_ID = '1MwvA8HPTStZiESym9cPWxPuRb6q72wZk3hxKkJJXwgg';
+const PRODUCTION_DATES_DEFAULT_GIDS = ['2120309268']; // fallback when the tab list cannot be discovered
 
 function getTempCacheDir() {
   const dir = path.join(os.tmpdir(), 'pirom_pdplan');
@@ -497,6 +499,118 @@ export default defineConfig({
               res.end(JSON.stringify({ error: err.message }));
               return;
             }
+          }
+
+          // Planned production date per (Production Order, Material) from the shared Google Sheet
+          // "ตรวจสอบรายการแมทและ STD ที่ใช้ผลิต": every tab that has the columns Production Order,
+          // Item / Material No. and "วันที่ ที่จะผลิต" (เลื่อย, Laser, CNC, ตัดแก๊ส, พาสมา, ...) is merged.
+          // Fetched server-side as CSV (no CORS); tabs are discovered from the sheet's htmlview page.
+          if (cleanUrl === '/api/production-dates' || cleanUrl.startsWith('/api/production-dates?')) {
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            let staleBody = null;
+            try {
+              const urlObj = new URL(req.url, 'http://localhost');
+              // Sheet link set in "Setting Location" (full URL or bare id); defaults to the shared sheet
+              const rawSheet = (urlObj.searchParams.get('sheetUrl') || '').trim();
+              const idMatch = rawSheet.match(/\/d\/([a-zA-Z0-9_-]{20,})/) || rawSheet.match(/^([a-zA-Z0-9_-]{20,})$/);
+              if (rawSheet && !idMatch) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ status: 'error', message: 'ลิงก์ Google Sheet ไม่ถูกต้อง' }));
+                return;
+              }
+              const sheetId = idMatch ? idMatch[1] : PRODUCTION_DATES_SHEET_ID;
+              globalThis.__prodDatesCaches = globalThis.__prodDatesCaches || {};
+              const cached = globalThis.__prodDatesCaches[sheetId];
+              staleBody = cached ? cached.body : null;
+              if (!(cached && Date.now() - cached.ts < 60000) || urlObj.searchParams.get('force') === '1') {
+                const sheetBase = `https://docs.google.com/spreadsheets/d/${sheetId}`;
+
+                // Discover tab gids (cached 10 min); fall back to the default tab list
+                globalThis.__prodDatesTabsById = globalThis.__prodDatesTabsById || {};
+                const tabsCached = globalThis.__prodDatesTabsById[sheetId];
+                let tabs = tabsCached && Date.now() - tabsCached.ts < 600000 ? tabsCached.list : null;
+                if (!tabs) {
+                  try {
+                    const htmlRes = await fetch(`${sheetBase}/htmlview`, { redirect: 'follow' });
+                    const html = await htmlRes.text();
+                    const found = [];
+                    const re = /items\.push\(\{name: "((?:[^"\\]|\\.)*)", pageUrl: "((?:[^"\\]|\\.)*)"/g;
+                    let mm;
+                    while ((mm = re.exec(html)) !== null) {
+                      const g = mm[2].match(/gid(?:=|\\x3d)(\d+)/);
+                      if (g) found.push({ gid: g[1], name: mm[1] });
+                    }
+                    if (found.length) tabs = found;
+                  } catch (e) { /* use fallback */ }
+                  if (!tabs) tabs = PRODUCTION_DATES_DEFAULT_GIDS.map(gid => ({ gid, name: gid }));
+                  else globalThis.__prodDatesTabsById[sheetId] = { ts: Date.now(), list: tabs };
+                }
+
+                // Minimal RFC4180 parser (quoted fields, escaped quotes, newlines inside quotes)
+                const parseCsv = (csvText) => {
+                  const table = [];
+                  let row = [], field = '', inQ = false;
+                  for (let i = 0; i < csvText.length; i++) {
+                    const ch = csvText[i];
+                    if (inQ) {
+                      if (ch === '"') { if (csvText[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+                      else field += ch;
+                    } else if (ch === '"') inQ = true;
+                    else if (ch === ',') { row.push(field); field = ''; }
+                    else if (ch === '\n') { row.push(field); table.push(row); row = []; field = ''; }
+                    else if (ch !== '\r') field += ch;
+                  }
+                  if (field !== '' || row.length) { row.push(field); table.push(row); }
+                  return table;
+                };
+
+                const dates = {};
+                const usedTabs = [];
+                await Promise.all(tabs.map(async (tab) => {
+                  try {
+                    // Google occasionally rate-limits parallel exports: retry a few times with a short backoff
+                    let csvText = null;
+                    for (let attempt = 0; attempt < 3 && csvText === null; attempt++) {
+                      try {
+                        const csvRes = await fetch(`${sheetBase}/export?format=csv&gid=${tab.gid}`, { redirect: 'follow' });
+                        if (csvRes.ok) csvText = await csvRes.text();
+                      } catch (e) { /* retry */ }
+                      if (csvText === null) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+                    }
+                    if (csvText === null) return;
+                    const table = parseCsv(csvText);
+                    const header = (table[0] || []).map(h => String(h).trim());
+                    const iPd = header.indexOf('Production Order');
+                    let iMat = header.indexOf('Item');
+                    if (iMat < 0) iMat = header.indexOf('Material No.');
+                    const iDate = header.findIndex(h => h.replace(/\s+/g, '') === 'วันที่ที่จะผลิต');
+                    if (iPd < 0 || iMat < 0 || iDate < 0) return; // not a production-date tab (e.g. Plan Order lists)
+                    let n = 0;
+                    for (const r of table.slice(1)) {
+                      const pd = String(r[iPd] || '').trim();
+                      const mat = String(r[iMat] || '').trim();
+                      const m = String(r[iDate] || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                      if (!pd || !mat || !m) continue;
+                      const iso = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+                      const key = `${pd}|${mat}`;
+                      if (!dates[key] || iso < dates[key]) dates[key] = iso; // same PD+Mat in several rows/tabs: earliest date wins
+                      n++;
+                    }
+                    usedTabs.push({ name: tab.name, rows: n });
+                  } catch (e) { /* skip tab on error */ }
+                }));
+                if (Object.keys(dates).length === 0) throw new Error('No production dates found in the Google Sheet');
+                globalThis.__prodDatesCaches[sheetId] = { ts: Date.now(), body: JSON.stringify({ status: 'success', sheetId, count: Object.keys(dates).length, tabs: usedTabs, dates }) };
+              }
+              res.statusCode = 200;
+              res.end(globalThis.__prodDatesCaches[sheetId].body);
+            } catch (err) {
+              console.warn('production-dates fetch failed:', err.message);
+              if (staleBody) { res.statusCode = 200; res.end(staleBody); }
+              else { res.statusCode = 502; res.end(JSON.stringify({ status: 'error', message: err.message })); }
+            }
+            return;
           }
 
           if (cleanUrl === '/api/plan-materials' || cleanUrl.startsWith('/api/plan-materials?')) {

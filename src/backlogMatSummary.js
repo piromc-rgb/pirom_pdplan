@@ -21,7 +21,7 @@ const PD_VIEW_COLS = [
   { key: 'desc', label: 'Mat._1', get: r => r.desc },
   { key: 'qty', label: 'QTY', right: true, get: r => Number(r.qty) || 0 },
   { key: 'status', label: 'Mat. status', get: r => r.status ? r.status.label : null },
-  { key: 'alloc', label: 'Allocation Date', get: r => { const t = r.allocationDate ? new Date(r.allocationDate).getTime() : NaN; return isNaN(t) ? null : t; } },
+  { key: 'alloc', label: 'วันที่ที่จะผลิต', get: r => { const t = r.allocationDate ? new Date(r.allocationDate).getTime() : NaN; return isNaN(t) ? null : t; } },
   { key: 'wh', label: 'จำนวนในคลัง', right: true, get: r => (r.warehouseQty === undefined || r.warehouseQty === null) ? null : Number(r.warehouseQty) },
   { key: 'suff', label: 'พอเบิก/ไม่พอ', get: r => (r.warehouseQty === undefined || r.warehouseQty === null) ? null : (Number(r.warehouseQty) >= Number(r.qty || 0) ? 'พอเบิก' : 'ไม่พอ') }
 ];
@@ -158,7 +158,10 @@ export class BacklogMatSummaryController {
       if (!v) return '<span style="color:#94a3b8;">-</span>';
       const d = new Date(v);
       if (isNaN(d.getTime())) return escapeHtml(v);
-      return escapeHtml(d.toLocaleString('th-TH', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }));
+      const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(String(v));
+      return escapeHtml(d.toLocaleString('th-TH', dateOnly
+        ? { day: '2-digit', month: 'short', year: '2-digit' }
+        : { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }));
     };
     const sufficiencyOf = (r) => {
       if (r.warehouseQty === undefined || r.warehouseQty === null) return null;
@@ -223,11 +226,11 @@ export class BacklogMatSummaryController {
         <button type="button" id="btn-close-backlog-mat-summary" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
       </div>
       <div style="color:#64748b;margin:2px 0 2px;font-size:11.5px;">วัตถุดิบ Op01 ของ PD ทุกตัวที่ยังอยู่ใน Backlog (ยังไม่ถูกจัดลงแผน) · สร้างเมื่อ ${escapeHtml(report.generatedAt.toLocaleString('th-TH'))}</div>
-      <div style="color:#94a3b8;margin:0 0 10px;font-size:10.5px;">จำนวนในคลัง/พอเบิก-ไม่พอ: ดึงจากไฟล์ Status Overview (.xlsx) ชีต "Plan + Mat" คอลัมน์ Mat.To Issue by Warehouse · Allocation Date: ดึงจากไฟล์ Material to issue.xlsx (ที่เก็บเดียวกับ Status Overview) · Inventory on Hand: ดึงจากไฟล์ Material to issue.xlsx เช่นกัน (สต๊อกรวมของบริษัท ไม่ผูกกับ PD ใดโดยเฉพาะ)</div>
+      <div style="color:#94a3b8;margin:0 0 10px;font-size:10.5px;">จำนวนในคลัง/พอเบิก-ไม่พอ: ดึงจากไฟล์ Status Overview (.xlsx) ชีต "Plan + Mat" คอลัมน์ Mat.To Issue by Warehouse · วันที่ที่จะผลิต: ดึงจากทุก Tab ใน Google Sheet "ตรวจสอบรายการแมทและ STD ที่ใช้ผลิต" (จับคู่ Production Order + Material No.) · Inventory on Hand: ดึงจากไฟล์ Material to issue.xlsx เช่นกัน (สต๊อกรวมของบริษัท ไม่ผูกกับ PD ใดโดยเฉพาะ)</div>
       <div style="display:flex;gap:6px;margin:6px 0;">
         ${viewToggleBtn('pd', 'จัดกลุ่มตาม PD No')}
         ${viewToggleBtn('mat', 'จัดกลุ่มตาม Mat.')}
-        <button type="button" id="btn-sync-backlog-mat-alloc" title="ดึง Allocation Date ใหม่จากไฟล์ Material to issue.xlsx" style="padding:5px 12px;border:1px solid #2563eb;color:#1d4ed8;border-radius:6px;background:#eff6ff;cursor:pointer;">🔄 Sync Allocation Date</button>
+        <button type="button" id="btn-sync-backlog-mat-alloc" title="ดึงวันที่ที่จะผลิตใหม่จาก Google Sheet" style="padding:5px 12px;border:1px solid #2563eb;color:#1d4ed8;border-radius:6px;background:#eff6ff;cursor:pointer;">🔄 Sync วันที่ที่จะผลิต</button>
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <label style="font-weight:600;">แสดง</label>
@@ -268,7 +271,7 @@ export class BacklogMatSummaryController {
       const btn = e.currentTarget;
       btn.disabled = true;
       btn.textContent = '⏳ กำลัง Sync...';
-      try { await this.state.storageSync?.syncAllocationDates(); } catch (err) { console.error('Sync Allocation Date failed', err); }
+      try { await this.state.storageSync?.syncProductionDates(); } catch (err) { console.error('Sync Allocation Date failed', err); }
       this.report = this.buildReport();
       this.render();
     });
@@ -302,7 +305,7 @@ export class BacklogMatSummaryController {
 
   buildCsvLines(rows) {
     const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const lines = [['PD No.', 'Dwg No.', 'Part Name', 'Mat.', 'Mat._1', 'QTY', 'Mat. status', 'Allocation Date', 'จำนวนในคลัง', 'พอเบิก/ไม่พอ'].map(q).join(',')];
+    const lines = [['PD No.', 'Dwg No.', 'Part Name', 'Mat.', 'Mat._1', 'QTY', 'Mat. status', 'วันที่ที่จะผลิต', 'จำนวนในคลัง', 'พอเบิก/ไม่พอ'].map(q).join(',')];
     rows.forEach(r => {
       const hasWh = r.warehouseQty !== undefined && r.warehouseQty !== null;
       const sufficiency = hasWh ? (Number(r.warehouseQty) >= Number(r.qty || 0) ? 'พอเบิก' : 'ไม่พอ') : '';

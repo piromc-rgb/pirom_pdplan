@@ -2610,10 +2610,9 @@ class CentralState {
           status = this.getMaterialIssueStatus(agg);
         }
       }
-      // Allocation Date comes from "Material to issue.xlsx" (same storage location as the Status
-      // Overview file), matched by PD+step+Mat during sync; only present while still pending issue.
-      const thisStepRow = matRows.find(r => Number(r.stepNum) === Number(stepNum) && r.allocationDate);
-      const allocationDate = thisStepRow ? thisStepRow.allocationDate : null;
+      // "Allocation Date" column = planned production date from the shared Google Sheet
+      // (Production Order + Material No. -> วันที่ที่จะผลิต), loaded by StorageSyncManager.fetchProductionDates().
+      const allocationDate = (this.productionDates || {})[`${pdId}|${mat}`] || null;
       return { mat, desc, qty, status, allocationDate, warehouseQty: agg.toIssueWh };
     });
   }

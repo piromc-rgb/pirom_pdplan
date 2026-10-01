@@ -17,6 +17,8 @@ const STORAGE_LAST_SYNC_KEY = 'PDPLAN_LAST_SYNC_TIME';
 const STORAGE_AUTO_SYNC_KEY = 'PDPLAN_AUTO_SYNC';
 const STORAGE_USER_MODE_KEY = 'PDPLAN_USER_MODE';
 const STORAGE_DWG_FOLDER_KEY = 'PDPLAN_DWG_FOLDER_URL';
+const STORAGE_PROD_DATES_SHEET_KEY = 'PDPLAN_PROD_DATES_SHEET_URL';
+export const DEFAULT_PROD_DATES_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1MwvA8HPTStZiESym9cPWxPuRb6q72wZk3hxKkJJXwgg/edit';
 export const DEFAULT_STATUS_OVERVIEW_FILENAME = 'AUTO';
 const STATUS_OVERVIEW_AUTO_MIGRATION_KEY = 'pdplan_so_auto_v1';
 const STORAGE_STATUS_OVERVIEW_FILE_KEY = 'PDPLAN_STATUS_OVERVIEW_FILENAME';
@@ -423,6 +425,16 @@ export class StorageSyncManager {
     const url = this.getDriveFolderUrl();
     const match = url.match(/folders\/([a-zA-Z0-9_-]+)/);
     return match ? match[1] : DEFAULT_DRIVE_FOLDER_ID;
+  }
+
+  getProdDatesSheetUrl() {
+    return localStorage.getItem(STORAGE_PROD_DATES_SHEET_KEY) || DEFAULT_PROD_DATES_SHEET_URL;
+  }
+
+  setProdDatesSheetUrl(url) {
+    const trimmed = (url || '').trim();
+    if (trimmed && trimmed !== DEFAULT_PROD_DATES_SHEET_URL) localStorage.setItem(STORAGE_PROD_DATES_SHEET_KEY, trimmed);
+    else localStorage.removeItem(STORAGE_PROD_DATES_SHEET_KEY);
   }
 
   getDwgFolderUrl() {
@@ -1525,6 +1537,140 @@ export class StorageSyncManager {
    * หรืออ่านตรงจาก Sheet "Plan + Mat" ในไฟล์ Status Overview
    * มีระบบ Local Cache เพื่อความรวดเร็ว และหากอยู่ในโหมดวางแผนจะ Up ข้อมูลขึ้น Cloud
    */
+  // Connection check for the "Setting Location" modal: asks the local server (/api/check-storage-status)
+  // about every data file / folder and paints the status pills. scope: all | drive | dwg | overview | endpoint
+  async runStorageConnectionCheck(scope = 'all') {
+    const $ = (id) => document.getElementById(id);
+    const setPill = (el, status, text, title = '') => {
+      if (!el) return;
+      el.textContent = text;
+      el.title = title;
+      const tone = {
+        ok: ['rgba(16, 185, 129, 0.14)', '#059669', 'rgba(16, 185, 129, 0.35)'],
+        warn: ['rgba(245, 158, 11, 0.15)', '#d97706', 'rgba(245, 158, 11, 0.35)'],
+        err: ['rgba(239, 68, 68, 0.14)', '#dc2626', 'rgba(239, 68, 68, 0.35)'],
+        info: ['rgba(2, 132, 199, 0.12)', '#0284c7', 'rgba(2, 132, 199, 0.3)']
+      }[status] || ['rgba(0,0,0,0.05)', 'var(--text-secondary)', 'transparent'];
+      el.style.background = tone[0];
+      el.style.color = tone[1];
+      el.style.border = `1px solid ${tone[2]}`;
+      el.style.fontWeight = '700';
+    };
+    const fmtDate = (iso) => { try { return new Date(iso).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }); } catch (e) { return ''; } };
+    const filePill = (el, info, label) => {
+      if (!info || !info.exists) { setPill(el, 'err', '❌ ไม่พบไฟล์', `${label}: ไม่พบไฟล์ในโฟลเดอร์ Drive หรือในเครื่อง`); return false; }
+      const where = info.inGoogleDrive ? 'Drive' : (info.inTempLocalDisk ? 'Temp' : 'เครื่อง');
+      setPill(el, 'ok', `✅ ${where} · ${info.sizeMB >= 1 ? info.sizeMB + ' MB' : info.sizeKB + ' KB'} · ${fmtDate(info.updatedAt)}`, info.path || info.name);
+      return true;
+    };
+
+    const btnAll = $('btn-check-all-storage');
+    const origHtml = btnAll ? btnAll.innerHTML : '';
+    if (scope === 'all' && btnAll) {
+      btnAll.disabled = true;
+      btnAll.innerHTML = '<span>⏳</span><span>กำลังตรวจสอบ...</span>';
+    }
+    const pills = ['conn-status-plan', 'conn-status-machine', 'conn-status-completed', 'conn-status-overview', 'conn-status-dwg'].map($);
+    if (scope === 'all') pills.forEach(el => setPill(el, 'info', '⏳ กำลังตรวจสอบ...'));
+
+    const driveUrl = ($('input-drive-folder-url')?.value || '').trim();
+    const dwgVal = ($('input-dwg-folder-url')?.value || '').trim() || this.getDwgFolderUrl();
+    const statusFn = ($('input-status-overview-filename')?.value || '').trim() || 'AUTO';
+    const endpointUrl = ($('input-sync-endpoint')?.value || '').trim() || this.getEndpointUrl();
+    const isLocalDwg = this.isDwgLocationLocal(dwgVal);
+
+    let report = null;
+    try {
+      const params = new URLSearchParams({
+        statusFilename: statusFn,
+        dwgDir: isLocalDwg ? dwgVal : '',
+        driveUrl,
+        dwgUrl: isLocalDwg ? '' : dwgVal,
+        endpointUrl
+      });
+      for (const api of ['/pirom_pdplan/api/check-storage-status', '/api/check-storage-status']) {
+        try {
+          const res = await fetch(`${api}?${params.toString()}`, { cache: 'no-store' });
+          if (res.ok) { report = await res.json(); break; }
+        } catch (e) { /* try next */ }
+      }
+    } finally {
+      if (scope === 'all' && btnAll) { btnAll.disabled = false; btnAll.innerHTML = origHtml; }
+    }
+
+    if (!report) {
+      pills.forEach(el => setPill(el, 'err', '❌ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'));
+      setPill($('badge-drive-conn-status'), 'err', '❌ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+      this.showToast('⚠️ ตรวจสอบไม่ได้: ไม่พบเซิร์ฟเวอร์ (ใช้ได้เฉพาะตอนรันผ่าน localhost)', 'error');
+      return null;
+    }
+
+    const f = report.files || {};
+    const results = {
+      plan: filePill($('conn-status-plan'), f.planJson, 'Plan.json'),
+      machine: filePill($('conn-status-machine'), f.machineSettings, 'machine_settings.json'),
+      completed: filePill($('conn-status-completed'), f.completedPds, 'completed_pds.json'),
+      overview: filePill($('conn-status-overview'), f.statusOverview, 'Status Overview')
+    };
+    const dwg = report.dwgStorage || {};
+    results.dwg = Boolean(dwg.exists);
+    if (dwg.exists) setPill($('conn-status-dwg'), 'ok', `✅ ${dwg.inGoogleDrive ? 'Drive' : 'เครื่อง'} · ${dwg.pdfCount} PDF`, dwg.activePath || '');
+    else setPill($('conn-status-dwg'), 'warn', '⚠️ ไม่พบโฟลเดอร์ DWG', 'ตั้งค่าโฟลเดอร์ DWG ให้ถูกต้อง');
+
+    const mounted = report.gdriveDesktop && report.gdriveDesktop.mounted;
+    const cloud = report.cloudApi || {};
+    setPill($('badge-drive-conn-status'), mounted ? 'ok' : (cloud.ok ? 'ok' : 'warn'),
+      mounted ? '✅ Drive G: เชื่อมต่อแล้ว' : (cloud.ok ? '✅ เชื่อมต่อผ่าน Cloud API' : '⚠️ ไม่พบ Drive G: (ใช้ไฟล์ในเครื่อง)'),
+      report.gdriveDesktop?.path || '');
+    const epBadge = $('badge-endpoint-conn-status');
+    if (epBadge) {
+      if (!cloud.configured) setPill(epBadge, 'warn', '⚠️ ยังไม่ได้ตั้งค่า', cloud.message || '');
+      else setPill(epBadge, cloud.ok ? 'ok' : 'err', cloud.ok ? '✅ เชื่อมต่อ Cloud API ได้' : '❌ เชื่อมต่อ Cloud API ไม่ได้', cloud.message || '');
+    }
+    if (f.statusOverview?.exists) this.noteResolvedOverview(f.statusOverview.name);
+
+    const okCount = Object.values(results).filter(Boolean).length;
+    const total = Object.keys(results).length;
+    const box = $('storage-connection-summary-box');
+    if (box && scope === 'all') {
+      box.style.display = 'block';
+      box.textContent = okCount === total
+        ? `✅ ตรวจสอบเรียบร้อย: พบข้อมูลครบทั้ง ${total} รายการ`
+        : `⚠️ พบข้อมูล ${okCount} จาก ${total} รายการ — ตรวจสอบรายการที่ขึ้น ❌/⚠️`;
+    }
+    if (scope !== 'all') {
+      this.showToast(mounted || cloud.ok ? '✅ ตรวจสอบการเชื่อมต่อเรียบร้อย' : '⚠️ ตรวจสอบแล้ว: ดูสถานะที่ป้ายด้านข้าง', mounted || cloud.ok ? 'success' : 'info');
+    }
+    return report;
+  }
+
+  // Planned production date per "PD|Material" from the shared Google Sheet (via the local dev server).
+  // Returns true when the data changed.
+  async fetchProductionDates(force = false, sheetUrlOverride = null) {
+    if (typeof window === 'undefined') return false;
+    try {
+      const params = new URLSearchParams();
+      params.set('sheetUrl', (sheetUrlOverride || this.getProdDatesSheetUrl()).trim());
+      if (force) params.set('force', '1');
+      const res = await fetch(`/pirom_pdplan/api/production-dates?${params.toString()}`, { cache: 'no-store' });
+      const json = await res.json().catch(() => null);
+      this._lastProdDatesResult = json;
+      if (!res.ok || !json || json.status !== 'success' || !json.dates) return false;
+      const changed = JSON.stringify(this.state.productionDates || {}) !== JSON.stringify(json.dates);
+      this.state.productionDates = json.dates;
+      if (changed) window.dispatchEvent(new CustomEvent('plan-materials-updated'));
+      return changed;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async syncProductionDates() {
+    const changed = await this.fetchProductionDates(true);
+    try { await this.syncAllocationDates(false); } catch (e) { /* inventory refresh is best-effort */ }
+    return changed;
+  }
+
   // Local-dev only: polls the server for the mtime of "Material to issue.xlsx"; when a newer file
   // shows up, Allocation Date / Inventory on Hand are re-read from it automatically.
   startMaterialToIssueWatcher(intervalMs = 60000) {
@@ -1555,6 +1701,9 @@ export class StorageSyncManager {
     };
     setTimeout(check, 8000);
     this._mtiWatcher = setInterval(check, intervalMs);
+    // Planned production dates (Google Sheet): initial load, then refresh every 2 minutes
+    setTimeout(() => this.fetchProductionDates(), 2500);
+    setInterval(() => this.fetchProductionDates(), 120000);
   }
 
   // Re-reads Allocation Date (+ Inventory on Hand) from "Material to issue.xlsx" via the server-side
@@ -2191,6 +2340,62 @@ export class StorageSyncManager {
       }
     });
 
+    // Connection-check buttons in the Setting Location modal
+    [
+      ['btn-check-all-storage', 'all'],
+      ['btn-test-drive-folder', 'drive'],
+      ['btn-test-dwg-folder', 'dwg'],
+      ['btn-test-status-overview', 'overview'],
+      ['btn-test-sync-endpoint', 'endpoint']
+    ].forEach(([id, scope]) => {
+      document.getElementById(id)?.addEventListener('click', () => this.runStorageConnectionCheck(scope));
+    });
+
+    const setProdDatesBadge = (text, ok) => {
+      const badge = document.getElementById('badge-prod-dates-sheet');
+      if (!badge) return;
+      badge.textContent = text;
+      badge.style.color = ok ? '#059669' : '#dc2626';
+      badge.style.background = ok ? 'rgba(16, 185, 129, 0.15)' : 'rgba(220, 38, 38, 0.12)';
+    };
+    const testProdDatesSheet = async (url) => {
+      setProdDatesBadge('⏳ กำลังเช็ค...', true);
+      await this.fetchProductionDates(true, url);
+      const r = this._lastProdDatesResult;
+      if (r && r.status === 'success') {
+        setProdDatesBadge(`✅ ${r.count} รายการ จาก ${r.tabs.length} Tab`, true);
+        return true;
+      }
+      setProdDatesBadge(`❌ ${(r && r.message) || 'เชื่อมต่อไม่ได้'}`, false);
+      return false;
+    };
+    document.getElementById('btn-test-prod-dates-sheet')?.addEventListener('click', () => {
+      const val = document.getElementById('input-prod-dates-sheet-url')?.value.trim() || this.getProdDatesSheetUrl();
+      testProdDatesSheet(val);
+    });
+    document.getElementById('btn-save-prod-dates-sheet')?.addEventListener('click', async () => {
+      const input = document.getElementById('input-prod-dates-sheet-url');
+      const val = (input?.value || '').trim() || DEFAULT_PROD_DATES_SHEET_URL;
+      const ok = await testProdDatesSheet(val);
+      if (!ok) {
+        this.showToast('⚠️ ยังไม่บันทึก: อ่านข้อมูลจากลิงก์นี้ไม่ได้ (ตรวจสอบลิงก์และสิทธิ์การเข้าถึง)', 'error');
+        return;
+      }
+      this.setProdDatesSheetUrl(val);
+      this.showToast('💾 บันทึกลิงก์ไฟล์ ตรวจสอบรายการแมทและ STD ที่ใช้ผลิต เรียบร้อย', 'success');
+    });
+    document.getElementById('btn-reset-prod-dates-sheet')?.addEventListener('click', async () => {
+      this.setProdDatesSheetUrl(DEFAULT_PROD_DATES_SHEET_URL);
+      const input = document.getElementById('input-prod-dates-sheet-url');
+      if (input) input.value = DEFAULT_PROD_DATES_SHEET_URL;
+      await testProdDatesSheet(DEFAULT_PROD_DATES_SHEET_URL);
+      this.showToast('↺ รีเซ็ตเป็นลิงก์เริ่มต้น', 'info');
+    });
+    document.getElementById('btn-open-prod-dates-sheet')?.addEventListener('click', () => {
+      const val = document.getElementById('input-prod-dates-sheet-url')?.value.trim() || this.getProdDatesSheetUrl();
+      window.open(val, '_blank', 'noopener');
+    });
+
     document.getElementById('btn-save-status-overview-file')?.addEventListener('click', () => {
       const input = document.getElementById('input-status-overview-filename');
       if (input && input.value.trim()) {
@@ -2620,6 +2825,8 @@ export class StorageSyncManager {
     const currentStatusFile = this.getStatusOverviewFilename();
     const inputStatusFile = document.getElementById('input-status-overview-filename');
     if (inputStatusFile) inputStatusFile.value = currentStatusFile;
+    const inputProdSheet = document.getElementById('input-prod-dates-sheet-url');
+    if (inputProdSheet) inputProdSheet.value = this.getProdDatesSheetUrl();
     const badgeStatusFile = document.getElementById('badge-status-overview-file');
     if (badgeStatusFile) {
       badgeStatusFile.textContent = this.isStatusOverviewAuto() && this.resolvedOverviewName

@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V1.7 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V1.8 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-B209sMGk.js"></script>
+    <script type="module" crossorigin src="./assets/index-DdJ_6Hgz.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-CErMgGt2.css">
   </head>
   <body>
@@ -1823,6 +1823,37 @@
             </div>
             <div style="font-size: 10px; color: var(--text-secondary); margin-top: 5px; line-height: 1.4;">
               * <strong>ระบบ Local Cache:</strong> ดึงข้อมูลจากไฟล์ Status Overview แคชไว้ในเครื่องเพื่อเปิดและประมวลผลได้รวดเร็วทันที · <strong>โหมดวางแผน:</strong> เมื่อดึง/อัปเดตไฟล์จะซิงค์ข้อมูลขึ้น Cloud ให้โดยอัตโนมัติ · <strong>โหมดดูแผน:</strong> เก็บไว้ในแคชเครื่องเท่านั้น
+            </div>
+          </div>
+
+          <!-- Setting: Google Sheet - ตรวจสอบรายการแมทและ STD ที่ใช้ผลิต (วันที่ที่จะผลิต) -->
+          <div style="margin-bottom: 16px; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 12px 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+              <label for="input-prod-dates-sheet-url" style="font-size: 12px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                <span>📅</span>
+                <span>ไฟล์ ตรวจสอบรายการแมทและ STD ที่ใช้ผลิต (วันที่ที่จะผลิต):</span>
+              </label>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span id="badge-prod-dates-sheet" style="font-size: 10px; font-weight: 700; color: #059669; background: rgba(16, 185, 129, 0.15); padding: 2px 6px; border-radius: 4px;">ยังไม่ได้เช็ค</span>
+                <button type="button" id="btn-test-prod-dates-sheet" class="btn" title="ตรวจสอบลิงก์และนับจำนวนรายการวันที่ที่จะผลิตจากทุก Tab" style="padding: 2px 8px; font-size: 10.5px; border: 1px solid rgba(16, 185, 129, 0.45); border-radius: 4px; background: rgba(16, 185, 129, 0.1); color: #047857; cursor: pointer;">
+                  🔌 เช็คไฟล์
+                </button>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="input-prod-dates-sheet-url" placeholder="https://docs.google.com/spreadsheets/d/.../edit" style="flex: 1; padding: 8px 12px; font-size: 11.5px; font-family: monospace; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.9); color: var(--text-primary);">
+              <button type="button" id="btn-save-prod-dates-sheet" class="btn btn-glowing" style="padding: 6px 14px; font-size: 11.5px; border-radius: 6px; white-space: nowrap;">
+                💾 บันทึกลิงก์
+              </button>
+              <button type="button" id="btn-open-prod-dates-sheet" class="btn" title="เปิดไฟล์ใน Google Sheets" style="padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(0,0,0,0.03); color: var(--text-secondary); cursor: pointer; white-space: nowrap;">
+                ↗ เปิดไฟล์
+              </button>
+              <button type="button" id="btn-reset-prod-dates-sheet" class="btn" title="รีเซ็ตเป็นลิงก์เริ่มต้น" style="padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(0,0,0,0.03); color: var(--text-secondary); cursor: pointer; white-space: nowrap;">
+                ↺ เริ่มต้น
+              </button>
+            </div>
+            <div style="font-size: 10px; color: var(--text-secondary); margin-top: 5px; line-height: 1.4;">
+              * ระบบอ่านทุก Tab ที่มีคอลัมน์ <strong>Production Order</strong>, <strong>Item / Material No.</strong> และ <strong>วันที่ ที่จะผลิต</strong> แล้วนำไปแสดงในสรุปความต้องการ Mat. ของ PD ใน Backlog (ไฟล์ต้องตั้งสิทธิ์ให้ดูได้ด้วยลิงก์)
             </div>
           </div>
 
