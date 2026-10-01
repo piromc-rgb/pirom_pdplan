@@ -1598,14 +1598,43 @@ export class StorageSyncManager {
           if (res.ok) { report = await res.json(); break; }
         } catch (e) { /* try next */ }
       }
-    } finally {
-      if (scope === 'all' && btnAll) { btnAll.disabled = false; btnAll.innerHTML = origHtml; }
+    } catch (e) { /* handled below */ }
+
+    // No local server (e.g. the GitHub Pages site): ask the Google Apps Script Cloud API instead
+    if (!report && endpointUrl.startsWith('http') && !endpointUrl.includes('drive.google.com/drive/folders')) {
+      try {
+        const sep = endpointUrl.includes('?') ? '&' : '?';
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 25000);
+        const res = await fetch(`${endpointUrl}${sep}action=check-cloud-status&statusFilename=${encodeURIComponent(statusFn)}&dwgFolderId=${encodeURIComponent(isLocalDwg ? DEFAULT_DWG_FOLDER_ID : (dwgVal.match(/folders\/([a-zA-Z0-9_-]+)/)?.[1] || (/^[a-zA-Z0-9_-]{20,}$/.test(dwgVal) ? dwgVal : DEFAULT_DWG_FOLDER_ID)))}&t=${Date.now()}`, { signal: ctrl.signal });
+        clearTimeout(timer);
+        const cj = res.ok ? await res.json() : null;
+        if (cj && cj.status === 'success') {
+          const withDrive = (info) => (info && info.exists) ? { ...info, inGoogleDrive: true } : { exists: false };
+          const cf = cj.files || {};
+          const dwgF = cj.dwgFolder || {};
+          report = {
+            fromCloud: true,
+            gdriveDesktop: { mounted: false },
+            cloudApi: { configured: true, ok: true, message: `Cloud API ตอบกลับ (โฟลเดอร์ ${cj.folderName || ''})` },
+            files: {
+              planJson: withDrive(cf.planJson),
+              machineSettings: withDrive(cf.machineSettings),
+              completedPds: withDrive(cf.completedPds),
+              statusOverview: withDrive(cf.statusOverview)
+            },
+            dwgStorage: { exists: Boolean(dwgF.exists), inGoogleDrive: true, pdfCount: null, subfolders: dwgF.subfolders || [], activePath: dwgF.folderName || '' }
+          };
+        }
+      } catch (e) { /* cloud unreachable too */ }
     }
+
+    if (scope === 'all' && btnAll) { btnAll.disabled = false; btnAll.innerHTML = origHtml; }
 
     if (!report) {
       pills.forEach(el => setPill(el, 'err', '❌ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'));
       setPill($('badge-drive-conn-status'), 'err', '❌ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
-      this.showToast('⚠️ ตรวจสอบไม่ได้: ไม่พบเซิร์ฟเวอร์ (ใช้ได้เฉพาะตอนรันผ่าน localhost)', 'error');
+      this.showToast('⚠️ ตรวจสอบไม่ได้: ไม่พบเซิร์ฟเวอร์ในเครื่องและเชื่อมต่อ Cloud API ไม่ได้ (ตรวจสอบ Web App Sync API URL)', 'error');
       return null;
     }
 
@@ -1618,7 +1647,7 @@ export class StorageSyncManager {
     };
     const dwg = report.dwgStorage || {};
     results.dwg = Boolean(dwg.exists);
-    if (dwg.exists) setPill($('conn-status-dwg'), 'ok', `✅ ${dwg.inGoogleDrive ? 'Drive' : 'เครื่อง'} · ${dwg.pdfCount} PDF`, dwg.activePath || '');
+    if (dwg.exists) setPill($('conn-status-dwg'), 'ok', `✅ ${dwg.inGoogleDrive ? 'Drive' : 'เครื่อง'} · ${dwg.pdfCount != null ? dwg.pdfCount + ' PDF' : (dwg.subfolders || []).length + ' โฟลเดอร์ย่อย'}`, dwg.activePath || '');
     else setPill($('conn-status-dwg'), 'warn', '⚠️ ไม่พบโฟลเดอร์ DWG', 'ตั้งค่าโฟลเดอร์ DWG ให้ถูกต้อง');
 
     const mounted = report.gdriveDesktop && report.gdriveDesktop.mounted;
@@ -1638,9 +1667,9 @@ export class StorageSyncManager {
     const box = $('storage-connection-summary-box');
     if (box && scope === 'all') {
       box.style.display = 'block';
-      box.textContent = okCount === total
+      box.textContent = (report.fromCloud ? '☁️ ตรวจผ่าน Cloud API (ไม่มีเซิร์ฟเวอร์ในเครื่อง) · ' : '') + (okCount === total
         ? `✅ ตรวจสอบเรียบร้อย: พบข้อมูลครบทั้ง ${total} รายการ`
-        : `⚠️ พบข้อมูล ${okCount} จาก ${total} รายการ — ตรวจสอบรายการที่ขึ้น ❌/⚠️`;
+        : `⚠️ พบข้อมูล ${okCount} จาก ${total} รายการ — ตรวจสอบรายการที่ขึ้น ❌/⚠️`);
     }
     if (scope !== 'all') {
       this.showToast(mounted || cloud.ok ? '✅ ตรวจสอบการเชื่อมต่อเรียบร้อย' : '⚠️ ตรวจสอบแล้ว: ดูสถานะที่ป้ายด้านข้าง', mounted || cloud.ok ? 'success' : 'info');
