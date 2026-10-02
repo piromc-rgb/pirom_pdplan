@@ -9,6 +9,13 @@ export class WorkflowController {
     this.expandedBacklogCards = new Set();
     this.initElements();
     this.bindEvents();
+    // Plan + Mat data (re)loaded: refresh the Mat. readiness badges on the backlog cards
+    if (typeof window !== 'undefined') {
+      window.addEventListener('plan-materials-updated', () => {
+        clearTimeout(this._matBadgeTimer);
+        this._matBadgeTimer = setTimeout(() => this.render(), 150);
+      });
+    }
   }
 
   initElements() {
@@ -340,9 +347,28 @@ export class WorkflowController {
         const targetColor = scaledDue !== null ? 'var(--accent-red)' : 'var(--text-secondary)';
         const isStepsExpanded = this.expandedBacklogCards.has(wo.id);
 
+        // Op01 raw-material readiness (worst status across the PD's materials)
+        let matBadgeHtml = '';
+        try {
+          const op1Num = Math.min(...(wo.steps || []).map(st => Number(st.stepNum) || 10));
+          const matSummary = wo.steps && wo.steps.length ? this.state.getStepMaterialIssueSummary(wo.id, op1Num) : null;
+          if (matSummary) {
+            const toneStyles = {
+              notready: 'border:1.5px solid #b91c1c;color:#b91c1c;background:rgba(185,28,28,0.12);',
+              ready: 'border:1.5px solid #15803d;color:#15803d;background:rgba(21,128,61,0.12);',
+              ok: 'border:1px solid #16a34a;color:#15803d;background:rgba(22,163,74,0.15);',
+              warn: 'border:1px solid #d97706;color:#b45309;background:rgba(245,158,11,0.15);',
+              info: 'border:1px solid #0284c7;color:#0369a1;background:rgba(2,132,199,0.15);',
+              old: 'border:1px solid #7c3aed;color:#6d28d9;background:rgba(124,58,237,0.12);'
+            };
+            const countText = matSummary.count < matSummary.total ? ` (${matSummary.count}/${matSummary.total})` : '';
+            matBadgeHtml = `<span class="${matSummary.tone === 'notready' ? 'mat-status-blink' : ''}" title="สถานะ Mat. ของ Op01" style="font-size:8.5px;font-weight:800;padding:1px 6px;border-radius:4px;white-space:nowrap;${toneStyles[matSummary.tone] || toneStyles.info}">${matSummary.label}${countText}</span>`;
+          }
+        } catch (e) { matBadgeHtml = ''; }
+
         backlogCard.innerHTML = `
           <div class="card-top" style="display: flex; justify-content: space-between; align-items: center;">
-            <span class="card-id" style="cursor: pointer;" title="คลิกเพื่อแก้ไขข้อมูล Production Order นี้">${wo.id}</span>
+            <span style="display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap;"><span class="card-id" style="cursor: pointer;" title="คลิกเพื่อแก้ไขข้อมูล Production Order นี้">${wo.id}</span>${matBadgeHtml}</span>
             <div style="display: flex; align-items: center; gap: 6px;">
               ${indicatorHtml}
               <button class="btn-edit-pd" data-id="${wo.id}" title="แก้ไขข้อมูล Production Order นี้" style="background: none; border: none; color: var(--accent-teal); cursor: pointer; padding: 2px; display: flex; align-items: center; justify-content: center; font-size: 11px; transition: opacity 0.2s;">

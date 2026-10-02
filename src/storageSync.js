@@ -1769,6 +1769,49 @@ export class StorageSyncManager {
     return changed;
   }
 
+  // Detects a new / newer Status Overview file (local server or, on hosted pages, the Cloud API) and
+  // reloads Plan + Mat from it automatically, so Mat. readiness never keeps showing stale cached data.
+  async checkStatusOverviewUpdate() {
+    if (typeof window === 'undefined' || this._soChecking) return;
+    this._soChecking = true;
+    const KEY = 'chaken_status_overview_stamp';
+    try {
+      const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ||
+        window.location.hostname.startsWith('192.168.') || window.location.port === '5173';
+      const statusFn = this.getStatusOverviewFilename() || 'AUTO';
+      let info = null;
+      if (isLocalDev) {
+        try {
+          const res = await fetch(`/pirom_pdplan/api/check-storage-status?statusFilename=${encodeURIComponent(statusFn)}`, { cache: 'no-store' });
+          if (res.ok) info = (await res.json())?.files?.statusOverview || null;
+        } catch (e) { /* server not reachable */ }
+      }
+      const endpoint = this.getEndpointUrl();
+      if (!info && endpoint && endpoint.startsWith('http') && !endpoint.includes('drive.google.com/drive/folders')) {
+        try {
+          const sep = endpoint.includes('?') ? '&' : '?';
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 25000);
+          const res = await fetch(`${endpoint}${sep}action=check-cloud-status&statusFilename=${encodeURIComponent(statusFn)}&t=${Date.now()}`, { signal: ctrl.signal });
+          clearTimeout(timer);
+          const cj = res.ok ? await res.json() : null;
+          if (cj && cj.status === 'success') info = cj.files?.statusOverview || null;
+        } catch (e) { /* cloud not reachable */ }
+      }
+      if (!info || !info.exists || !info.updatedAt) return;
+      const stamp = `${info.name}|${info.updatedAt}`;
+      const seen = localStorage.getItem(KEY);
+      if (seen === stamp) return;
+      await this.fetchPlanMaterials(true);
+      localStorage.setItem(KEY, stamp);
+      if (seen) this.showToast(`🔄 พบไฟล์ ${info.name} ใหม่ อัปเดตข้อมูล Mat. เรียบร้อย`, 'success');
+    } catch (e) {
+      console.warn('Status Overview auto-refresh failed:', e);
+    } finally {
+      this._soChecking = false;
+    }
+  }
+
   // Local-dev only: polls the server for the mtime of "Material to issue.xlsx"; when a newer file
   // shows up, Allocation Date / Inventory on Hand are re-read from it automatically.
   startMaterialToIssueWatcher(intervalMs = 60000) {
@@ -1780,6 +1823,11 @@ export class StorageSyncManager {
     }
     const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ||
       window.location.hostname.startsWith('192.168.') || window.location.port === '5173';
+    // Status Overview freshness: every minute against the local server, every 5 minutes against the Cloud API
+    if (!this._soTimer) {
+      setTimeout(() => this.checkStatusOverviewUpdate(), 6000);
+      this._soTimer = setInterval(() => this.checkStatusOverviewUpdate(), isLocalDev ? 60000 : 300000);
+    }
     if (!isLocalDev) return;
     const KEY = 'chaken_mat_to_issue_mtime';
     const check = async () => {
@@ -2013,6 +2061,8 @@ export class StorageSyncManager {
 
     try {
       const res = await this._fetchPlanMaterialsPromise;
+      // Backlog cards / open popups re-read Mat. status from the freshly loaded data
+      if (res && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('plan-materials-updated'));
       return res;
     } finally {
       this._fetchPlanMaterialsPromise = null;
