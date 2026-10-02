@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V2.0 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V2.1 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-BzffOTem.js"></script>
+    <script type="module" crossorigin src="./assets/index-DQOUIFrs.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-T1l8V0Oo.css">
   </head>
   <body>
@@ -1620,6 +1620,9 @@
             <div style="display: flex; align-items: center; gap: 10px;">
               <button id="btn-export-daily-pdf" class="btn btn-glowing" style="padding: 6px 12px; font-size: 10px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; box-shadow: var(--shadow-neon); display: flex; align-items: center; gap: 4px;">
                 <span>📄 PDF</span>
+              </button>
+              <button id="btn-export-daily-excel" class="btn" title="ส่งออกแผนของทุก Work Center (ตามช่วงเวลาที่เลือกอยู่) เป็นไฟล์ Excel แยก Sheet ตาม Work Center" style="padding: 6px 12px; font-size: 10px; border-radius: 6px; cursor: pointer; background: rgba(22, 163, 74, 0.12); border: 1px solid #16a34a; color: #15803d; font-weight: bold;">
+                <span>📊 Excel ทุก Work Center</span>
               </button>
               <span class="modal-close" id="btn-close-wc-daily" style="cursor: pointer; font-size: 20px; color: var(--text-secondary);">&times;</span>
             </div>

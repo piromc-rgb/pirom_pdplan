@@ -17,6 +17,7 @@ export class DailyScheduleController {
     this.btnPrevDay = document.getElementById('btn-prev-day');
     this.btnNextDay = document.getElementById('btn-next-day');
     this.btnExportPDF = document.getElementById('btn-export-daily-pdf');
+    this.btnExportExcel = document.getElementById('btn-export-daily-excel');
     this.viewModeSelect = document.getElementById('wc-schedule-view-mode');
     
     this.titleLabel = document.getElementById('wc-daily-title');
@@ -43,6 +44,10 @@ export class DailyScheduleController {
 
     if (this.btnExportPDF) {
       this.btnExportPDF.addEventListener('click', () => this.exportDailyPDF());
+    }
+
+    if (this.btnExportExcel) {
+      this.btnExportExcel.addEventListener('click', () => this.exportAllWorkCentersExcel());
     }
 
     if (this.viewModeSelect) {
@@ -384,6 +389,134 @@ export class DailyScheduleController {
 
       this.timelineContainer.appendChild(card);
     });
+  }
+
+  // Jobs of one machine that fall inside the period currently selected in the modal (day / week / month)
+  getJobsForMachineInPeriod(machine, viewMode) {
+    const { monday, sunday } = this.getWeekRange(this.selectedDate);
+    const startOfWeek = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate(), 0, 0, 0);
+    const endOfWeek = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate(), 23, 59, 59);
+    return this.state.scheduledJobs.filter(job => {
+      if (job.machine !== machine) return false;
+      if (job.status === 'Completed') return false;
+      const d = this.state.workingHourToDate(job.startHour);
+      if (viewMode === 'daily') {
+        return d.getFullYear() === this.selectedDate.getFullYear() && d.getMonth() === this.selectedDate.getMonth() && d.getDate() === this.selectedDate.getDate();
+      }
+      if (viewMode === 'weekly') return d >= startOfWeek && d <= endOfWeek;
+      if (viewMode === 'monthly') return d.getFullYear() === this.selectedDate.getFullYear() && d.getMonth() === this.selectedDate.getMonth();
+      return false;
+    }).sort((a, b) => a.startHour - b.startHour);
+  }
+
+  // Previous / next operation of a job (same wording as the card and the PDF)
+  getJobNeighbors(job) {
+    const wo = this.state.workOrders.find(w => w.id === job.woId);
+    let prevWCStr = 'ไม่มี (ขั้นตอนแรก / คลังวัตถุดิบ)';
+    let nextWCStr = 'คลังสินค้าสำเร็จรูป (FG)';
+    let prevStep = null;
+    const sortedSteps = (wo && wo.steps && wo.steps.length > 0)
+      ? [...wo.steps].sort((a, b) => a.stepNum - b.stepNum)
+      : this.state.scheduledJobs.filter(j => j.woId === job.woId).sort((a, b) => a.stepNum - b.stepNum);
+    if (sortedSteps.length > 0) {
+      const idx = sortedSteps.findIndex(st => st.stepNum === job.stepNum);
+      if (idx > 0) {
+        prevStep = sortedSteps[idx - 1];
+        prevWCStr = `${prevStep.name || prevStep.stepName || prevStep.partName || 'Operation'} (${prevStep.machine})`;
+      }
+      if (idx !== -1 && idx < sortedSteps.length - 1) {
+        const nextStep = sortedSteps[idx + 1];
+        nextWCStr = `${nextStep.name || nextStep.stepName || nextStep.partName || 'Operation'} (${nextStep.machine})`;
+      } else if (this.state.assemblyLinks) {
+        const link = this.state.assemblyLinks.find(l => l.from === job.id);
+        if (link) nextWCStr = `ประกอบเข้า ${link.to.split('-')[0]}`;
+      }
+    }
+    return { prevWCStr, nextWCStr, prevStep };
+  }
+
+  // Excel: one workbook, one sheet per Work Center (only those with jobs in the selected period),
+  // columns follow the daily-schedule card (time, PD, part, Dwg, Qty, customer, SO, prev/next op, Mat status)
+  // plus the Op01 raw-material list the PDF prints.
+  exportAllWorkCentersExcel() {
+    if (typeof XLSX === 'undefined') {
+      this.state.ganttController?.showToast?.('⚠️ ไม่พบตัวสร้างไฟล์ Excel (XLSX) กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่', 'error');
+      return;
+    }
+    const viewMode = this.viewModeSelect ? this.viewModeSelect.value : 'daily';
+    const periodLabel = viewMode === 'weekly' ? this.formatThaiWeek(this.selectedDate)
+      : viewMode === 'monthly' ? this.formatThaiMonth(this.selectedDate)
+      : this.formatThaiDate(this.selectedDate);
+
+    const order = (this.state.workCenterOrder && this.state.workCenterOrder.length)
+      ? this.state.workCenterOrder.filter(k => this.state.workCenters[k])
+      : Object.keys(this.state.workCenters || {});
+    const machines = [...new Set([...order, ...Object.keys(this.state.workCenters || {})])];
+
+    const pad = (n) => String(n).padStart(2, '0');
+    const fmtDate = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+    const fmtTime = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const usedNames = new Set();
+    const sheetNameFor = (machine) => {
+      const wcLabel = this.state.workCenters[machine]?.name;
+      const fullName = wcLabel && wcLabel !== machine ? `${machine} ${wcLabel}` : String(machine);
+      let base = fullName.replace(/[\\/?*\[\]:]/g, '-').trim().slice(0, 31) || 'WC';
+      let name = base;
+      let i = 2;
+      while (usedNames.has(name.toLowerCase())) {
+        const suffix = `~${i++}`;
+        name = base.slice(0, 31 - suffix.length) + suffix;
+      }
+      usedNames.add(name.toLowerCase());
+      return name;
+    };
+
+    const header = ['ลำดับ', 'วันที่', 'เวลาเริ่ม', 'เวลาสิ้นสุด', 'Duration (ชม.)', 'OT', 'Priority', 'เลขที่ PD', 'ชื่องาน',
+      'รหัสแบบ (Dwg)', 'จำนวนผลิต', 'Customer', 'เลขที่ SO', 'Op No.', 'Operation ก่อนหน้า', 'Operation ถัดไป', 'สถานะเบิกวัสดุ',
+      'Mat. Op1 (รหัส)', 'Mat. Op1 (รายละเอียด)', 'Mat. Op1 (จำนวน)', 'Mat. Op1 (สถานะ)'];
+    const widths = [6, 11, 9, 11, 13, 5, 9, 14, 38, 18, 11, 26, 16, 7, 34, 34, 26, 16, 36, 14, 18];
+
+    const wb = XLSX.utils.book_new();
+    let sheets = 0;
+    let totalJobs = 0;
+    machines.forEach(machine => {
+      const jobs = this.getJobsForMachineInPeriod(machine, viewMode);
+      if (jobs.length === 0) return;
+      const rows = [header];
+      jobs.forEach((job, idx) => {
+        const dStart = this.state.workingHourToDate(job.startHour);
+        const dEnd = this.state.workingHourToDate(job.startHour + job.estHours);
+        const hasOT = dEnd.getHours() > 17 || (dEnd.getHours() === 17 && dEnd.getMinutes() > 0);
+        const { prevWCStr, nextWCStr, prevStep } = this.getJobNeighbors(job);
+        const issue = this.state.getStepMaterialIssueSummary(job.woId, job.stepNum);
+        const issueText = issue ? issue.label + (issue.count < issue.total ? ` (${issue.count}/${issue.total} รายการ)` : '') : '';
+        const mats = !prevStep ? (this.state.getStepMaterialsList(job.woId, job.stepNum) || []) : [];
+        rows.push([
+          idx + 1, fmtDate(dStart), fmtTime(dStart), fmtTime(dEnd), Number(Number(job.estHours || 0).toFixed(2)), hasOT ? 'OT' : '',
+          job.priority || '', job.woId, job.partName || '', job.dwgNo || '', job.qty ?? '', job.customer || '', job.project || '',
+          job.stepNum ?? '', prevWCStr, nextWCStr, issueText,
+          mats.map(m => m.mat).join(' | '),
+          mats.map(m => m.desc || '').join(' | '),
+          mats.map(m => m.qty).join(' | '),
+          mats.map(m => (m.status ? m.status.label : '')).join(' | ')
+        ]);
+      });
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = widths.map(w => ({ wch: w }));
+      ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+      XLSX.utils.book_append_sheet(wb, ws, sheetNameFor(machine));
+      sheets++;
+      totalJobs += jobs.length;
+    });
+
+    if (sheets === 0) {
+      this.state.ganttController?.showToast?.(`ℹ️ ไม่มีแผนงานของ Work Center ใดในช่วง ${periodLabel}`, 'info');
+      return;
+    }
+    const d = this.selectedDate;
+    const fileName = `WorkCenter_Plan_${viewMode}_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    this.state.ganttController?.showToast?.(`📊 ส่งออก Excel แล้ว: ${sheets} Work Center, ${totalJobs} งาน (${periodLabel})`, 'success');
   }
 
   exportDailyPDF() {
