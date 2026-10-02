@@ -1237,40 +1237,19 @@ class CentralState {
     return this.scheduleSingleStep(stepId, machine, startHour);
   }
 
-  // PDs currently on the board whose Op01 raw material is not ready ("ไม่พร้อมผลิต"). Completed PDs and
-  // PDs of locked projects are left alone (same rule AI Auto-Optimize uses when it evicts them).
-  // Returns [{ woId, jobIds, partName }].
-  findBoardPdsWithOp1MatNotReady() {
-    const isFixed = (j) => j.status === 'Completed' || Boolean(this.lockedProjects && this.lockedProjects[j.project || 'General']);
-    const byWo = new Map();
-    (this.scheduledJobs || []).forEach(j => {
-      const woId = j.woId || j.id;
-      if (!byWo.has(woId)) byWo.set(woId, []);
-      byWo.get(woId).push(j);
+  // Backlog PDs that can go onto the plan now: not in a locked project and no Op1 raw material flagged
+  // "ไม่พร้อมผลิต" (same readiness rule the AI "Mat ready only" option uses). Returns Production Order ids.
+  findReadyBacklogPdIds() {
+    const ids = [];
+    (this.workOrders || []).forEach(wo => {
+      if (!wo.steps || wo.steps.length === 0) return;
+      if (this.isProjectLocked(wo.project)) return;
+      const op1 = Math.min(...wo.steps.map(st => Number(st.stepNum) || 10));
+      const mats = this.getStepMaterialsList(wo.id, op1) || [];
+      if (mats.some(m => m.status && m.status.tone === 'notready')) return;
+      ids.push(wo.id);
     });
-    const result = [];
-    byWo.forEach((jobs, woId) => {
-      if (jobs.some(isFixed)) return;
-      const op1 = Math.min(...jobs.map(j => Number(j.stepNum) || 10));
-      const mats = this.getStepMaterialsList(woId, op1) || [];
-      if (mats.some(m => m.status && m.status.tone === 'notready')) {
-        result.push({ woId, jobIds: jobs.map(j => j.id), partName: jobs[0].partName || '' });
-      }
-    });
-    return result;
-  }
-
-  // Takes those PDs off the board and puts every one of their steps back into the Backlog (one undo step).
-  moveOp1MatNotReadyToBacklog() {
-    const targets = this.findBoardPdsWithOp1MatNotReady();
-    if (targets.length === 0) return 0;
-    this.saveStateToHistory();
-    targets.forEach(t => t.jobIds.forEach(id => this.executeUnscheduleJob(id)));
-    this.savePlanToFile();
-    this.saveWorkOrdersToFile();
-    this.notify();
-    this.dispatchHistoryEvent();
-    return targets.length;
+    return ids;
   }
 
   // Unschedule a specific step (returns it back to parent backlog WO)
@@ -2545,6 +2524,8 @@ class CentralState {
 
   buildPlanPayload() {
     return {
+      // PD Backlog travels with the plan so hosted pages (no local pd.md / /api/pd) can show it too
+      workOrders: this.workOrders || [],
       scheduledJobs: this.scheduledJobs,
       nests: this.nests,
       assemblyLinks: this.assemblyLinks || [],

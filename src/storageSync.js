@@ -1062,8 +1062,16 @@ export class StorageSyncManager {
 
     this.state._isLoadingData = true;
     try {
+      // Backlog: on a machine with the local server, pd.md (/api/pd) stays the source of truth and the
+      // payload only fills an empty backlog; on hosted pages (GitHub Pages) the payload is the only source.
       if (Array.isArray(data.workOrders) && data.workOrders.length > 0) {
-        this.state.workOrders = data.workOrders;
+        const isLocalHost = typeof window !== 'undefined' && (
+          window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ||
+          window.location.hostname.startsWith('192.168.') || window.location.port === '5173'
+        );
+        if (!isLocalHost || !this.state.workOrders || this.state.workOrders.length === 0) {
+          this.state.workOrders = data.workOrders;
+        }
       }
       if (Array.isArray(data.scheduledJobs)) this.state.scheduledJobs = data.scheduledJobs;
       if (data.nests) this.state.nests = data.nests;

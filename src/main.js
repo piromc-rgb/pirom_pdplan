@@ -108,7 +108,7 @@ class App {
     this.initCompletedPdList();
     this.initGanttLabelColumnResize();
     this.initSidebarLeftResize();
-    this.initMoveMatNotReadyButton();
+    this.initAddReadyPdsButton();
     this.initSidebarRightResize();
 
     // Default Gantt view: Time Scale Fit (start day left-aligned)
@@ -515,32 +515,33 @@ class App {
     });
   }
 
-  // Backlog button: takes PDs off the board whose Op1 Mat is not ready and returns them to the Backlog.
-  initMoveMatNotReadyButton() {
-    const btn = document.getElementById('btn-move-matnotready-backlog');
+  // Backlog button: schedules every Backlog PD whose Op1 Mat is ready onto the plan (via the AI scheduler,
+  // which shows its usual result popup so the plan can still be reviewed before accepting).
+  initAddReadyPdsButton() {
+    const btn = document.getElementById('btn-add-ready-pds-plan');
     if (!btn) return;
     btn.addEventListener('click', () => {
       const toast = (msg, type) => state.ganttController?.showToast?.(msg, type);
       const mode = state.storageSync && typeof state.storageSync.getUserMode === 'function' ? state.storageSync.getUserMode() : 'plan';
       if (mode !== 'plan') {
-        toast('⚠️ กรุณาสลับเป็นโหมดวางแผนก่อน จึงจะย้ายงานกลับ Backlog ได้', 'error');
+        toast('⚠️ กรุณาสลับเป็นโหมดวางแผนก่อน จึงจะจัดงานลงแผนได้', 'error');
         return;
       }
-      const hasMats = state.planMaterials && Object.keys(state.planMaterials).length > 0;
-      if (!hasMats) {
+      if (!state.planMaterials || Object.keys(state.planMaterials).length === 0) {
         toast('⚠️ ยังไม่มีข้อมูล Mat. จาก Status Overview (กด 🔄 ที่หัวหน้าจอเพื่อโหลดก่อน)', 'error');
         return;
       }
-      const targets = state.findBoardPdsWithOp1MatNotReady();
-      if (targets.length === 0) {
-        toast('✅ ไม่มี PD บน Board ที่ Mat ของ Op1 ยังไม่พร้อมผลิต', 'success');
+      const readyIds = state.findReadyBacklogPdIds();
+      if (readyIds.length === 0) {
+        toast('ℹ️ ไม่มี PD ใน Backlog ที่ Mat ของ Op1 พร้อมผลิต', 'info');
         return;
       }
-      const preview = targets.slice(0, 15).map(t => t.woId).join(', ') + (targets.length > 15 ? ` ... และอีก ${targets.length - 15} รายการ` : '');
-      const ok = window.confirm(`พบ ${targets.length} PD บน Board ที่ Mat ของ Op1 ยังไม่พร้อมผลิต\n\n${preview}\n\nย้ายกลับไปไว้ที่ Backlog ทั้งหมดหรือไม่? (กด Undo ได้)`);
+      const total = (state.workOrders || []).length;
+      const ok = window.confirm(`พบ ${readyIds.length} PD (จากทั้งหมด ${total} ใน Backlog) ที่ Mat ของ Op1 พร้อมผลิต\n\nจัดลงแผนทั้งหมดด้วย AI Auto-Optimize หรือไม่?\n(ใช้เวลาสักครู่ และจะมีหน้าสรุปผลให้ตรวจก่อนยืนยัน)`);
       if (!ok) return;
-      const n = state.moveOp1MatNotReadyToBacklog();
-      toast(`📦 ย้าย ${n} PD ที่ Mat Op1 ยังไม่พร้อม กลับไปที่ Backlog แล้ว`, 'success');
+      const aiBtn = document.getElementById('btn-ai-optimize') || btn;
+      // onlyMatReadyOp1 = false: the ready PDs are already selected here; PDs already on the board stay untouched
+      this.runAIOptimizationWithSelection(aiBtn, readyIds, null, false);
     });
   }
 
@@ -984,8 +985,8 @@ class App {
       // Backlog itself, not while browsing the Assembly Set list.
       if (btnAddPd) btnAddPd.style.display = showAssembly ? 'none' : '';
       if (btnImportExcel) btnImportExcel.style.display = showAssembly ? 'none' : '';
-      const btnMoveMat = document.getElementById('btn-move-matnotready-backlog');
-      if (btnMoveMat) btnMoveMat.style.display = showAssembly ? 'none' : 'flex';
+      const btnAddReady = document.getElementById('btn-add-ready-pds-plan');
+      if (btnAddReady) btnAddReady.style.display = showAssembly ? 'none' : 'flex';
       if (showAssembly) renderAssemblySetList(assemblySearchInput ? assemblySearchInput.value : '');
 
       // Force redraw Gantt to resize cards to the newly available planning board width
@@ -2397,9 +2398,11 @@ class App {
       // status; backlog PDs are only pulled onto the board when their Op01 Mat is ready.
       if (onlyMatReadyOp1 && state.storageSync && typeof state.storageSync.fetchPlanMaterials === 'function') {
         button.disabled = true;
-        if (state.ganttController) state.ganttController.showToast('🔄 กำลัง Sync Status Overview ล่าสุดเพื่อตรวจสถานะ Mat....');
+        if (state.ganttController) state.ganttController.showToast('🔄 กำลังตรวจสอบ Status Overview ล่าสุดเพื่อตรวจสถานะ Mat....');
         try {
-          await state.storageSync.fetchPlanMaterials(true);
+          // Only re-downloads/parses the file when a newer one exists (the full reload takes minutes on hosted pages)
+          if (typeof state.storageSync.checkStatusOverviewUpdate === 'function') await state.storageSync.checkStatusOverviewUpdate();
+          else await state.storageSync.fetchPlanMaterials(true);
         } catch (e) {
           console.warn('Status Overview sync before AI optimize failed:', e);
           if (state.ganttController) state.ganttController.showToast('⚠️ Sync Status Overview ไม่สำเร็จ — ใช้ข้อมูล Mat. ที่โหลดไว้ล่าสุดแทน');
@@ -3081,8 +3084,8 @@ class App {
       if (btnAddPd) btnAddPd.style.display = 'none';
       if (btnImportExcel) btnImportExcel.style.display = 'none';
       if (btnViewCompletedPd) btnViewCompletedPd.style.display = 'none';
-      const btnMoveMatA = document.getElementById('btn-move-matnotready-backlog');
-      if (btnMoveMatA) btnMoveMatA.style.display = 'none';
+      const btnAddReadyA = document.getElementById('btn-add-ready-pds-plan');
+      if (btnAddReadyA) btnAddReadyA.style.display = 'none';
       if (sidebarFooter) sidebarFooter.style.display = 'none';
       if (backlogTabContent) {
         backlogTabContent.classList.add('hidden');
@@ -3113,8 +3116,8 @@ class App {
         if (btnAddPd) btnAddPd.style.display = '';
         if (btnImportExcel) btnImportExcel.style.display = '';
         if (btnViewCompletedPd) btnViewCompletedPd.style.display = '';
-        const btnMoveMatB = document.getElementById('btn-move-matnotready-backlog');
-        if (btnMoveMatB) btnMoveMatB.style.display = 'flex';
+        const btnAddReadyB = document.getElementById('btn-add-ready-pds-plan');
+        if (btnAddReadyB) btnAddReadyB.style.display = 'flex';
         if (backlogTabContent) {
           backlogTabContent.classList.remove('hidden');
           backlogTabContent.style.display = 'flex';
