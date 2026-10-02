@@ -661,14 +661,27 @@ export class StorageSyncManager {
         }
 
         const fetchUrl = endpoint.includes('?') ? `${endpoint}&t=${Date.now()}` : `${endpoint}?t=${Date.now()}`;
-        const response = await fetch(fetchUrl, {
-          method: 'GET',
-          redirect: 'follow',
-          cache: 'no-cache'
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+        // Google Apps Script web apps occasionally answer 404/5xx (or drop the request) on a cold start:
+        // retry a couple of times before reporting a failure
+        let response = null;
+        let lastErr = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            response = await fetch(fetchUrl, {
+              method: 'GET',
+              redirect: 'follow',
+              cache: 'no-cache'
+            });
+            if (response.ok) break;
+            lastErr = new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+          } catch (netErr) {
+            lastErr = netErr;
+            response = null;
+          }
+          if (attempt < 2) await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+        }
+        if (!response || !response.ok) {
+          throw lastErr || new Error('ไม่สามารถเชื่อมต่อ Cloud Endpoint ได้');
         }
 
         const rawText = await response.text();
