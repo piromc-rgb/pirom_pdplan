@@ -108,6 +108,7 @@ class App {
     this.initCompletedPdList();
     this.initGanttLabelColumnResize();
     this.initSidebarLeftResize();
+    this.initMoveMatNotReadyButton();
     this.initSidebarRightResize();
 
     // Default Gantt view: Time Scale Fit (start day left-aligned)
@@ -511,6 +512,35 @@ class App {
       document.body.style.userSelect = 'none';
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
+    });
+  }
+
+  // Backlog button: takes PDs off the board whose Op1 Mat is not ready and returns them to the Backlog.
+  initMoveMatNotReadyButton() {
+    const btn = document.getElementById('btn-move-matnotready-backlog');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const toast = (msg, type) => state.ganttController?.showToast?.(msg, type);
+      const mode = state.storageSync && typeof state.storageSync.getUserMode === 'function' ? state.storageSync.getUserMode() : 'plan';
+      if (mode !== 'plan') {
+        toast('⚠️ กรุณาสลับเป็นโหมดวางแผนก่อน จึงจะย้ายงานกลับ Backlog ได้', 'error');
+        return;
+      }
+      const hasMats = state.planMaterials && Object.keys(state.planMaterials).length > 0;
+      if (!hasMats) {
+        toast('⚠️ ยังไม่มีข้อมูล Mat. จาก Status Overview (กด 🔄 ที่หัวหน้าจอเพื่อโหลดก่อน)', 'error');
+        return;
+      }
+      const targets = state.findBoardPdsWithOp1MatNotReady();
+      if (targets.length === 0) {
+        toast('✅ ไม่มี PD บน Board ที่ Mat ของ Op1 ยังไม่พร้อมผลิต', 'success');
+        return;
+      }
+      const preview = targets.slice(0, 15).map(t => t.woId).join(', ') + (targets.length > 15 ? ` ... และอีก ${targets.length - 15} รายการ` : '');
+      const ok = window.confirm(`พบ ${targets.length} PD บน Board ที่ Mat ของ Op1 ยังไม่พร้อมผลิต\n\n${preview}\n\nย้ายกลับไปไว้ที่ Backlog ทั้งหมดหรือไม่? (กด Undo ได้)`);
+      if (!ok) return;
+      const n = state.moveOp1MatNotReadyToBacklog();
+      toast(`📦 ย้าย ${n} PD ที่ Mat Op1 ยังไม่พร้อม กลับไปที่ Backlog แล้ว`, 'success');
     });
   }
 
@@ -954,6 +984,8 @@ class App {
       // Backlog itself, not while browsing the Assembly Set list.
       if (btnAddPd) btnAddPd.style.display = showAssembly ? 'none' : '';
       if (btnImportExcel) btnImportExcel.style.display = showAssembly ? 'none' : '';
+      const btnMoveMat = document.getElementById('btn-move-matnotready-backlog');
+      if (btnMoveMat) btnMoveMat.style.display = showAssembly ? 'none' : 'flex';
       if (showAssembly) renderAssemblySetList(assemblySearchInput ? assemblySearchInput.value : '');
 
       // Force redraw Gantt to resize cards to the newly available planning board width
@@ -3049,6 +3081,8 @@ class App {
       if (btnAddPd) btnAddPd.style.display = 'none';
       if (btnImportExcel) btnImportExcel.style.display = 'none';
       if (btnViewCompletedPd) btnViewCompletedPd.style.display = 'none';
+      const btnMoveMatA = document.getElementById('btn-move-matnotready-backlog');
+      if (btnMoveMatA) btnMoveMatA.style.display = 'none';
       if (sidebarFooter) sidebarFooter.style.display = 'none';
       if (backlogTabContent) {
         backlogTabContent.classList.add('hidden');
@@ -3079,6 +3113,8 @@ class App {
         if (btnAddPd) btnAddPd.style.display = '';
         if (btnImportExcel) btnImportExcel.style.display = '';
         if (btnViewCompletedPd) btnViewCompletedPd.style.display = '';
+        const btnMoveMatB = document.getElementById('btn-move-matnotready-backlog');
+        if (btnMoveMatB) btnMoveMatB.style.display = 'flex';
         if (backlogTabContent) {
           backlogTabContent.classList.remove('hidden');
           backlogTabContent.style.display = 'flex';

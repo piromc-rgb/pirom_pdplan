@@ -1237,6 +1237,42 @@ class CentralState {
     return this.scheduleSingleStep(stepId, machine, startHour);
   }
 
+  // PDs currently on the board whose Op01 raw material is not ready ("ไม่พร้อมผลิต"). Completed PDs and
+  // PDs of locked projects are left alone (same rule AI Auto-Optimize uses when it evicts them).
+  // Returns [{ woId, jobIds, partName }].
+  findBoardPdsWithOp1MatNotReady() {
+    const isFixed = (j) => j.status === 'Completed' || Boolean(this.lockedProjects && this.lockedProjects[j.project || 'General']);
+    const byWo = new Map();
+    (this.scheduledJobs || []).forEach(j => {
+      const woId = j.woId || j.id;
+      if (!byWo.has(woId)) byWo.set(woId, []);
+      byWo.get(woId).push(j);
+    });
+    const result = [];
+    byWo.forEach((jobs, woId) => {
+      if (jobs.some(isFixed)) return;
+      const op1 = Math.min(...jobs.map(j => Number(j.stepNum) || 10));
+      const mats = this.getStepMaterialsList(woId, op1) || [];
+      if (mats.some(m => m.status && m.status.tone === 'notready')) {
+        result.push({ woId, jobIds: jobs.map(j => j.id), partName: jobs[0].partName || '' });
+      }
+    });
+    return result;
+  }
+
+  // Takes those PDs off the board and puts every one of their steps back into the Backlog (one undo step).
+  moveOp1MatNotReadyToBacklog() {
+    const targets = this.findBoardPdsWithOp1MatNotReady();
+    if (targets.length === 0) return 0;
+    this.saveStateToHistory();
+    targets.forEach(t => t.jobIds.forEach(id => this.executeUnscheduleJob(id)));
+    this.savePlanToFile();
+    this.saveWorkOrdersToFile();
+    this.notify();
+    this.dispatchHistoryEvent();
+    return targets.length;
+  }
+
   // Unschedule a specific step (returns it back to parent backlog WO)
   unscheduleJob(stepId) {
     this.saveStateToHistory();
