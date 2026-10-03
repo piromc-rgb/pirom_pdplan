@@ -1144,6 +1144,9 @@ export class StorageSyncManager {
         wo.steps = wo.steps.filter(step => !this.state.isStepIdentityRemoved(wo.id, step.machine, step.name));
       });
       this.state.deduplicateAllWorkOrders();
+      // The completed-PD list may arrive after Plan + Mat was loaded: default those PDs to Closed in the imported data
+      if (typeof this.state.markCompletedPdsClosed === 'function') this.state.markCompletedPdsClosed();
+      this.state.workOrders = (this.state.workOrders || []).filter(wo => !this.state.isPdClosedForPlanning(wo.id));
 
       if (this.state.ganttController && this.state.scheduledJobs.length > 0) {
         this.state.ganttController.fitTasks(this.state.scheduledJobs);
@@ -2264,6 +2267,9 @@ export class StorageSyncManager {
   }
 
   updateAssemblyTreeAfterMaterials() {
+    // Whatever path loaded Plan + Mat (cache / Cloud / direct parse): completed-list PDs default to Closed
+    if (this.state && typeof this.state.markCompletedPdsClosed === 'function') this.state.markCompletedPdsClosed();
+    if (this.state && typeof this.state.purgeClosedPdsFromBacklog === 'function') this.state.purgeClosedPdsFromBacklog();
     if (
       (!this.state.pdOpStatusMap || Object.keys(this.state.pdOpStatusMap).length === 0) &&
       ((this.state.dwgToPdMap && Object.keys(this.state.dwgToPdMap).length > 0) ||

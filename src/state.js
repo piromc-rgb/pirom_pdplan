@@ -1244,6 +1244,7 @@ class CentralState {
     (this.workOrders || []).forEach(wo => {
       if (!wo.steps || wo.steps.length === 0) return;
       if (this.isProjectLocked(wo.project)) return;
+      if (this.isPdClosedForPlanning(wo.id)) return;
       const op1 = Math.min(...wo.steps.map(st => Number(st.stepNum) || 10));
       const mats = this.getStepMaterialsList(wo.id, op1) || [];
       if (mats.some(m => m.status && m.status.tone === 'notready')) return;
@@ -2215,6 +2216,45 @@ class CentralState {
     return false;
   }
 
+  // A PD is "Closed" for planning when it is in the completed-PD list or its imported Order Status is Closed.
+  // Closed PDs never stay in the Backlog and are never planned onto the Board.
+  isPdClosedForPlanning(pdId) {
+    if (!pdId) return false;
+    return String(this.getPdOrderStatus(pdId) || '').trim().toLowerCase() === 'closed';
+  }
+
+  // Drops Closed PDs from the Backlog. Returns the number removed (and notifies listeners when > 0).
+  purgeClosedPdsFromBacklog() {
+    const before = (this.workOrders || []).length;
+    if (before === 0) return 0;
+    this.workOrders = this.workOrders.filter(wo => !this.isPdClosedForPlanning(wo.id));
+    const removed = before - this.workOrders.length;
+    if (removed > 0) this.notify();
+    return removed;
+  }
+
+  // Import default: a PD that is in the completed-PD list is "Closed" in the imported Status Overview data
+  // too (Plan + Mat rows and Dwg->PD map), so every view that reads the imported Order Status shows
+  // Closed / เสร็จสิ้น without having to check the list again. Returns the number of entries changed.
+  markCompletedPdsClosed() {
+    const hist = this.completedPdHistory || {};
+    if (Object.keys(hist).length === 0) return 0;
+    let changed = 0;
+    Object.keys(this.planMaterials || {}).forEach(pdId => {
+      if (!hist[pdId]) return;
+      (this.planMaterials[pdId] || []).forEach(r => {
+        if (String(r.orderStatus || '').trim().toLowerCase() !== 'closed') { r.orderStatus = 'Closed'; changed++; }
+      });
+    });
+    Object.values(this.dwgToPdMap || {}).forEach(entry => {
+      if (entry && hist[entry.pdId] && String(entry.orderStatus || '').trim().toLowerCase() !== 'closed') {
+        entry.orderStatus = 'Closed';
+        changed++;
+      }
+    });
+    return changed;
+  }
+
   isPdInCompletedHistory(pdId) {
     return Boolean(pdId && this.completedPdHistory[pdId]);
   }
@@ -2845,6 +2885,24 @@ class CentralState {
     }
   }
 
+  // Order Status of a PD as imported from the Status Overview: completed-PD list first, then the
+  // "Plan + Mat" rows (PD level, present even when the PD is missing from the Data sheet's Dwg map),
+  // then the Data sheet entries. Returns '' when the PD is unknown.
+  getPdOrderStatus(pdId) {
+    if (!pdId) return '';
+    if (typeof this.isPdInCompletedHistory === 'function' && this.isPdInCompletedHistory(pdId)) return 'Closed';
+    const rows = (this.planMaterials || {})[pdId];
+    if (Array.isArray(rows)) {
+      const statuses = rows.map(r => String(r.orderStatus || '').trim()).filter(Boolean);
+      if (statuses.length > 0) return statuses.find(st => st.toLowerCase() === 'closed') || statuses[0];
+    }
+    const map = this.dwgToPdMap || {};
+    for (const dwg of Object.keys(map)) {
+      if (map[dwg] && map[dwg].pdId === pdId && map[dwg].orderStatus) return String(map[dwg].orderStatus).trim();
+    }
+    return '';
+  }
+
   getChildPdInfo(matCode) {
     if (!matCode) return null;
     const trimmedMat = String(matCode).trim();
@@ -2897,7 +2955,14 @@ class CentralState {
 
     let orderStatus = info?.orderStatus || '';
     if (isCompletedHistory) orderStatus = 'Closed';
-    else if (!orderStatus) {
+    else if (!orderStatus || info?.pdId !== childPdId) {
+      // Child PD found only via the live plan/backlog (or not in the Dwg map): ask the imported Status Overview.
+      // A PD whose Order Status is Closed shows "Closed" / "เสร็จสิ้น" by default.
+      // (other statuses keep the previous Scheduled / Backlog / Active labels)
+      const importedStatus = this.getPdOrderStatus(childPdId);
+      if (importedStatus && importedStatus.toLowerCase() === 'closed') orderStatus = 'Closed';
+    }
+    if (!isCompletedHistory && !orderStatus) {
       if (allJobsForPd.length > 0) orderStatus = 'Scheduled';
       else if (woForPd) orderStatus = 'Backlog';
       else orderStatus = 'Active';

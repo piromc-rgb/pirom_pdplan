@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V2.1 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V2.2 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-DQOUIFrs.js"></script>
+    <script type="module" crossorigin src="./assets/index-YeqOhaFp.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-T1l8V0Oo.css">
   </head>
   <body>
@@ -1094,7 +1094,7 @@
                 <label for="excel-opt-incomplete-only" style="font-size: 10px; color: var(--text-primary); cursor: pointer; user-select: none;">เอาเฉพาะ Work Center ที่ยังไม่ Complete (คอลัมน์ Operation Status ไม่ใช่ Complete)</label>
               </div>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <input type="checkbox" id="excel-opt-unclosed-only" checked style="cursor: pointer; width: auto; margin: 0;">
+                <input type="checkbox" id="excel-opt-unclosed-only" checked disabled title="บังคับเสมอ: PD ที่ Closed จะไม่ถูกนำเข้า Backlog" style="cursor: not-allowed; width: auto; margin: 0;">
                 <label for="excel-opt-unclosed-only" style="font-size: 10px; color: var(--text-primary); cursor: pointer; user-select: none;">เอาเฉพาะ Order Status ที่ยังไม่ Close (คอลัมน์ Order Status ไม่ใช่ Closed)</label>
               </div>
             </div>

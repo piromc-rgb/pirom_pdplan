@@ -123,7 +123,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.1';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.2';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -2424,7 +2424,7 @@ class App {
     const now = startDate instanceof Date && !isNaN(startDate.getTime()) ? startDate : new Date();
     const nowWorkingHour = state.dateToWorkingHour(now);
 
-    let backlogToOptimize = state.workOrders.filter(wo => selectedWOIds.includes(wo.id));
+    let backlogToOptimize = state.workOrders.filter(wo => selectedWOIds.includes(wo.id) && !state.isPdClosedForPlanning(wo.id));
     let scheduledJobsForOptimizer = state.scheduledJobs;
     // WOs evicted from the board back to the backlog because their Op01 Mat isn't ready
     // (only populated when the "วางแผนเฉพาะงานที่ Mat พร้อมผลิต (Op01)" option is on).

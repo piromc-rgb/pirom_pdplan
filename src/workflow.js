@@ -562,6 +562,11 @@ export class WorkflowController {
   runPDSimulation(woId) {
     const wo = this.state.workOrders.find(w => w.id === woId);
     if (!wo) return;
+    if (this.state.isPdClosedForPlanning(woId)) {
+      this.state.ganttController?.showToast?.(`⛔ ${woId} มีสถานะ Closed (ผลิตเสร็จแล้ว) ไม่สามารถวางแผนลง Board ได้`, 'error');
+      this.state.purgeClosedPdsFromBacklog();
+      return;
+    }
 
     // Parent-Child identification
     const childMatch = woId.match(/^(.*)-(\d+)$/);
@@ -1166,7 +1171,7 @@ export class WorkflowController {
     const priorityFilter = document.getElementById('new-pd-excel-priority')?.value.trim();
     const projectFilter = document.getElementById('new-pd-excel-project')?.value.trim();
     const incompleteOnly = document.getElementById('excel-opt-incomplete-only')?.checked;
-    const unclosedOnly = document.getElementById('excel-opt-unclosed-only')?.checked;
+    const unclosedOnly = true; // Closed PDs are never imported into the Backlog
     
     if (typeof XLSX === 'undefined') {
       alert('ไม่สามารถโหลดไลบรารี SheetJS (XLSX) ได้สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต');
@@ -1821,6 +1826,7 @@ export class WorkflowController {
     }
     this.state.planMaterials = planMaterials;
     this.state.pdOpStatusMap = pdOpStatusMap;
+    if (typeof this.state.markCompletedPdsClosed === 'function') this.state.markCompletedPdsClosed();
     if (typeof this.state.syncOverviewStatusToJobs === 'function') {
       this.state.syncOverviewStatusToJobs();
     }
