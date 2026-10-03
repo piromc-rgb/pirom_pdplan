@@ -123,7 +123,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.2';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.3';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -2049,6 +2049,17 @@ class App {
       });
     }
 
+    // Gear option: a PD with open child PDs stays in the Backlog until all of them are Closed (default on)
+    const toggleChildPdClosed = document.getElementById('toggle-child-pd-closed');
+    if (toggleChildPdClosed) {
+      toggleChildPdClosed.checked = state.requireChildPdsClosed !== false;
+      toggleChildPdClosed.addEventListener('change', () => {
+        state.requireChildPdsClosed = toggleChildPdClosed.checked;
+        state.savePlanToFile();
+        state.notify();
+      });
+    }
+
     const toggleCloudSync = document.getElementById('toggle-cloud-sync');
     if (toggleCloudSync) {
       const isSyncEnabled = this.storageSync ? this.storageSync.isAutoSyncEnabled() : (localStorage.getItem('PDPLAN_AUTO_SYNC') !== 'false');
@@ -2148,6 +2159,7 @@ class App {
       if (toggleMachineOffload) toggleMachineOffload.checked = state.allowMachineOffload !== false;
       if (toggleGroupSameItem) toggleGroupSameItem.checked = state.groupSameItem !== false;
       if (toggleMatReadyOnly) toggleMatReadyOnly.checked = state.onlyScheduleMatReadyOp1 !== false;
+      if (toggleChildPdClosed) toggleChildPdClosed.checked = state.requireChildPdsClosed !== false;
     };
 
     state.subscribe(() => {
@@ -2425,6 +2437,12 @@ class App {
     const nowWorkingHour = state.dateToWorkingHour(now);
 
     let backlogToOptimize = state.workOrders.filter(wo => selectedWOIds.includes(wo.id) && !state.isPdClosedForPlanning(wo.id));
+    // Option: PDs with child PDs that are not Closed yet stay in the Backlog
+    const waitingForChildren = backlogToOptimize.filter(wo => state.isPdBlockedByChildren(wo.id));
+    if (waitingForChildren.length > 0) {
+      backlogToOptimize = backlogToOptimize.filter(wo => !state.isPdBlockedByChildren(wo.id));
+      state.ganttController?.showToast?.(`⏳ ${waitingForChildren.length} PD ยังมี PD ลูกที่ไม่ Closed จึงคงอยู่ใน Backlog`, 'info');
+    }
     let scheduledJobsForOptimizer = state.scheduledJobs;
     // WOs evicted from the board back to the backlog because their Op01 Mat isn't ready
     // (only populated when the "วางแผนเฉพาะงานที่ Mat พร้อมผลิต (Op01)" option is on).

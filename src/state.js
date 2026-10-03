@@ -75,6 +75,7 @@ class CentralState {
     // Strategy option: group same item (DWG No. / Part Name) together across different PDs
     // to run consecutively / simultaneously on machines, reducing setup changeovers.
     this.groupSameItem = true;
+    this.requireChildPdsClosed = true; // Gear option: plan a PD only after all its child PDs are Closed
 
     // Whether the Assembly Set list (left sidebar) only shows assemblies that still
     // have at least one job passing the current Priority/Project/Customer/Work
@@ -467,6 +468,7 @@ class CentralState {
   // Notify all subscribers
   notify() {
     this._oeeCache = null;
+    this._childBlockCache = null;
     this.subscribers.forEach(callback => callback(this));
     
     // Debounced save to Temp folder (pd.md and Plan.json in OS Temp) when in EDIT mode
@@ -1170,7 +1172,15 @@ class CentralState {
       }
     }
 
-    
+        if (isNewTask && this.isPdBlockedByChildren(targetWoId)) {
+      const kids = this.getOpenChildPdsForPlanning(targetWoId).map(c => c.pdId);
+      const event = new CustomEvent('scheduling-blocked', {
+        detail: { stepId, error: `${targetWoId} ยังมี PD ลูกที่ไม่ Closed (${kids.slice(0, 4).join(', ')}${kids.length > 4 ? ' ...' : ''}) ต้อง Closed ทั้งหมดก่อนจึงวางแผนลง Board ได้` }
+      });
+      window.dispatchEvent(event);
+      return false;
+    }
+
     // Enforce no scheduling in the past
     const nowWorkingHour = this.dateToWorkingHour(new Date());
     if (startHour < nowWorkingHour - 0.01) {
@@ -1245,6 +1255,7 @@ class CentralState {
       if (!wo.steps || wo.steps.length === 0) return;
       if (this.isProjectLocked(wo.project)) return;
       if (this.isPdClosedForPlanning(wo.id)) return;
+      if (this.isPdBlockedByChildren(wo.id)) return;
       const op1 = Math.min(...wo.steps.map(st => Number(st.stepNum) || 10));
       const mats = this.getStepMaterialsList(wo.id, op1) || [];
       if (mats.some(m => m.status && m.status.tone === 'notready')) return;
@@ -2216,6 +2227,60 @@ class CentralState {
     return false;
   }
 
+  // Child PDs that are still open for a PD about to be planned: internal sub-PDs (PDxxxx-1, -2 ...) and the
+  // sub-assemblies listed as 14-char materials on its Op1 (step 10). "Closed" = completed list / Order Status
+  // Closed, or a sub-PD whose scheduled jobs are all completed. Returns [{ pdId, kind }].
+  getOpenChildPdsForPlanning(woId) {
+    if (!woId) return [];
+    if (!this._childBlockCache) this._childBlockCache = new Map();
+    if (this._childBlockCache.has(woId)) return this._childBlockCache.get(woId);
+
+    const open = [];
+    const seen = new Set();
+    const isChildDone = (childId) => {
+      if (this.isPdClosedForPlanning(childId)) return true;
+      const inBacklog = (this.workOrders || []).some(w => w.id === childId && (w.steps || []).length > 0);
+      if (inBacklog) return false;
+      const jobs = (this.scheduledJobs || []).filter(j => (j.woId || j.id) === childId);
+      return jobs.length > 0 && jobs.every(j => j.status === 'Completed');
+    };
+
+    // 1. Internal sub-PDs: PDxxxx-n for this PD (backlog or board)
+    const childIds = new Set();
+    (this.workOrders || []).forEach(w => { const m = String(w.id).match(/^(.*)-(\d+)$/); if (m && m[1] === woId) childIds.add(w.id); });
+    (this.scheduledJobs || []).forEach(j => { const id = j.woId || j.id; const m = String(id).match(/^(.*)-(\d+)$/); if (m && m[1] === woId) childIds.add(id); });
+    childIds.forEach(childId => {
+      if (!isChildDone(childId)) { open.push({ pdId: childId, kind: 'sub' }); seen.add(childId); }
+    });
+
+    // 2. Sub-assemblies needed at Op1: 14-char material codes -> their own PD
+    const rows = (this.planMaterials || {})[woId];
+    if (Array.isArray(rows) && rows.length > 0) {
+      const wo = (this.workOrders || []).find(w => w.id === woId);
+      const stepNums = wo && (wo.steps || []).length > 0
+        ? wo.steps.map(st => Number(st.stepNum) || 10)
+        : rows.map(r => Number(r.stepNum) || 10);
+      const op1 = Math.min(...stepNums);
+      const mats = [...new Set(rows.filter(r => Number(r.stepNum) === op1).map(r => String(r.mat || '').trim()).filter(m => m.length === 14))];
+      mats.forEach(mat => {
+        const info = this.getChildPdInfo(mat);
+        if (info && info.found && !info.isRawMat && !info.isClosed && info.pdId && info.pdId !== woId && !seen.has(info.pdId)) {
+          open.push({ pdId: info.pdId, kind: 'mat', mat });
+          seen.add(info.pdId);
+        }
+      });
+    }
+
+    this._childBlockCache.set(woId, open);
+    return open;
+  }
+
+  // Option (Gear menu, default on): a PD with open child PDs stays in the Backlog until every child is Closed.
+  isPdBlockedByChildren(woId) {
+    if (this.requireChildPdsClosed === false) return false;
+    return this.getOpenChildPdsForPlanning(woId).length > 0;
+  }
+
   // A PD is "Closed" for planning when it is in the completed-PD list or its imported Order Status is Closed.
   // Closed PDs never stay in the Backlog and are never planned onto the Board.
   isPdClosedForPlanning(pdId) {
@@ -2578,6 +2643,7 @@ class CentralState {
       timelineOffset: this.timelineOffset,
       activeScale: this.activeScale,
       groupSameItem: this.groupSameItem !== false,
+      requireChildPdsClosed: this.requireChildPdsClosed !== false,
       completedPdHistory: this.completedPdHistory || {},
       favoritePDs: this.favoritePDs || {},
       pdMemos: this.pdMemos || {},
@@ -2828,6 +2894,7 @@ class CentralState {
       this.assemblyLinks = data.assemblyLinks || [];
       this.lockedProjects = data.lockedProjects || {};
       if (data.groupSameItem !== undefined) this.groupSameItem = Boolean(data.groupSameItem);
+      if (data.requireChildPdsClosed !== undefined) this.requireChildPdsClosed = Boolean(data.requireChildPdsClosed);
       if (data.priorityColors) this.priorityColors = data.priorityColors;
       if (data.projectColors) this.projectColors = data.projectColors;
       if (data.customerColors) this.customerColors = data.customerColors;

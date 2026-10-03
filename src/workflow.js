@@ -12,6 +12,7 @@ export class WorkflowController {
     // Plan + Mat data (re)loaded: refresh the Mat. readiness badges on the backlog cards
     if (typeof window !== 'undefined') {
       window.addEventListener('plan-materials-updated', () => {
+        this.state._childBlockCache = null; // child-PD readiness depends on the freshly loaded Plan + Mat data
         clearTimeout(this._matBadgeTimer);
         this._matBadgeTimer = setTimeout(() => this.render(), 150);
       });
@@ -366,9 +367,17 @@ export class WorkflowController {
           }
         } catch (e) { matBadgeHtml = ''; }
 
+        let childWaitBadgeHtml = '';
+        try {
+          if (this.state.isPdBlockedByChildren(wo.id)) {
+            const kids = this.state.getOpenChildPdsForPlanning(wo.id).map(c => c.pdId);
+            childWaitBadgeHtml = `<span title="รอ PD ลูกให้ Closed ก่อน: ${kids.join(', ')}" style="font-size:8.5px;font-weight:800;padding:1px 6px;border-radius:4px;white-space:nowrap;border:1px solid #b45309;color:#b45309;background:rgba(245,158,11,0.15);">⏳ รอ PD ลูก (${kids.length})</span>`;
+          }
+        } catch (e) { childWaitBadgeHtml = ''; }
+
         backlogCard.innerHTML = `
           <div class="card-top" style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap;"><span class="card-id" style="cursor: pointer;" title="คลิกเพื่อแก้ไขข้อมูล Production Order นี้">${wo.id}</span>${matBadgeHtml}</span>
+            <span style="display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap;"><span class="card-id" style="cursor: pointer;" title="คลิกเพื่อแก้ไขข้อมูล Production Order นี้">${wo.id}</span>${matBadgeHtml}${childWaitBadgeHtml}</span>
             <div style="display: flex; align-items: center; gap: 6px;">
               ${indicatorHtml}
               <button class="btn-edit-pd" data-id="${wo.id}" title="แก้ไขข้อมูล Production Order นี้" style="background: none; border: none; color: var(--accent-teal); cursor: pointer; padding: 2px; display: flex; align-items: center; justify-content: center; font-size: 11px; transition: opacity 0.2s;">
@@ -565,6 +574,11 @@ export class WorkflowController {
     if (this.state.isPdClosedForPlanning(woId)) {
       this.state.ganttController?.showToast?.(`⛔ ${woId} มีสถานะ Closed (ผลิตเสร็จแล้ว) ไม่สามารถวางแผนลง Board ได้`, 'error');
       this.state.purgeClosedPdsFromBacklog();
+      return;
+    }
+    if (this.state.isPdBlockedByChildren(woId)) {
+      const kids = this.state.getOpenChildPdsForPlanning(woId).map(c => c.pdId);
+      this.state.ganttController?.showToast?.(`⏳ ${woId} ยังมี PD ลูกที่ไม่ Closed (${kids.slice(0, 4).join(', ')}${kids.length > 4 ? ' ...' : ''}) จึงยังวางแผนลง Board ไม่ได้ (ปิดเงื่อนไขนี้ได้ที่ Option ⚙)`, 'error');
       return;
     }
 
