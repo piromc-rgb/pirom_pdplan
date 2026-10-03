@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V2.3 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V2.4 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-CZUF0-zp.js"></script>
+    <script type="module" crossorigin src="./assets/index-CT44J4rf.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-T1l8V0Oo.css">
   </head>
   <body>
@@ -294,6 +294,9 @@
             </button>
             <button id="btn-add-ready-pds-plan" class="btn" title="จัดลงแผนด้วย AI ทุก PD ใน Backlog ที่ Mat ของ Op1 พร้อมผลิต" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(21, 128, 61, 0.1); border: 1px solid #15803d; color: #15803d; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 4px;">
               <span>➕ Add PD ที่พร้อมผลิตทั้งหมดลงแผน</span>
+            </button>
+            <button id="btn-move-waiting-children-backlog" class="btn" title="ย้าย PD บน Board ที่ยังมี PD ลูกไม่ Closed กลับมาไว้ที่ Backlog" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(180, 83, 9, 0.1); border: 1px solid #b45309; color: #b45309; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 4px;">
+              <span>⏳ ย้าย PD ที่รอ PD ลูก กลับ Backlog</span>
             </button>
           </div>
           

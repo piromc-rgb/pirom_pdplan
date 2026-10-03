@@ -2275,6 +2275,40 @@ class CentralState {
     return open;
   }
 
+  // PDs already on the Board that still wait for open child PDs (rule: plan a PD only after all its child
+  // PDs are Closed). Skips PDs that are Closed/finished, have any completed job, or belong to a locked project.
+  // Returns [{ woId, jobIds, children }].
+  findBoardPdsWaitingForChildren() {
+    if (this.requireChildPdsClosed === false) return [];
+    const byWo = new Map();
+    (this.scheduledJobs || []).forEach(j => {
+      const woId = j.woId || j.id;
+      if (!byWo.has(woId)) byWo.set(woId, []);
+      byWo.get(woId).push(j);
+    });
+    const result = [];
+    byWo.forEach((jobs, woId) => {
+      if (this.isPdClosedForPlanning(woId)) return;
+      if (jobs.some(j => j.status === 'Completed' || (this.lockedProjects && this.lockedProjects[j.project || 'General']))) return;
+      const children = this.getOpenChildPdsForPlanning(woId);
+      if (children.length > 0) result.push({ woId, jobIds: jobs.map(j => j.id), children: children.map(c => c.pdId) });
+    });
+    return result;
+  }
+
+  // Takes those PDs off the Board and puts all their steps back into the Backlog (one undo step).
+  moveWaitingPdsBackToBacklog() {
+    const targets = this.findBoardPdsWaitingForChildren();
+    if (targets.length === 0) return 0;
+    this.saveStateToHistory();
+    targets.forEach(t => t.jobIds.forEach(id => this.executeUnscheduleJob(id)));
+    this.savePlanToFile();
+    this.saveWorkOrdersToFile();
+    this.notify();
+    this.dispatchHistoryEvent();
+    return targets.length;
+  }
+
   // Option (Gear menu, default on): a PD with open child PDs stays in the Backlog until every child is Closed.
   isPdBlockedByChildren(woId) {
     if (this.requireChildPdsClosed === false) return false;

@@ -109,6 +109,7 @@ class App {
     this.initGanttLabelColumnResize();
     this.initSidebarLeftResize();
     this.initAddReadyPdsButton();
+    this.initMoveWaitingChildrenButton();
     this.initSidebarRightResize();
 
     // Default Gantt view: Time Scale Fit (start day left-aligned)
@@ -123,7 +124,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.3';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.4';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -512,6 +513,38 @@ class App {
       document.body.style.userSelect = 'none';
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
+    });
+  }
+
+  // Backlog button: takes PDs off the Board whose child PDs are not all Closed yet and returns them to the Backlog.
+  initMoveWaitingChildrenButton() {
+    const btn = document.getElementById('btn-move-waiting-children-backlog');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const toast = (msg, type) => state.ganttController?.showToast?.(msg, type);
+      const mode = state.storageSync && typeof state.storageSync.getUserMode === 'function' ? state.storageSync.getUserMode() : 'plan';
+      if (mode !== 'plan') {
+        toast('⚠️ กรุณาสลับเป็นโหมดวางแผนก่อน จึงจะย้ายงานกลับ Backlog ได้', 'error');
+        return;
+      }
+      if (state.requireChildPdsClosed === false) {
+        toast('ℹ️ ตัวเลือก "รอ PD ลูก Closed ก่อนวางแผนลง Board" ปิดอยู่ (เปิดได้ที่ Option ⚙)', 'info');
+        return;
+      }
+      if (!state.planMaterials || Object.keys(state.planMaterials).length === 0) {
+        toast('⚠️ ยังไม่มีข้อมูล Mat. จาก Status Overview (กด 🔄 ที่หัวหน้าจอเพื่อโหลดก่อน)', 'error');
+        return;
+      }
+      const targets = state.findBoardPdsWaitingForChildren();
+      if (targets.length === 0) {
+        toast('✅ ไม่มี PD บน Board ที่ยังรอ PD ลูก Closed', 'success');
+        return;
+      }
+      const preview = targets.slice(0, 15).map(t => `${t.woId} (ลูก ${t.children.length})`).join(', ') + (targets.length > 15 ? ` ... และอีก ${targets.length - 15} รายการ` : '');
+      const ok = window.confirm(`พบ ${targets.length} PD บน Board ที่ยังมี PD ลูกไม่ Closed\n\n${preview}\n\nย้ายกลับไปไว้ที่ Backlog ทั้งหมดหรือไม่? (กด Undo ได้)`);
+      if (!ok) return;
+      const n = state.moveWaitingPdsBackToBacklog();
+      toast(`⏳ ย้าย ${n} PD ที่รอ PD ลูก กลับไปที่ Backlog แล้ว`, 'success');
     });
   }
 
@@ -987,6 +1020,8 @@ class App {
       if (btnImportExcel) btnImportExcel.style.display = showAssembly ? 'none' : '';
       const btnAddReady = document.getElementById('btn-add-ready-pds-plan');
       if (btnAddReady) btnAddReady.style.display = showAssembly ? 'none' : 'flex';
+      const btnMoveWait = document.getElementById('btn-move-waiting-children-backlog');
+      if (btnMoveWait) btnMoveWait.style.display = showAssembly ? 'none' : 'flex';
       if (showAssembly) renderAssemblySetList(assemblySearchInput ? assemblySearchInput.value : '');
 
       // Force redraw Gantt to resize cards to the newly available planning board width
@@ -3104,6 +3139,8 @@ class App {
       if (btnViewCompletedPd) btnViewCompletedPd.style.display = 'none';
       const btnAddReadyA = document.getElementById('btn-add-ready-pds-plan');
       if (btnAddReadyA) btnAddReadyA.style.display = 'none';
+      const btnMoveWaitA = document.getElementById('btn-move-waiting-children-backlog');
+      if (btnMoveWaitA) btnMoveWaitA.style.display = 'none';
       if (sidebarFooter) sidebarFooter.style.display = 'none';
       if (backlogTabContent) {
         backlogTabContent.classList.add('hidden');
@@ -3136,6 +3173,8 @@ class App {
         if (btnViewCompletedPd) btnViewCompletedPd.style.display = '';
         const btnAddReadyB = document.getElementById('btn-add-ready-pds-plan');
         if (btnAddReadyB) btnAddReadyB.style.display = 'flex';
+        const btnMoveWaitB = document.getElementById('btn-move-waiting-children-backlog');
+        if (btnMoveWaitB) btnMoveWaitB.style.display = 'flex';
         if (backlogTabContent) {
           backlogTabContent.classList.remove('hidden');
           backlogTabContent.style.display = 'flex';
