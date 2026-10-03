@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V2.4 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V2.5 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-CT44J4rf.js"></script>
+    <script type="module" crossorigin src="./assets/index-Cm_4GOfz.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-T1l8V0Oo.css">
   </head>
   <body>
@@ -283,21 +283,35 @@
               <h3 id="backlog-header-title" style="font-size: 12px; font-family: var(--font-display); color: var(--accent-teal); text-transform: uppercase; margin: 0;">PD BACKLOG</h3>
               <button id="btn-collapse-backlog-x" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass);" title="Collapse Sidebar">◀</button>
             </div>
-            <button id="btn-add-pd" class="btn btn-glowing" title="สรุปความต้องการวัตถุดิบ (Mat.) ของ PD ทุกตัวที่ยังอยู่ใน Backlog" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; border-radius: 6px; cursor: pointer; box-shadow: var(--shadow-neon);">
-              <span>📋 สรุปความต้องการ Mat.</span>
-            </button>
-            <button id="btn-import-excel" class="btn" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 4px;">
-              <span>📥 Import from Excel</span>
-            </button>
-            <button id="btn-view-completed-pd" class="btn" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(22, 163, 74, 0.1); border: 1px solid var(--accent-green, #16a34a); color: var(--accent-green, #16a34a); font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 4px;">
-              <span>✅ View PD ที่ผลิตเสร็จแล้ว</span>
-            </button>
-            <button id="btn-add-ready-pds-plan" class="btn" title="จัดลงแผนด้วย AI ทุก PD ใน Backlog ที่ Mat ของ Op1 พร้อมผลิต" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(21, 128, 61, 0.1); border: 1px solid #15803d; color: #15803d; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 4px;">
-              <span>➕ Add PD ที่พร้อมผลิตทั้งหมดลงแผน</span>
-            </button>
-            <button id="btn-move-waiting-children-backlog" class="btn" title="ย้าย PD บน Board ที่ยังมี PD ลูกไม่ Closed กลับมาไว้ที่ Backlog" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(180, 83, 9, 0.1); border: 1px solid #b45309; color: #b45309; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 4px;">
-              <span>⏳ ย้าย PD ที่รอ PD ลูก กลับ Backlog</span>
-            </button>
+            <div id="backlog-tools-dropdown" class="dropdown-container" style="position: relative; display: block; width: 100%;">
+              <button id="btn-backlog-tools" type="button" class="btn btn-glowing" title="เมนูเครื่องมือของ PD Backlog" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; padding: 7px 14px; font-size: 12px; font-weight: 700;">
+                <span>🗂️ Backlog Tools</span>
+                <svg class="backlog-tools-arrow" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px; transition: transform 0.2s;">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+
+              <div id="backlog-tools-menu" class="dropdown-menu card-glass hidden" style="position: absolute; top: calc(100% + 6px); left: 0; right: 0; min-width: 0; padding: 8px; gap: 6px; z-index: 99999; background: var(--bg-darker, #ffffff); border: 1px solid var(--border-glass); border-radius: 10px; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.35);">
+                <div style="font-size: 9.5px; font-weight: 700; color: var(--text-secondary); padding: 4px 8px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border-glass); margin-bottom: 2px;">
+                  🗂️ Backlog Tools
+                </div>
+                <button id="btn-add-pd" class="btn btn-glowing" title="สรุปความต้องการวัตถุดิบ (Mat.) ของ PD ทุกตัวที่ยังอยู่ใน Backlog" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: linear-gradient(135deg, var(--accent-teal), #0284c7); border: none; color: #fff; font-weight: bold; border-radius: 6px; cursor: pointer; box-shadow: var(--shadow-neon);">
+                  <span>📋 สรุปความต้องการ Mat.</span>
+                </button>
+                <button id="btn-import-excel" class="btn" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 0;">
+                  <span>📥 Import from Excel</span>
+                </button>
+                <button id="btn-view-completed-pd" class="btn" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(22, 163, 74, 0.1); border: 1px solid var(--accent-green, #16a34a); color: var(--accent-green, #16a34a); font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 0;">
+                  <span>✅ View PD ที่ผลิตเสร็จแล้ว</span>
+                </button>
+                <button id="btn-add-ready-pds-plan" class="btn" title="จัดลงแผนด้วย AI ทุก PD ใน Backlog ที่ Mat ของ Op1 พร้อมผลิต" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(21, 128, 61, 0.1); border: 1px solid #15803d; color: #15803d; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 0;">
+                  <span>➕ Add PD ที่พร้อมผลิตทั้งหมดลงแผน</span>
+                </button>
+                <button id="btn-move-waiting-children-backlog" class="btn" title="ย้าย PD บน Board ที่ยังมี PD ลูกไม่ Closed กลับมาไว้ที่ Backlog" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(180, 83, 9, 0.1); border: 1px solid #b45309; color: #b45309; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 0;">
+                  <span>⏳ ย้าย PD ที่รอ PD ลูก กลับ Backlog</span>
+                </button>
+              </div>
+            </div>
           </div>
           
           <div class="tab-content" id="backlog-tab-content" style="flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; margin-top: 10px;">

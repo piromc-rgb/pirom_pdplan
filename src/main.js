@@ -124,7 +124,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.4';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.5';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -1022,6 +1022,8 @@ class App {
       if (btnAddReady) btnAddReady.style.display = showAssembly ? 'none' : 'flex';
       const btnMoveWait = document.getElementById('btn-move-waiting-children-backlog');
       if (btnMoveWait) btnMoveWait.style.display = showAssembly ? 'none' : 'flex';
+      const backlogToolsBox = document.getElementById('backlog-tools-dropdown');
+      if (backlogToolsBox) backlogToolsBox.style.display = showAssembly ? 'none' : 'block';
       if (showAssembly) renderAssemblySetList(assemblySearchInput ? assemblySearchInput.value : '');
 
       // Force redraw Gantt to resize cards to the newly available planning board width
@@ -1696,6 +1698,34 @@ class App {
         planningToolsMenu.querySelectorAll('button').forEach(btn => {
           btn.addEventListener('click', () => {
             planningToolsMenu.classList.add('hidden');
+          });
+        });
+      }
+    }
+
+    // 7.2 Backlog Tools Dropdown Menu (same behaviour as Planing Tools)
+    const backlogToolsDropdown = document.getElementById('backlog-tools-dropdown');
+    if (backlogToolsDropdown) {
+      const btnBacklogTools = document.getElementById('btn-backlog-tools');
+      const backlogToolsMenu = document.getElementById('backlog-tools-menu');
+      if (btnBacklogTools && backlogToolsMenu) {
+        const arrow = btnBacklogTools.querySelector('.backlog-tools-arrow');
+        const syncArrow = () => { if (arrow) arrow.style.transform = backlogToolsMenu.classList.contains('hidden') ? '' : 'rotate(180deg)'; };
+        btnBacklogTools.addEventListener('click', (e) => {
+          e.stopPropagation();
+          backlogToolsMenu.classList.toggle('hidden');
+          syncArrow();
+        });
+        document.addEventListener('click', (e) => {
+          if (!backlogToolsDropdown.contains(e.target)) {
+            backlogToolsMenu.classList.add('hidden');
+            syncArrow();
+          }
+        });
+        backlogToolsMenu.querySelectorAll('button').forEach(btn => {
+          btn.addEventListener('click', () => {
+            backlogToolsMenu.classList.add('hidden');
+            syncArrow();
           });
         });
       }
@@ -3141,6 +3171,8 @@ class App {
       if (btnAddReadyA) btnAddReadyA.style.display = 'none';
       const btnMoveWaitA = document.getElementById('btn-move-waiting-children-backlog');
       if (btnMoveWaitA) btnMoveWaitA.style.display = 'none';
+      const backlogToolsBoxA = document.getElementById('backlog-tools-dropdown');
+      if (backlogToolsBoxA) backlogToolsBoxA.style.display = 'none';
       if (sidebarFooter) sidebarFooter.style.display = 'none';
       if (backlogTabContent) {
         backlogTabContent.classList.add('hidden');
@@ -3175,6 +3207,8 @@ class App {
         if (btnAddReadyB) btnAddReadyB.style.display = 'flex';
         const btnMoveWaitB = document.getElementById('btn-move-waiting-children-backlog');
         if (btnMoveWaitB) btnMoveWaitB.style.display = 'flex';
+        const backlogToolsBoxB = document.getElementById('backlog-tools-dropdown');
+        if (backlogToolsBoxB) backlogToolsBoxB.style.display = 'block';
         if (backlogTabContent) {
           backlogTabContent.classList.remove('hidden');
           backlogTabContent.style.display = 'flex';
