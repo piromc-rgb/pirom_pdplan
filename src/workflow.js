@@ -1749,7 +1749,7 @@ export class WorkflowController {
         // now-completed individual steps out of both the backlog and the board.
         this.state.workOrders = this.state.workOrders.filter(wo => !this.state.isPdInCompletedHistory(wo.id));
         this.state.scheduledJobs = this.state.scheduledJobs.filter(j =>
-          !this.state.isPdInCompletedHistory(j.woId) && !this.state.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name)
+          !this.state.isPdForceClosed(j.woId) && !this.state.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name)
         );
 
         // Automatically link assembly relationships
