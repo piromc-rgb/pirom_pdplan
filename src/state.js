@@ -3044,18 +3044,9 @@ class CentralState {
       if (data.workCenterOrder) this.workCenterOrder = data.workCenterOrder;
       if (data.timelineOffset !== undefined) this.timelineOffset = data.timelineOffset;
       if (data.activeScale) this.activeScale = data.activeScale;
-      if (data.completedPdHistory) {
-        if (Array.isArray(data.completedPdHistory)) {
-          const obj = {};
-          data.completedPdHistory.forEach(item => {
-            const id = typeof item === 'string' ? item : (item.id || item.woId || item.pdId);
-            if (id) obj[id] = true;
-          });
-          this.completedPdHistory = obj;
-        } else if (typeof data.completedPdHistory === 'object') {
-          this.completedPdHistory = data.completedPdHistory;
-        }
-      }
+      // RESET: the old stored completed-PD list is no longer used (completion is derived from Operation statuses),
+      // so whatever an old plan / cloud copy still carries is dropped here and not written back on the next Save.
+      this.completedPdHistory = {};
       if (data.favoritePDs) this.favoritePDs = data.favoritePDs;
       if (data.pdMemos) this.pdMemos = Object.assign({}, this.pdMemos || {}, data.pdMemos);
       if (data.removedStepHistory) this.removedStepHistory = data.removedStepHistory;

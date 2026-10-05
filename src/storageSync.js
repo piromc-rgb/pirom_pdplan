@@ -1086,21 +1086,9 @@ export class StorageSyncManager {
       if (data.workCenterOrder) this.state.workCenterOrder = data.workCenterOrder;
       if (data.timelineOffset !== undefined) this.state.timelineOffset = data.timelineOffset;
       if (data.activeScale) this.state.activeScale = data.activeScale;
-      if (data.completedPdHistory) {
-        if (Array.isArray(data.completedPdHistory)) {
-          const obj = {};
-          data.completedPdHistory.forEach(item => {
-            const id = typeof item === 'string' ? item : (item.id || item.woId || item.pdId);
-            if (id) obj[id] = true;
-          });
-          this.state.completedPdHistory = obj;
-        } else if (typeof data.completedPdHistory === 'object') {
-          this.state.completedPdHistory = data.completedPdHistory;
-        }
-        try {
-          localStorage.setItem('pdplan_completed_pds', JSON.stringify(this.state.completedPdHistory));
-        } catch (e) {}
-      }
+      // RESET: legacy stored completed-PD list is dropped (completion is derived from Operation statuses now)
+      this.state.completedPdHistory = {};
+      try { localStorage.removeItem('pdplan_completed_pds'); } catch (e) {}
       if (data.favoritePDs) this.state.favoritePDs = data.favoritePDs;
       if (data.removedStepHistory) this.state.removedStepHistory = data.removedStepHistory;
       if (data.completedOpHistory && typeof data.completedOpHistory === 'object') this.state.completedOpHistory = data.completedOpHistory;
