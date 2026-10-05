@@ -124,7 +124,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.6';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.7';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -1024,6 +1024,8 @@ class App {
       if (btnMoveWait) btnMoveWait.style.display = showAssembly ? 'none' : 'flex';
       const backlogToolsBox = document.getElementById('backlog-tools-dropdown');
       if (backlogToolsBox) backlogToolsBox.style.display = showAssembly ? 'none' : 'block';
+      const backlogSummaryBox = document.getElementById('backlog-status-summary');
+      if (backlogSummaryBox) backlogSummaryBox.style.display = showAssembly ? 'none' : 'flex';
       if (showAssembly) renderAssemblySetList(assemblySearchInput ? assemblySearchInput.value : '');
 
       // Force redraw Gantt to resize cards to the newly available planning board width
@@ -3173,6 +3175,8 @@ class App {
       if (btnMoveWaitA) btnMoveWaitA.style.display = 'none';
       const backlogToolsBoxA = document.getElementById('backlog-tools-dropdown');
       if (backlogToolsBoxA) backlogToolsBoxA.style.display = 'none';
+      const backlogSummaryBoxA = document.getElementById('backlog-status-summary');
+      if (backlogSummaryBoxA) backlogSummaryBoxA.style.display = 'none';
       if (sidebarFooter) sidebarFooter.style.display = 'none';
       if (backlogTabContent) {
         backlogTabContent.classList.add('hidden');
@@ -3209,6 +3213,8 @@ class App {
         if (btnMoveWaitB) btnMoveWaitB.style.display = 'flex';
         const backlogToolsBoxB = document.getElementById('backlog-tools-dropdown');
         if (backlogToolsBoxB) backlogToolsBoxB.style.display = 'block';
+        const backlogSummaryBoxB = document.getElementById('backlog-status-summary');
+        if (backlogSummaryBoxB) backlogSummaryBoxB.style.display = 'flex';
         if (backlogTabContent) {
           backlogTabContent.classList.remove('hidden');
           backlogTabContent.style.display = 'flex';

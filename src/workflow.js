@@ -311,6 +311,10 @@ export class WorkflowController {
     }
 
     this.backlogList.innerHTML = '';
+    // Counters for the summary line under the Backlog Tools button
+    let cntNotReady = 0;
+    let cntWaiting = 0;
+    let cntReady = 0;
     if (this.state.workOrders.length === 0) {
       this.backlogList.innerHTML = '<div class="empty-list-hint">Backlog empty. All steps scheduled.</div>';
     } else {
@@ -372,6 +376,8 @@ export class WorkflowController {
 
         // Op01 raw-material readiness (worst status across the PD's materials)
         let matBadgeHtml = '';
+        let isNotReady = false;
+        let isWaitingChildren = false;
         try {
           const op1Num = Math.min(...(wo.steps || []).map(st => Number(st.stepNum) || 10));
           const matSummary = wo.steps && wo.steps.length ? this.state.getStepMaterialIssueSummary(wo.id, op1Num) : null;
@@ -385,6 +391,7 @@ export class WorkflowController {
               old: 'border:1px solid #7c3aed;color:#6d28d9;background:rgba(124,58,237,0.12);'
             };
             const countText = matSummary.count < matSummary.total ? ` (${matSummary.count}/${matSummary.total})` : '';
+            if (matSummary.tone === 'notready') isNotReady = true;
             matBadgeHtml = `<span class="${matSummary.tone === 'notready' ? 'mat-status-blink' : ''}" title="สถานะ Mat. ของ Op01" style="font-size:8.5px;font-weight:800;padding:1px 6px;border-radius:4px;white-space:nowrap;${toneStyles[matSummary.tone] || toneStyles.info}">${matSummary.label}${countText}</span>`;
           }
         } catch (e) { matBadgeHtml = ''; }
@@ -392,10 +399,15 @@ export class WorkflowController {
         let childWaitBadgeHtml = '';
         try {
           if (this.state.isPdBlockedByChildren(wo.id)) {
+            isWaitingChildren = true;
             const kids = this.state.getOpenChildPdsForPlanning(wo.id).map(c => c.pdId);
             childWaitBadgeHtml = `<span title="รอ PD ลูกให้ Closed ก่อน: ${kids.join(', ')}" style="font-size:8.5px;font-weight:800;padding:1px 6px;border-radius:4px;white-space:nowrap;border:1px solid #b45309;color:#b45309;background:rgba(245,158,11,0.15);">⏳ รอ PD ลูก (${kids.length})</span>`;
           }
         } catch (e) { childWaitBadgeHtml = ''; }
+
+        if (isNotReady) cntNotReady++;
+        if (isWaitingChildren) cntWaiting++;
+        if (!isNotReady && !isWaitingChildren) cntReady++;
 
         backlogCard.innerHTML = `
           <div class="card-top" style="display: flex; justify-content: space-between; align-items: center;">
@@ -588,6 +600,26 @@ export class WorkflowController {
         this.backlogList.appendChild(backlogCard);
       });
     }
+    this.updateBacklogStatusSummary(this.state.workOrders.length, cntNotReady, cntWaiting, cntReady);
+  }
+
+  // Summary line under the Backlog Tools button: how many Backlog PDs are not material-ready, how many wait for
+  // child PDs, and how many are free to plan (a PD can be in both of the first two groups).
+  updateBacklogStatusSummary(total, notReady, waiting, ready) {
+    const el = document.getElementById('backlog-status-summary');
+    if (!el) return;
+    if (!total) { el.innerHTML = ''; return; }
+    const hasMats = this.state.planMaterials && Object.keys(this.state.planMaterials).length > 0;
+    if (!hasMats) {
+      el.innerHTML = '<span style="color: var(--text-secondary);">ยังไม่มีข้อมูล Mat. (กด 🔄 ที่หัวหน้าจอ)</span>';
+      return;
+    }
+    const chip = (label, n, color, bg, title) => `<span title="${title}" style="padding: 2px 8px; border-radius: 10px; font-weight: 700; white-space: nowrap; border: 1px solid ${color}; color: ${color}; background: ${bg};">${label} <strong>${n}</strong></span>`;
+    const waitingOn = this.state.requireChildPdsClosed !== false;
+    el.innerHTML =
+      chip('⛔ ไม่พร้อมผลิต', notReady, '#b91c1c', 'rgba(185,28,28,0.10)', 'PD ที่ Mat ของ Op1 ยังไม่พร้อมผลิต') +
+      (waitingOn ? chip('⏳ รอ PD ลูก', waiting, '#b45309', 'rgba(245,158,11,0.15)', 'PD ที่ยังมี PD ลูกไม่ Closed (กติกาเปิดอยู่ใน Option ⚙)') : '') +
+      chip('✅ พร้อมวางแผน', ready, '#15803d', 'rgba(21,128,61,0.12)', 'PD ที่ไม่ติดทั้งสองเงื่อนไข');
   }
 
   runPDSimulation(woId) {
