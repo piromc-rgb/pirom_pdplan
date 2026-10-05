@@ -907,6 +907,20 @@ class App {
       }
     });
 
+    // "🧹 เคลียร์ทั้งหมด": empty the completed-PD list. PDs that are Closed in the Status Overview or have every
+    // Operation Complete are still skipped by Import / planning (that is decided from the file, not from this list).
+    const btnClearAll = document.getElementById('btn-completed-clear-all');
+    if (btnClearAll) btnClearAll.addEventListener('click', () => {
+      const n = Object.keys(state.completedPdHistory || {}).length;
+      if (n === 0) { state.ganttController?.showToast?.('รายการผลิตเสร็จแล้วว่างอยู่แล้ว'); return; }
+      if (!confirm(`เคลียร์รายการ "ผลิตเสร็จแล้ว" ทั้งหมด ${n} PD ใช่หรือไม่?\n\nPD ที่ Closed ในไฟล์ Status Overview หรือ Operation Complete ครบจะยังไม่ถูกนำเข้า Backlog\nส่วน PD อื่นจะนำกลับเข้าแผนได้เมื่อ Import from Excel\n(ในโหมด EDIT ต้องกด Save เพื่อส่งขึ้น Cloud)`)) return;
+      state.completedPdHistory = {};
+      state.savePlanToFile();
+      state.notify();
+      renderList();
+      state.ganttController?.showToast?.(`🧹 เคลียร์รายการผลิตเสร็จแล้ว ${n} PD — กด Import from Excel เพื่อนำ PD กลับเข้า Backlog`, 'success');
+    });
+
     if (searchEl) searchEl.addEventListener('input', renderList);
     if (btnViewList) btnViewList.addEventListener('click', () => { viewMode = 'list'; renderList(); });
     if (btnViewLog) btnViewLog.addEventListener('click', () => { viewMode = 'log'; renderList(); });
