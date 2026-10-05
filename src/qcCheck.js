@@ -190,13 +190,12 @@ export class QcCheckController {
     // 2. Find currently active PDs in the system (on Gantt Board or in Backlog)
     const scheduledJobs = this.state.scheduledJobs || [];
     const workOrders = this.state.workOrders || [];
-    const completedHistory = this.state.completedPdHistory || {};
 
     const activePdMap = new Map();
 
     scheduledJobs.forEach(job => {
       const woId = job.woId || job.id;
-      if (!woId || completedHistory[woId]) return;
+      if (!woId || this.state.isPdInCompletedHistory(woId)) return;
       if (!activePdMap.has(woId)) {
         activePdMap.set(woId, {
           woId,
@@ -212,7 +211,7 @@ export class QcCheckController {
 
     workOrders.forEach(wo => {
       const woId = wo.id;
-      if (!woId || completedHistory[woId]) return;
+      if (!woId || this.state.isPdInCompletedHistory(woId)) return;
       if (!activePdMap.has(woId)) {
         activePdMap.set(woId, {
           woId,

@@ -763,113 +763,48 @@ class App {
     const searchEl = document.getElementById('completed-pd-list-search');
     const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+    // RULE: the list is derived - a PD is here only when EVERY Operation is Complete (Status Overview or Force close).
+    // Only PDs completed through Force close (completedOpHistory) can be un-marked here; PDs that are Complete in the
+    // Status Overview file change only when the file changes.
+    const MAX_ROWS = 1000;
     const renderList = () => {
       const q = (searchEl?.value || '').trim().toLowerCase();
-      const allIds = Object.keys(state.completedPdHistory || {}).sort();
+      const allIds = state.getCompletedPdIds().sort();
       const ids = q ? allIds.filter(id => id.toLowerCase().includes(q)) : allIds;
+      const forced = state.completedOpHistory || {};
       listBody.innerHTML = '';
       emptyMsg.classList.toggle('hidden', allIds.length > 0);
       if (countEl) countEl.textContent = allIds.length;
 
-      ids.forEach(pdId => {
+      const frag = document.createDocumentFragment();
+      ids.slice(0, MAX_ROWS).forEach(pdId => {
         const row = document.createElement('div');
         row.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(22, 163, 74, 0.06); border: 1px solid var(--border-glass); border-left: 3px solid var(--accent-green, #16a34a); border-radius: 6px;';
+        const isForced = Boolean(forced[pdId]);
         row.innerHTML = `
-          <div><strong style="font-size: 12px; color: var(--text-primary);">${esc(pdId)}</strong></div>
-          <button type="button" class="btn-unmark-completed-pd" data-pd-id="${esc(pdId)}" title="ยกเลิกสถานะผลิตเสร็จแล้ว - PD นี้จะกลับมารับการวางแผนได้อีกครั้ง (ต้อง Import กลับเข้า backlog เอง)" style="font-size: 9.5px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--accent-red); background: rgba(239, 68, 68, 0.08); color: var(--accent-red); cursor: pointer; font-weight: bold;">↩️ ยกเลิกสถานะ</button>
+          <div><strong style="font-size: 12px; color: var(--text-primary);">${esc(pdId)}</strong>${isForced ? '<span style="font-size:10px;color:var(--text-secondary);margin-left:10px;">Force close</span>' : ''}</div>
+          ${isForced ? `<button type="button" class="btn-unmark-completed-pd" data-pd-id="${esc(pdId)}" title="ยกเลิก Force close - Operation ที่ตั้งเป็น Complete จะกลับเป็น Planned (ต้อง Import กลับเข้า backlog เอง)" style="font-size: 9.5px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--accent-red); background: rgba(239, 68, 68, 0.08); color: var(--accent-red); cursor: pointer; font-weight: bold;">↩️ ยกเลิกสถานะ</button>` : ''}
         `;
-        listBody.appendChild(row);
+        frag.appendChild(row);
       });
+      if (ids.length > MAX_ROWS) {
+        const more = document.createElement('div');
+        more.style.cssText = 'text-align:center;padding:8px;font-size:11px;color:var(--text-secondary);';
+        more.textContent = `แสดง ${MAX_ROWS} จาก ${ids.length} รายการ — พิมพ์เลข PD ในช่องค้นหาเพื่อกรอง`;
+        frag.appendChild(more);
+      }
+      listBody.appendChild(frag);
 
       listBody.querySelectorAll('.btn-unmark-completed-pd').forEach(btn => {
         btn.addEventListener('click', () => {
           const pdId = btn.getAttribute('data-pd-id');
-          if (confirm(`ยกเลิกสถานะ "ผลิตเสร็จแล้ว" ของ ${pdId} ใช่หรือไม่?`)) {
+          if (confirm(`ยกเลิก Force close ของ ${pdId} ใช่หรือไม่?\nOperation ที่ถูกตั้งเป็น Complete จะกลับเป็น Planned`)) {
             state.markPdCompletedHistory(pdId, false);
             renderList();
           }
         });
       });
     };
-
-    // "🔍 ตรวจ PD ที่ปิดผิด": compare the completed list with the newest Status Overview file. A PD that is NOT Closed
-    // in the file, still has an unfinished Operation and was not Force closed was most likely closed by mistake
-    // (e.g. by the old automatic cascade to child PDs). Lists them and, after confirmation, takes them out of the list.
-    const btnCheckWrong = document.getElementById('btn-completed-check-wrong');
-    if (btnCheckWrong) btnCheckWrong.addEventListener('click', async () => {
-      const toast = (m, t) => state.ganttController?.showToast?.(m, t);
-      if (typeof XLSX === 'undefined' || !state.storageSync) { toast('⚠️ ยังไม่พร้อมอ่านไฟล์ Status Overview', 'error'); return; }
-      const prev = btnCheckWrong.textContent;
-      btnCheckWrong.disabled = true; btnCheckWrong.textContent = '⏳ กำลังอ่านไฟล์...';
-      try {
-        const ov = await state.storageSync.fetchStatusOverview({ force: false, silent: true, noUpload: true });
-        if (!ov || !ov.arrayBuffer) throw new Error('ไม่พบไฟล์ Status Overview');
-        const wb = XLSX.read(new Uint8Array(ov.arrayBuffer), { type: 'array' });
-        const sn = wb.SheetNames.find(n => (n || '').trim().toLowerCase() === 'data') || wb.SheetNames.find(n => (n || '').toLowerCase().includes('data')) || wb.SheetNames[0];
-        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: '' });
-        const head = (rows[0] || []).map(h => String(h || '').trim().toLowerCase());
-        const ci = (n, d) => { const i = head.indexOf(n); return i >= 0 ? i : d; };
-        const cPd = ci('production order', 6), cOs = ci('order status', 17), cOp = ci('operation status', 15);
-        const file = {};
-        for (let i = 1; i < rows.length; i++) {
-          const r = rows[i]; if (!r) continue;
-          const raw = String(r[cPd] || '').trim(); const m = raw.match(/^PD\d+[A-Z]?/i); const id = m ? m[0].toUpperCase() : raw;
-          if (!id) continue;
-          const f = file[id] || (file[id] = { closed: false, ops: 0, done: 0 });
-          if (/^close(d)?$/i.test(String(r[cOs] || '').trim())) f.closed = true;
-          f.ops++; if (/^complete(d)?$/i.test(String(r[cOp] || '').trim())) f.done++;
-        }
-        const forced = state.completedOpHistory || {};
-        const wrong = Object.keys(state.completedPdHistory || {}).filter(id => {
-          const f = file[id];
-          return f && !f.closed && f.ops > 0 && f.done < f.ops && !forced[id];
-        }).sort();
-        const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-        const old = document.getElementById('wrong-closed-popup'); if (old) old.remove();
-        const ov2 = document.createElement('div');
-        ov2.id = 'wrong-closed-popup';
-        ov2.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:100002;display:flex;align-items:center;justify-content:center;padding:16px;';
-        ov2.innerHTML = `<div style="background:#fff;color:#0f172a;border-radius:10px;max-width:760px;width:100%;max-height:85vh;display:flex;flex-direction:column;font-size:12.5px;box-shadow:0 20px 50px rgba(0,0,0,0.3);">
-          <div style="padding:14px 18px 8px;"><div style="font-size:15px;font-weight:700;">🔍 PD ที่น่าจะถูกปิดผิด (${wrong.length} PD)</div>
-          <div style="color:#64748b;font-size:11.5px;margin-top:3px;">เทียบกับ ${esc(ov.filename || 'ไฟล์ Status Overview ล่าสุด')} · อยู่ในรายการผลิตเสร็จแล้ว แต่ในไฟล์ยังไม่ Closed, ยังมี Operation ค้าง และไม่ได้ Force close</div></div>
-          <div style="padding:6px 18px 10px;overflow:auto;">${wrong.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${wrong.map(id => `<span style="font-size:11px;font-family:monospace;padding:3px 8px;border-radius:4px;background:#fef3c7;border:1px solid #fcd34d;color:#92400e;">${esc(id)}</span>`).join('')}</div>
-          <div style="margin-top:10px;color:#0f766e;font-size:11.5px;">หลังคืนสถานะ ให้กด <b>Import from Excel</b> (ไม่ใส่ตัวกรอง) เพื่อนำ PD เหล่านี้กลับเข้า Backlog</div>` : '<div style="color:#15803d;font-weight:600;padding:12px 0;">✔ ไม่พบ PD ที่ปิดผิด</div>'}</div>
-          <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e2e8f0;">
-            <button type="button" id="btn-wrong-closed-cancel" style="padding:6px 16px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;">ปิด</button>
-            ${wrong.length ? `<button type="button" id="btn-wrong-closed-restore" style="padding:6px 18px;border:none;border-radius:6px;background:#b45309;color:#fff;font-weight:700;cursor:pointer;">↩️ คืนสถานะ ${wrong.length} PD</button>` : ''}
-          </div></div>`;
-        document.body.appendChild(ov2);
-        const closeP = () => ov2.remove();
-        ov2.addEventListener('click', (e) => { if (e.target === ov2) closeP(); });
-        ov2.querySelector('#btn-wrong-closed-cancel').addEventListener('click', closeP);
-        ov2.querySelector('#btn-wrong-closed-restore')?.addEventListener('click', () => {
-          wrong.forEach(id => { delete state.completedPdHistory[id]; });
-          state.savePlanToFile();
-          state.notify();
-          closeP();
-          renderList();
-          toast(`↩️ คืนสถานะ ${wrong.length} PD แล้ว — กด Import from Excel เพื่อนำกลับเข้า Backlog`, 'success');
-        });
-      } catch (err) {
-        toast(`⚠️ ตรวจไม่สำเร็จ: ${err.message || err}`, 'error');
-      } finally {
-        btnCheckWrong.disabled = false; btnCheckWrong.textContent = prev;
-      }
-    });
-
-    // "🧹 เคลียร์ทั้งหมด": empty the completed-PD list. PDs that are Closed in the Status Overview or have every
-    // Operation Complete are still skipped by Import / planning (that is decided from the file, not from this list).
-    const btnClearAll = document.getElementById('btn-completed-clear-all');
-    if (btnClearAll) btnClearAll.addEventListener('click', () => {
-      const n = Object.keys(state.completedPdHistory || {}).length;
-      if (n === 0) { state.ganttController?.showToast?.('รายการผลิตเสร็จแล้วว่างอยู่แล้ว'); return; }
-      if (!confirm(`เคลียร์รายการ "ผลิตเสร็จแล้ว" ทั้งหมด ${n} PD ใช่หรือไม่?\n\nPD ที่ Closed ในไฟล์ Status Overview หรือ Operation Complete ครบจะยังไม่ถูกนำเข้า Backlog\nส่วน PD อื่นจะนำกลับเข้าแผนได้เมื่อ Import from Excel\n(ในโหมด EDIT ต้องกด Save เพื่อส่งขึ้น Cloud)`)) return;
-      state.completedPdHistory = {};
-      state.savePlanToFile();
-      state.notify();
-      renderList();
-      state.ganttController?.showToast?.(`🧹 เคลียร์รายการผลิตเสร็จแล้ว ${n} PD — กด Import from Excel เพื่อนำ PD กลับเข้า Backlog`, 'success');
-    });
 
     if (searchEl) searchEl.addEventListener('input', renderList);
 

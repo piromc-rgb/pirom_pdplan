@@ -698,7 +698,7 @@ export class StorageSyncManager {
           this.updateModalValues();
           const wcCount = Object.keys(this.state.workCenters || {}).length;
           const jobCount = (this.state.scheduledJobs || []).length;
-          const completedCount = Object.keys(this.state.completedPdHistory || {}).length;
+          const completedCount = this.state.getCompletedPdIds().length;
           if (!silent) {
             this.showToast(`✅ ดึงข้อมูลล่าสุดจาก Cloud สำเร็จ: Plan (${jobCount} Tasks), machine_settings (${wcCount} เครื่อง), completed_pds (${completedCount} รายการ)`, 'success');
           } else {
@@ -743,7 +743,7 @@ export class StorageSyncManager {
               if (!silent) {
                 const jobCount = (this.state.scheduledJobs || []).length;
                 const wcCount = Object.keys(this.state.workCenters || {}).length;
-                const completedCount = Object.keys(this.state.completedPdHistory || {}).length;
+                const completedCount = this.state.getCompletedPdIds().length;
                 this.showToast(`✅ โหลดข้อมูลจากไฟล์ Plan.json, machine_settings.json (${wcCount} เครื่อง) และ completed_pds.json (${completedCount} รายการ) ในเครื่องสำเร็จ`, 'success');
               }
               this.fetchPlanMaterials(this.getUserMode() === 'plan');
@@ -768,7 +768,7 @@ export class StorageSyncManager {
         if (!silent) {
           const jobCount = (this.state.scheduledJobs || []).length;
           const wcCount = Object.keys(this.state.workCenters || {}).length;
-          const completedCount = Object.keys(this.state.completedPdHistory || {}).length;
+          const completedCount = this.state.getCompletedPdIds().length;
           this.showToast(`💾 โหลดข้อมูลจาก Local Cache: Plan (${jobCount} Tasks), machine_settings (${wcCount} เครื่อง), completed_pds (${completedCount} รายการ)`, 'info');
         }
         this.fetchPlanMaterials(this.getUserMode() === 'plan');
@@ -907,7 +907,7 @@ export class StorageSyncManager {
 
       const jobCount = (this.state.scheduledJobs || []).length;
       const wcCount = Object.keys(this.state.workCenters || {}).length;
-      const completedCount = Object.keys(this.state.completedPdHistory || {}).length;
+      const completedCount = this.state.getCompletedPdIds().length;
       this.showToast(`☁️ บันทึกข้อมูลจาก Temp Folder ขึ้น Cloud สำเร็จ! (Plan ${jobCount} Tasks, ${wcCount} เครื่อง, Completed ${completedCount} รายการ)`, 'success');
     } catch (err) {
       this.isSavingToCloud = false;
@@ -1117,7 +1117,7 @@ export class StorageSyncManager {
 
       // กรอง PD ที่ผลิตจริงเสร็จแล้ว และขั้นตอนที่ถูกลบออก
       this.state.scheduledJobs = this.state.scheduledJobs.filter(
-        j => !this.state.isPdInCompletedHistory(j.woId) && !this.state.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name)
+        j => !this.state.isPdForceClosed(j.woId) && !this.state.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name)
       );
       this.state.workOrders = this.state.workOrders.filter(wo => !this.state.isPdInCompletedHistory(wo.id));
       this.state.workOrders.forEach(wo => {
@@ -2681,7 +2681,7 @@ export class StorageSyncManager {
       const endpoint = this.getEndpointUrl();
       const payload = this.state.buildPlanPayload();
       const wcCount = Object.keys(this.state?.workCenters || {}).length;
-      const completedCount = Object.keys(this.state?.completedPdHistory || {}).length;
+      const completedCount = (this.state?.getCompletedPdIds ? this.state.getCompletedPdIds().length : 0);
 
       const btn = document.getElementById('btn-modal-cloud-save');
       if (btn) {
@@ -2717,7 +2717,7 @@ export class StorageSyncManager {
       } catch (e) {}
       this.exportBackupJson();
       const wcCount = Object.keys(this.state?.workCenters || {}).length;
-      const completedCount = Object.keys(this.state?.completedPdHistory || {}).length;
+      const completedCount = (this.state?.getCompletedPdIds ? this.state.getCompletedPdIds().length : 0);
       this.showToast(`💾 Local Save: บันทึก Plan.json, machine_settings.json (${wcCount} เครื่อง) และ completed_pds.json (${completedCount} รายการ) สำเร็จ`, 'success');
     });
 
@@ -2964,7 +2964,7 @@ export class StorageSyncManager {
     const isDwgLocal = this.isDwgLocationLocal(currentDwgUrl);
     const currentEndpoint = this.getEndpointUrl();
     const lastSyncDisplay = this.lastSyncTime ? new Date(this.lastSyncTime).toLocaleString('th-TH') : 'ยังไม่มีการซิงค์';
-    const completedCount = Object.keys(this.state?.completedPdHistory || {}).length;
+    const completedCount = (this.state?.getCompletedPdIds ? this.state.getCompletedPdIds().length : 0);
     const scheduledCount = (this.state?.scheduledJobs || []).length;
 
     // Update Hero link card

@@ -1832,13 +1832,6 @@ class CentralState {
     const childPdIds = typeof this.getDescendantPdIds === 'function' ? this.getDescendantPdIds(woId) : [];
     const allIdsToDelete = new Set([woId, ...childPdIds]);
 
-    // If the main PD was marked completed in history, also ensure all its children are marked completed
-    if (this.isPdInCompletedHistory(woId)) {
-      allIdsToDelete.forEach(id => {
-        this.completedPdHistory[id] = true;
-      });
-    }
-
     this.scheduledJobs = this.scheduledJobs.filter(j => !allIdsToDelete.has(j.woId) && !allIdsToDelete.has(j.id));
     this.workOrders = this.workOrders.filter(wo => !allIdsToDelete.has(wo.id));
     if (this.pdMemos) {
@@ -2337,12 +2330,11 @@ class CentralState {
   // too (Plan + Mat rows and Dwg->PD map), so every view that reads the imported Order Status shows
   // Closed / เสร็จสิ้น without having to check the list again. Returns the number of entries changed.
   markCompletedPdsClosed() {
-    const hist = this.completedPdHistory || {};
-    // PDs whose operations are all Completed in the Status Overview are Closed automatically too
+    // PDs whose operations are all Completed are Closed
     const autoClosed = new Set();
     Object.keys(this.pdOpStatusMap || {}).forEach(pdId => { if (this.isPdAllOpsComplete(pdId)) autoClosed.add(pdId); });
-    const isClosedPd = (pdId) => Boolean(hist[pdId]) || autoClosed.has(pdId);
-    if (Object.keys(hist).length === 0 && autoClosed.size === 0) return 0;
+    const isClosedPd = (pdId) => autoClosed.has(pdId);
+    if (autoClosed.size === 0) return 0;
     let changed = 0;
     Object.keys(this.planMaterials || {}).forEach(pdId => {
       if (!isClosedPd(pdId)) return;
@@ -2366,8 +2358,22 @@ class CentralState {
     return changed;
   }
 
+  // RULE: a PD belongs to the completed list ("Production Order ที่ผลิตเสร็จแล้ว") only when EVERY Operation is
+  // Complete (imported Status Overview status, or force-completed via Force close). It is derived from the
+  // operation statuses, not from a stored list, so nothing can be pushed in by a parent / import guess.
   isPdInCompletedHistory(pdId) {
-    return Boolean(pdId && this.completedPdHistory[pdId]);
+    return Boolean(pdId && this.isPdAllOpsComplete(pdId));
+  }
+
+  // True only when the PD was closed explicitly (Force close): used to take such a PD off the Board. A PD that is merely
+  // Complete in the Status Overview file stays on the Board as before (its bars show as Completed).
+  isPdForceClosed(pdId) {
+    return Boolean(pdId && this.completedOpHistory && this.completedOpHistory[pdId] && this.isPdAllOpsComplete(pdId));
+  }
+
+  // PD ids that are completed under the rule above
+  getCompletedPdIds() {
+    return Object.keys(this.pdOpStatusMap || {}).filter(id => this.isPdAllOpsComplete(id));
   }
 
   isPdFavorite(pdId) {
@@ -2534,20 +2540,21 @@ class CentralState {
     return false;
   }
 
-  markPdCompletedHistory(pdId, completed, cascadeChildren = false) {
+  // Mark a PD finished = force-complete all its Operations; un-mark = drop that force-completion (only possible for a
+  // PD that was force-completed here; Operations that are Completed in the Status Overview file stay Completed).
+  markPdCompletedHistory(pdId, completed) {
     if (!pdId) return [];
-    const childPdIds = cascadeChildren ? this.getDescendantPdIds(pdId) : [];
-    const allIds = [pdId, ...childPdIds];
-    allIds.forEach(id => {
-      if (completed) {
-        this.completedPdHistory[id] = true;
-      } else {
-        delete this.completedPdHistory[id];
-      }
-    });
+    if (completed) {
+      this.forceCompleteOps([pdId]);
+    } else if (this.completedOpHistory && this.completedOpHistory[pdId]) {
+      const steps = Object.keys(this.completedOpHistory[pdId]);
+      delete this.completedOpHistory[pdId];
+      const ops = this.pdOpStatusMap && this.pdOpStatusMap[pdId];
+      if (ops) steps.forEach(st => { ops[String(st)] = 'Planned'; });
+    }
     this.savePlanToFile();
     this.notify();
-    return childPdIds;
+    return [];
   }
 
   // One-click "mark finished and take it off the board now" - same permanent
@@ -2556,9 +2563,9 @@ class CentralState {
   markPdCompletedAndRemove(pdId) {
     if (!pdId) return [];
     this.saveStateToHistory();
-    const childPdIds = this.getDescendantPdIds(pdId);
-    const idSet = new Set([pdId, ...childPdIds]);
-    idSet.forEach(id => { this.completedPdHistory[id] = true; });
+    const childPdIds = [];
+    const idSet = new Set([pdId]);
+    this.forceCompleteOps([...idSet]);
     this.scheduledJobs = this.scheduledJobs.filter(j => !idSet.has(j.woId));
     this.workOrders = this.workOrders.filter(wo => !idSet.has(wo.id));
     if (this.assemblyLinks) {
@@ -2576,14 +2583,13 @@ class CentralState {
 
   // Same as markPdCompletedAndRemove() but for many PDs at once (e.g. every PD
   // that falls inside a checked PD Range Filter entry) - one history snapshot
-  // and one save/notify instead of one per PD. Also cascades to all child PDs.
+  // and one save/notify instead of one per PD.
   markPdsCompletedAndRemoveBulk(pdIds) {
     if (!pdIds || pdIds.length === 0) return;
     this.saveStateToHistory();
+    // Only the PDs given are closed (all their Operations become Complete); child PDs are never touched here.
     const idSet = new Set(pdIds);
-    const children = this.getDescendantPdIds(pdIds);
-    for (let i = 0; i < children.length; i++) idSet.add(children[i]);
-    idSet.forEach(id => { this.completedPdHistory[id] = true; });
+    this.forceCompleteOps([...idSet]);
     this.scheduledJobs = this.scheduledJobs.filter(j => !idSet.has(j.woId));
     this.workOrders = this.workOrders.filter(wo => !idSet.has(wo.id));
     if (this.assemblyLinks) {
@@ -3042,7 +3048,7 @@ class CentralState {
       this.cascadeCompletedPdsToChildren();
       this.syncOverviewStatusToJobs();
 
-      this.scheduledJobs = this.scheduledJobs.filter(j => !this.isPdInCompletedHistory(j.woId) && !this.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name));
+      this.scheduledJobs = this.scheduledJobs.filter(j => !this.isPdForceClosed(j.woId) && !this.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name));
       this.workOrders = this.workOrders.filter(wo => !this.isPdInCompletedHistory(wo.id));
       this.workOrders.forEach(wo => {
         wo.steps = wo.steps.filter(step => !this.isStepIdentityRemoved(wo.id, step.machine, step.name));
