@@ -758,16 +758,20 @@ export class ResourcesController {
     const sortedProjects = Array.from(projects).sort();
     
     // 2. Count jobs for each project
-    const counts = {};
-    sortedProjects.forEach(proj => counts[proj] = 0);
+    // Count distinct PDs (a PD on the board has one scheduled job per routing step, so
+    // counting jobs would over-count multi-step PDs), both on the board and in the backlog.
+    const pdSets = {};
+    sortedProjects.forEach(proj => pdSets[proj] = new Set());
     this.state.scheduledJobs.forEach(job => {
       const proj = job.project || 'General';
-      counts[proj]++;
+      pdSets[proj].add(job.woId || job.id);
     });
     this.state.workOrders.forEach(wo => {
       const proj = wo.project || 'General';
-      counts[proj]++;
+      pdSets[proj].add(wo.id);
     });
+    const counts = {};
+    sortedProjects.forEach(proj => counts[proj] = pdSets[proj].size);
 
     // 2b. Collect which customer(s) each project belongs to, for display next
     // to the project number - most projects map to a single customer, but show
