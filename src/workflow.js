@@ -1,5 +1,6 @@
 // MIE Trak Pro - Production Order Backlog Controller
 import { getPriorityWeight } from './scheduler.js';
+import { isJobPriorityVisible, isJobProjectVisible, isJobCustomerVisible, isJobPdRangeVisible } from './gantt.js';
 
 // Several PDs can share one Dwg (an old closed PD plus the PD just released for a new parent). The Dwg -> PD map keeps
 // one default PD per Dwg; this also remembers EVERY PD of a Dwg so a parent can pick its own child (nearest PD number
@@ -315,6 +316,7 @@ export class WorkflowController {
     let cntNotReady = 0;
     let cntWaiting = 0;
     let cntReady = 0;
+    let cntShown = 0; // PDs passing the active Priority / Project / Customer / PD Range filters
     if (this.state.workOrders.length === 0) {
       this.backlogList.innerHTML = '<div class="empty-list-hint">Backlog empty. All steps scheduled.</div>';
     } else {
@@ -405,9 +407,16 @@ export class WorkflowController {
           }
         } catch (e) { childWaitBadgeHtml = ''; }
 
-        if (isNotReady) cntNotReady++;
-        if (isWaitingChildren) cntWaiting++;
-        if (!isNotReady && !isWaitingChildren) cntReady++;
+        // The summary follows the active filters (same ones that hide jobs on the board)
+        const filterProbe = { id: wo.id, woId: wo.id, priority: wo.priority, project: wo.project, customer: wo.customer };
+        const passesFilters = isJobPriorityVisible(filterProbe, this.state) && isJobProjectVisible(filterProbe, this.state) &&
+          isJobCustomerVisible(filterProbe, this.state) && isJobPdRangeVisible(filterProbe, this.state);
+        if (passesFilters) {
+          cntShown++;
+          if (isNotReady) cntNotReady++;
+          if (isWaitingChildren) cntWaiting++;
+          if (!isNotReady && !isWaitingChildren) cntReady++;
+        }
 
         backlogCard.innerHTML = `
           <div class="card-top" style="display: flex; justify-content: space-between; align-items: center;">
@@ -600,12 +609,12 @@ export class WorkflowController {
         this.backlogList.appendChild(backlogCard);
       });
     }
-    this.updateBacklogStatusSummary(this.state.workOrders.length, cntNotReady, cntWaiting, cntReady);
+    this.updateBacklogStatusSummary(this.state.workOrders.length, cntNotReady, cntWaiting, cntReady, cntShown);
   }
 
   // Summary line under the Backlog Tools button: how many Backlog PDs are not material-ready, how many wait for
   // child PDs, and how many are free to plan (a PD can be in both of the first two groups).
-  updateBacklogStatusSummary(total, notReady, waiting, ready) {
+  updateBacklogStatusSummary(total, notReady, waiting, ready, shown = total) {
     const el = document.getElementById('backlog-status-summary');
     if (!el) return;
     if (!total) { el.innerHTML = ''; return; }
@@ -616,7 +625,10 @@ export class WorkflowController {
     }
     const chip = (label, n, color, bg, title) => `<span title="${title}" style="padding: 2px 8px; border-radius: 10px; font-weight: 700; white-space: nowrap; border: 1px solid ${color}; color: ${color}; background: ${bg};">${label} <strong>${n}</strong></span>`;
     const waitingOn = this.state.requireChildPdsClosed !== false;
-    el.innerHTML =
+    const filterNote = shown < total
+      ? `<span title="ตัวเลขนับเฉพาะ PD ที่ผ่านตัวกรอง Priority / Project / Customer / PD Range ที่เปิดอยู่" style="width: 100%; color: #0369a1; font-weight: 700;">🔎 ตามตัวกรอง: ${shown} จาก ${total} PD</span>`
+      : '';
+    el.innerHTML = filterNote +
       chip('⛔ ไม่พร้อมผลิต', notReady, '#b91c1c', 'rgba(185,28,28,0.10)', 'PD ที่ Mat ของ Op1 ยังไม่พร้อมผลิต') +
       (waitingOn ? chip('⏳ รอ PD ลูก', waiting, '#b45309', 'rgba(245,158,11,0.15)', 'PD ที่ยังมี PD ลูกไม่ Closed (กติกาเปิดอยู่ใน Option ⚙)') : '') +
       chip('✅ พร้อมวางแผน', ready, '#15803d', 'rgba(21,128,61,0.12)', 'PD ที่ไม่ติดทั้งสองเงื่อนไข');

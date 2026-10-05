@@ -552,24 +552,33 @@ export class ResourcesController {
         e.stopPropagation();
         e.preventDefault();
 
-        const confirmMsg = `คุณต้องการลบข้อมูลงานทั้งหมดที่มีระดับความสำคัญ (Priority): "${p}" ใช่หรือไม่?\n\n*คำเตือน: การดำเนินการนี้จะลบใบสั่งผลิตใน Backlog และคิวงานบน Gantt ทั้งหมดที่มีระดับความสำคัญนี้ออกไปอย่างถาวร`;
+        const confirmMsg = `คุณต้องการลบข้อมูลงานทั้งหมดที่มีระดับความสำคัญ (Priority): "${p}" ใช่หรือไม่?\n\n*คำเตือน: การดำเนินการนี้จะ Closed ใบสั่งผลิต (Production Order) ทั้งหมดที่มีระดับความสำคัญนี้ รวมถึง PD ลูก แล้วนำออกจาก Backlog และคิวงานบน Gantt อย่างถาวร`;
         if (confirm(confirmMsg)) {
-          // 1. Filter scheduledJobs
-          this.state.scheduledJobs = this.state.scheduledJobs.filter(j => j.priority !== p);
-          // 2. Filter workOrders
-          this.state.workOrders = this.state.workOrders.filter(w => w.priority !== p);
-
-          // 3. Save files
-          this.state.savePlanToFile();
-          this.state.saveWorkOrdersToFile();
-
-          // 4. Notify to re-render
-          this.state.notify();
+          // Closed every Production Order of this priority (and its child PDs), then remove them from the plan
+          this.closePdsAndRemove(j => j.priority === p, w => w.priority === p);
         }
       });
 
       this.priorityFiltersContainer.appendChild(label);
     });
+  }
+
+  // Trash button of the Priority / Project lists: every Production Order inside (board + backlog) is recorded as
+  // Closed (completed list, together with its child PDs) and taken off the plan, so it does not come back from the
+  // next Status Overview import or get planned again. Returns the number of PDs closed.
+  closePdsAndRemove(matchJob, matchWo) {
+    const ids = new Set();
+    this.state.scheduledJobs.forEach(j => { if (matchJob(j)) ids.add(j.woId || j.id); });
+    this.state.workOrders.forEach(w => { if (matchWo(w)) ids.add(w.id); });
+    if (ids.size > 0) this.state.markPdsCompletedAndRemoveBulk([...ids]);
+    // Anything still matching (e.g. entries without a PD id) is removed as before
+    this.state.scheduledJobs = this.state.scheduledJobs.filter(j => !matchJob(j));
+    this.state.workOrders = this.state.workOrders.filter(w => !matchWo(w));
+    this.state.savePlanToFile();
+    this.state.saveWorkOrdersToFile();
+    this.state.notify();
+    this.state.ganttController?.showToast?.(`✅ Closed Production Order ${ids.size} รายการ (รวม PD ลูก) และนำออกจากแผนแล้ว`, 'success');
+    return ids.size;
   }
 
   renderProjectFilters() {
@@ -771,19 +780,10 @@ export class ResourcesController {
         e.stopPropagation();
         e.preventDefault();
         
-        const confirmMsg = `คุณต้องการลบข้อมูลงานทั้งหมดที่มีเลขที่ SO / Project: "${proj}" ใช่หรือไม่?\n\n*คำเตือน: การดำเนินการนี้จะลบใบสั่งผลิตใน Backlog และคิวงานบน Gantt ทั้งหมดที่มีโครงการนี้ออกไปอย่างถาวร`;
+        const confirmMsg = `คุณต้องการลบข้อมูลงานทั้งหมดที่มีเลขที่ SO / Project: "${proj}" ใช่หรือไม่?\n\n*คำเตือน: การดำเนินการนี้จะ Closed ใบสั่งผลิต (Production Order) ทั้งหมดของโครงการนี้ รวมถึง PD ลูก แล้วนำออกจาก Backlog และคิวงานบน Gantt อย่างถาวร`;
         if (confirm(confirmMsg)) {
-          // 1. Filter scheduledJobs
-          this.state.scheduledJobs = this.state.scheduledJobs.filter(j => (j.project || 'General') !== proj);
-          // 2. Filter workOrders
-          this.state.workOrders = this.state.workOrders.filter(w => (w.project || 'General') !== proj);
-          
-          // 3. Save files
-          this.state.savePlanToFile();
-          this.state.saveWorkOrdersToFile();
-          
-          // 4. Notify to re-render
-          this.state.notify();
+          // Closed every Production Order of this SO / Project (and its child PDs), then remove them from the plan
+          this.closePdsAndRemove(j => (j.project || 'General') === proj, w => (w.project || 'General') === proj);
         }
       });
       

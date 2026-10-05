@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const compileVersion = '2.7';
+const compileVersion = '2.8';
 const PRODUCTION_DATES_SHEET_ID = '1MwvA8HPTStZiESym9cPWxPuRb6q72wZk3hxKkJJXwgg';
 const PRODUCTION_DATES_DEFAULT_GIDS = ['2120309268']; // fallback when the tab list cannot be discovered
 
