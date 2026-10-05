@@ -571,35 +571,22 @@ export class ResourcesController {
     const sum = this.state.buildProjectSummary(keys);
     const o = sum.overall;
     const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    const pct = (n, d) => d > 0 ? (n / d * 100).toFixed(1) + '%' : '-';
-    const statusOrder = (statuses) => {
-      const names = Object.keys(statuses);
-      const first = ['Closed', 'Active'].filter(n => statuses[n] !== undefined);
-      return [...first, ...names.filter(n => !first.includes(n)).sort((a, b) => statuses[b] - statuses[a])];
-    };
-    const statusRows = (b) => {
-      const names = statusOrder(b.statuses);
-      if (names.length === 0) return '<tr><td colspan="3" style="color:#94a3b8;padding:4px 0;">ไม่มี</td></tr>';
-      return names.map(n => {
-        const color = n === 'Closed' ? '#15803d' : (n === 'Active' ? '#1d4ed8' : '#92400e');
-        const label = n === 'Closed' ? 'Close' : (n === 'Unknown' ? 'ไม่ทราบสถานะ' : n);
-        return `<tr><td style="padding:3px 0;"><strong style="color:${color};">${esc(label)}</strong></td><td style="text-align:right;padding:3px 10px;">${b.statuses[n]} PD</td><td style="text-align:right;padding:3px 0;color:#475569;">${pct(b.statuses[n], b.others)}</td></tr>`;
-      }).join('');
-    };
-    const statusText = (b) => {
-      const names = statusOrder(b.statuses);
-      return names.length ? names.map(n => `${n === 'Closed' ? 'Close' : (n === 'Unknown' ? 'ไม่ทราบสถานะ' : n)} ${b.statuses[n]} (${pct(b.statuses[n], b.others)})`).join(' · ') : '-';
-    };
-    const card = (label, value, sub, color) => `<div style="flex:1;min-width:150px;padding:10px 12px;border-radius:8px;background:#f8fafc;border-left:4px solid ${color};"><div style="font-size:11px;color:#64748b;">${label}</div><div style="font-size:22px;font-weight:800;color:#0f172a;">${value}</div>${sub ? `<div style="font-size:10.5px;color:#64748b;">${sub}</div>` : ''}</div>`;
-    const tableRows = sum.perProject.map(r => `
-      <tr style="border-top:1px solid #e2e8f0;">
-        <td style="padding:5px 8px;font-weight:700;white-space:nowrap;">${esc(r.project)}</td>
-        <td style="padding:5px 8px;text-align:right;">${r.total}</td>
-        <td style="padding:5px 8px;text-align:right;">${r.assembly}</td>
-        <td style="padding:5px 8px;text-align:right;">${r.others}</td>
-        <td style="padding:5px 8px;font-size:11px;color:#334155;">${esc(statusText(r))}</td>
-        <td style="padding:5px 8px;text-align:right;color:${r.matNotReady ? '#b91c1c' : '#475569'};font-weight:${r.matNotReady ? 700 : 400};">${r.matNotReady}</td>
-      </tr>`).join('');
+    const num = (n, color) => `<span style="font-weight:800;color:${color || '#0f172a'};">${n}</span>`;
+    const line = (label, n, color, indent = false) => `<div style="display:flex;justify-content:space-between;gap:16px;padding:5px 0;border-bottom:1px solid #f1f5f9;${indent ? 'padding-left:22px;color:#475569;' : ''}"><span>${indent ? '↳ ' : ''}${label}</span>${num(n, color)}</div>`;
+    const breakdown = (b) => [
+      line('จำนวน PD ทั้งหมด (ดูจากไฟล์ Status Overview)', b.total, '#2563eb'),
+      line('จำนวน PD ที่ทุก Operation Complete', b.allComplete, '#15803d'),
+      line('จำนวน PD ที่อยู่ในแผน (อยู่ใน Board)', b.board, '#0d9488'),
+      line('จำนวน PD ที่อยู่ใน Backlog', b.backlog, '#7c3aed'),
+      line('อยู่ใน Backlog ที่ Mat ยังไม่พร้อม', b.backlogMatNotReady, b.backlogMatNotReady ? '#b91c1c' : '#475569', true),
+      line('อยู่ใน Backlog ที่รอ PD ลูกเสร็จ', b.backlogWaitChild, b.backlogWaitChild ? '#b45309' : '#475569', true),
+      b.other ? line('ยังไม่ Complete แต่ไม่อยู่ทั้ง Board และ Backlog', b.other, '#92400e') : ''
+    ].join('');
+    const projectBlocks = sum.perProject.map(r => `
+      <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;">
+        <div style="font-weight:700;margin-bottom:4px;">${esc(r.project)}</div>
+        ${breakdown(r)}
+      </div>`).join('');
     const old = document.getElementById('project-summary-popup');
     if (old) old.remove();
     const overlay = document.createElement('div');
@@ -610,32 +597,17 @@ export class ResourcesController {
         <div style="padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <div>
             <div style="font-size:15px;font-weight:700;">📊 สรุปภาพรวมโครงการที่เลือก (${sum.perProject.length} โครงการ)</div>
-            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">นับจาก PD ทั้งหมดในไฟล์ Status Overview ของ SO / โครงการที่ติ๊กอยู่ในตัวกรอง · Assembly = PD ที่มี PD ลูก</div>
+            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">นับจาก PD ทั้งหมดในไฟล์ Status Overview ของ SO / โครงการที่ติ๊กอยู่ในตัวกรอง เทียบกับสถานะใน Board / Backlog ปัจจุบัน</div>
           </div>
           <button type="button" id="btn-close-project-summary" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
         </div>
         <div style="padding:6px 18px 12px;overflow:auto;display:flex;flex-direction:column;gap:14px;">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;">
-            ${card('จำนวน PD ทั้งหมด', o.total + ' PD', '', '#2563eb')}
-            ${card('PD Assembly', o.assembly + ' PD', pct(o.assembly, o.total) + ' ของทั้งหมด', '#7c3aed')}
-            ${card('PD อื่นๆ (ไม่ใช่ Assembly)', o.others + ' PD', pct(o.others, o.total) + ' ของทั้งหมด', '#0d9488')}
-            ${card('PD รอผลิต เพราะ Mat ไม่พร้อม', o.matNotReady + ' PD', 'เฉพาะ PD อื่นๆ ที่ยังไม่ Close (' + pct(o.matNotReady, o.others) + ' ของ PD อื่นๆ)', '#b91c1c')}
+          <div style="border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;padding:10px 14px;">
+            <div style="font-weight:700;margin-bottom:4px;">รวมทุกโครงการที่เลือก (${sum.perProject.length} โครงการ)</div>
+            ${breakdown(o)}
           </div>
-          <div>
-            <div style="font-weight:700;margin-bottom:6px;">Order Status ของ PD อื่นๆ (ไม่ใช่ Assembly) ${o.others} PD</div>
-            <table style="border-collapse:collapse;font-size:12.5px;"><tbody>${statusRows(o)}</tbody></table>
-          </div>
-          <div>
-            <div style="font-weight:700;margin-bottom:6px;">แยกรายโครงการ</div>
-            <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:6px;">
-              <table style="border-collapse:collapse;width:100%;font-size:12px;">
-                <thead><tr style="background:#f1f5f9;text-align:left;">
-                  <th style="padding:6px 8px;">SO / โครงการ</th><th style="padding:6px 8px;text-align:right;">PD ทั้งหมด</th><th style="padding:6px 8px;text-align:right;">Assembly</th><th style="padding:6px 8px;text-align:right;">PD อื่นๆ</th><th style="padding:6px 8px;">Order Status ของ PD อื่นๆ (จำนวน และ % ของ PD อื่นๆ)</th><th style="padding:6px 8px;text-align:right;">รอ Mat</th>
-                </tr></thead>
-                <tbody>${tableRows}</tbody>
-              </table>
-            </div>
-          </div>
+          ${sum.perProject.length > 1 ? `<div style="font-weight:700;">แยกรายโครงการ</div>${projectBlocks}` : ''}
+          <div style="color:#94a3b8;font-size:10.5px;">Backlog ที่ Mat ไม่พร้อม และ Backlog ที่รอ PD ลูก เป็นส่วนหนึ่งของ PD ใน Backlog (PD เดียวอาจนับทั้งสองรายการ)</div>
         </div>
         <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;border-top:1px solid #e2e8f0;">
           <button type="button" id="btn-ok-project-summary" style="padding:6px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">ปิด</button>

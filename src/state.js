@@ -3165,25 +3165,31 @@ class CentralState {
   buildProjectSummary(projectKeys) {
     const wanted = new Set((projectKeys || []).map(p => String(p || 'General').trim() || 'General'));
     const idx = this.getPdProjectIndex();
-    const blank = () => ({ total: 0, assembly: 0, others: 0, statuses: {}, matNotReady: 0 });
+    const boardIds = new Set((this.scheduledJobs || []).map(j => j.woId || j.id));
+    const backlogIds = new Set((this.workOrders || []).map(w => w.id));
+    const blank = () => ({ total: 0, allComplete: 0, board: 0, backlog: 0, backlogMatNotReady: 0, backlogWaitChild: 0, other: 0 });
     const perProject = new Map();
     const overall = blank();
     idx.forEach((proj, pdId) => {
       const key = String(proj || 'General').trim() || 'General';
       if (!wanted.has(key)) return;
-      const rows = (this.planMaterials || {})[pdId] || [];
-      const isAssembly = rows.some(r => String(r.mat || '').trim().length === 14);
       const bucket = perProject.get(key) || perProject.set(key, blank()).get(key);
-      [bucket, overall].forEach(b => { b.total++; if (isAssembly) b.assembly++; else b.others++; });
-      if (isAssembly) return;
-      const status = String(this.getPdOrderStatus(pdId) || 'Unknown').trim() || 'Unknown';
-      const label = status.toLowerCase() === 'closed' ? 'Closed' : status;
-      [bucket, overall].forEach(b => { b.statuses[label] = (b.statuses[label] || 0) + 1; });
-      if (label !== 'Closed' && rows.length > 0) {
-        const op1 = Math.min(...rows.map(r => Number(r.stepNum) || 10));
-        const mat = this.getStepMaterialIssueSummary(pdId, op1);
-        if (mat && mat.tone === 'notready') [bucket, overall].forEach(b => { b.matNotReady++; });
+      const both = (fn) => [bucket, overall].forEach(fn);
+      both(b => { b.total++; });
+      const allComplete = this.isPdAllOpsComplete(pdId);
+      if (allComplete) both(b => { b.allComplete++; });
+      const onBoard = boardIds.has(pdId);
+      const wo = backlogIds.has(pdId) ? (this.workOrders || []).find(w => w.id === pdId) : null;
+      if (onBoard) both(b => { b.board++; });
+      if (wo && !onBoard) {
+        both(b => { b.backlog++; });
+        const op1 = Math.min(...((wo.steps || []).map(st => Number(st.stepNum) || 10)));
+        const mats = (wo.steps || []).length > 0 ? (this.getStepMaterialsList(pdId, op1) || []) : [];
+        if (mats.some(m => m.status && m.status.tone === 'notready')) both(b => { b.backlogMatNotReady++; });
+        if (this.isPdBlockedByChildren(pdId)) both(b => { b.backlogWaitChild++; });
       }
+      // Not complete and neither on the Board nor in the Backlog (e.g. closed list / not imported yet)
+      if (!allComplete && !onBoard && !wo) both(b => { b.other++; });
     });
     return { overall, perProject: [...perProject.entries()].map(([project, v]) => ({ project, ...v })).sort((a, b) => b.total - a.total || a.project.localeCompare(b.project)) };
   }
