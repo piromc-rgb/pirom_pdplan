@@ -368,7 +368,7 @@ export class QcCheckController {
     // Confirm close listener
     modal.querySelector('#btn-confirm-close-pds')?.addEventListener('click', () => {
       const pdIdsToRemove = matchingPds.map(p => p.woId);
-      this.state.markPdsCompletedAndRemoveBulk(pdIdsToRemove);
+      this.state.markPdsCompletedAndRemoveBulk(pdIdsToRemove, { method: 'qc-log', detail: 'ตรวจ QC Log: ส่งเข้าคลัง PRD/SEMI' });
 
       closeModal();
       this.showToast(`✅ ปิดและลบ Production Order ที่ส่งเข้าคลังแล้วเรียบร้อย (${pdIdsToRemove.length} รายการ)`);

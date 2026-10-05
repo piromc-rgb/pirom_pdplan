@@ -154,7 +154,7 @@ export class ResourcesController {
       if (pdIds.length === 0) return;
       const confirmed = window.confirm(`ยืนยันผลิตเสร็จแล้ว ${pdIds.length} PD?\nรายการจะถูกลบออกจากบอร์ดและบันทึกเป็น PD ที่ผลิตเสร็จแล้ว`);
       if (!confirmed) return;
-      this.state.markPdsCompletedAndRemoveBulk(pdIds);
+      this.state.markPdsCompletedAndRemoveBulk(pdIds, { method: 'pd-range', detail: 'ปุ่ม ผลิตเสร็จแล้ว ใน PD Range Filter' });
     });
 
     // Priority filter Select All / Deselect All
@@ -649,11 +649,11 @@ export class ResourcesController {
   // Trash button of the Priority / Project lists: every Production Order inside (board + backlog) is recorded as
   // Closed (completed list, together with its child PDs), all its Operations become Complete, and it is taken off
   // the plan so it does not come back from the next Status Overview import or get planned again.
-  closePdsAndRemove(matchJob, matchWo, preview = null) {
+  closePdsAndRemove(matchJob, matchWo, preview = null, label = '') {
     const { direct, children } = preview || this.previewForceClose(matchJob, matchWo);
     // Every Operation of the force-closed PDs becomes Complete (and stays Complete when a newer Status Overview is loaded)
     const opsMarked = this.state.forceCompleteOps([...direct, ...children]);
-    if (direct.length > 0) this.state.markPdsCompletedAndRemoveBulk([...direct]);
+    if (direct.length > 0) this.state.markPdsCompletedAndRemoveBulk([...direct], { method: 'force-close', detail: label ? `Force close: ${label}` : 'ปุ่มถังขยะ (Force close)' });
     // Anything still matching (e.g. entries without a PD id) is removed as before
     this.state.scheduledJobs = this.state.scheduledJobs.filter(j => !matchJob(j));
     this.state.workOrders = this.state.workOrders.filter(w => !matchWo(w));
@@ -670,7 +670,7 @@ export class ResourcesController {
       label,
       ...preview,
       onConfirm: () => {
-        const r = this.closePdsAndRemove(matchJob, matchWo, preview);
+        const r = this.closePdsAndRemove(matchJob, matchWo, preview, label);
         this.state.ganttController?.showToast?.(`✅ ยืนยันลบแล้ว: Force close ${r.closed} PD และตั้ง ${r.opsMarked} Operation เป็น Complete`, 'success');
       }
     });

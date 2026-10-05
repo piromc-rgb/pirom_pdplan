@@ -1685,6 +1685,7 @@ export class WorkflowController {
         inferredCompletedIds.forEach(id => {
           this.state.completedPdHistory[id] = true;
         });
+        this.state.logPdClose(inferredCompletedIds, 'import-inferred', `Import ${filename}: PD ใน Backlog ที่ไม่อยู่ในไฟล์`);
 
         // For each work order, sort steps by stepNum and assign step IDs
         importedWOs.forEach(wo => {

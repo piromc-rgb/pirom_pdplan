@@ -759,18 +759,73 @@ class App {
     const countEl = document.getElementById('completed-pd-list-count');
     if (!modal || !btnOpen || !listBody) return;
 
-    const renderList = () => {
-      const ids = Object.keys(state.completedPdHistory || {}).sort();
+    const searchEl = document.getElementById('completed-pd-list-search');
+    const btnViewList = document.getElementById('btn-completed-view-list');
+    const btnViewLog = document.getElementById('btn-completed-view-log');
+    let viewMode = 'list'; // 'list' = PDs in the completed list · 'log' = close/unmark audit log
+    const METHOD_LABELS = {
+      'force-close': 'Force close (ถังขยะ)',
+      'force-close-child': 'Force close — PD ลูก',
+      'mark-complete': 'ติ๊ก ผลิตจริงเสร็จแล้ว',
+      'mark-complete-child': 'ติ๊ก ผลิตจริงเสร็จแล้ว — PD ลูก',
+      'unmark': 'ยกเลิกสถานะ',
+      'unmark-child': 'ยกเลิกสถานะ — PD ลูก',
+      'pd-range': 'PD Range Filter: ผลิตเสร็จแล้ว',
+      'pd-range-child': 'PD Range Filter — PD ลูก',
+      'qc-log': 'ตรวจ QC Log',
+      'qc-log-child': 'ตรวจ QC Log — PD ลูก',
+      'import-inferred': 'Import: ไม่อยู่ในไฟล์',
+      'cascade-child': 'ปิดตาม PD แม่',
+      'remove-completed': 'ปิดและนำออกจากแผน',
+      'remove-completed-child': 'ปิดและนำออกจากแผน — PD ลูก'
+    };
+    const methodLabel = (m) => METHOD_LABELS[m] || m || '-';
+    const fmtTime = (t) => new Date(t).toLocaleString('th-TH', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    const renderLog = () => {
+      const q = (searchEl?.value || '').trim().toLowerCase();
+      const log = (state.closeLog || []).filter(e => !q || String(e.pd).toLowerCase().includes(q)).slice().reverse();
       listBody.innerHTML = '';
-      emptyMsg.classList.toggle('hidden', ids.length > 0);
-      if (countEl) countEl.textContent = ids.length;
+      emptyMsg.classList.add('hidden');
+      if (countEl) countEl.textContent = Object.keys(state.completedPdHistory || {}).length;
+      if (log.length === 0) {
+        listBody.innerHTML = '<div style="text-align:center;padding:30px 20px;color:var(--text-secondary);font-size:12px;">ยังไม่มี Log การปิด PD (เริ่มบันทึกตั้งแต่อัปเดตนี้)</div>';
+        return;
+      }
+      const shown = log.slice(0, 500);
+      const rows = shown.map(e => {
+        const isUndo = /^unmark/.test(e.method);
+        const color = isUndo ? '#b45309' : (/^force-close/.test(e.method) ? '#b91c1c' : '#15803d');
+        return `<tr style="border-top:1px solid var(--border-glass);"><td style="padding:5px 8px;white-space:nowrap;">${esc(fmtTime(e.t))}</td><td style="padding:5px 8px;font-family:monospace;font-weight:700;">${esc(e.pd)}</td><td style="padding:5px 8px;color:${color};font-weight:700;white-space:nowrap;">${esc(methodLabel(e.method))}</td><td style="padding:5px 8px;color:var(--text-secondary);">${esc(e.detail)}</td><td style="padding:5px 8px;">${esc(e.by)}</td></tr>`;
+      }).join('');
+      listBody.innerHTML = `<div style="font-size:10.5px;color:var(--text-secondary);margin-bottom:6px;">แสดง ${shown.length} จาก ${log.length} รายการล่าสุด (ใหม่สุดก่อน)</div><table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="text-align:left;color:var(--text-secondary);"><th style="padding:5px 8px;">เวลา</th><th style="padding:5px 8px;">PD</th><th style="padding:5px 8px;">วิธี</th><th style="padding:5px 8px;">รายละเอียด</th><th style="padding:5px 8px;">โหมด</th></tr></thead><tbody>${rows}</tbody></table>`;
+    };
+
+    const renderList = () => {
+      if (btnViewList) btnViewList.style.outline = viewMode === 'list' ? '2px solid var(--accent-teal)' : 'none';
+      if (btnViewLog) btnViewLog.style.outline = viewMode === 'log' ? '2px solid var(--accent-teal)' : 'none';
+      if (viewMode === 'log') { renderLog(); return; }
+      const q = (searchEl?.value || '').trim().toLowerCase();
+      const allIds = Object.keys(state.completedPdHistory || {}).sort();
+      const ids = q ? allIds.filter(id => id.toLowerCase().includes(q)) : allIds;
+      // Latest log entry per PD (so each row can say how it was closed)
+      const lastLog = {};
+      (state.closeLog || []).forEach(e => { lastLog[e.pd] = e; });
+      listBody.innerHTML = '';
+      emptyMsg.classList.toggle('hidden', allIds.length > 0);
+      if (countEl) countEl.textContent = allIds.length;
 
       ids.forEach(pdId => {
         const row = document.createElement('div');
         row.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(22, 163, 74, 0.06); border: 1px solid var(--border-glass); border-left: 3px solid var(--accent-green, #16a34a); border-radius: 6px;';
+        const last = lastLog[pdId];
+        const how = last
+          ? `<span style="font-size:10px;color:var(--text-secondary);margin-left:10px;">${esc(methodLabel(last.method))} · ${esc(fmtTime(last.t))}</span>`
+          : '<span style="font-size:10px;color:var(--text-secondary);margin-left:10px;">ไม่มี Log (ปิดก่อนเริ่มบันทึก)</span>';
         row.innerHTML = `
-          <strong style="font-size: 12px; color: var(--text-primary);">${pdId}</strong>
-          <button type="button" class="btn-unmark-completed-pd" data-pd-id="${pdId}" title="ยกเลิกสถานะผลิตเสร็จแล้ว - PD นี้จะกลับมารับการวางแผนได้อีกครั้ง (ต้อง Import กลับเข้า backlog เอง)" style="font-size: 9.5px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--accent-red); background: rgba(239, 68, 68, 0.08); color: var(--accent-red); cursor: pointer; font-weight: bold;">↩️ ยกเลิกสถานะ</button>
+          <div><strong style="font-size: 12px; color: var(--text-primary);">${esc(pdId)}</strong>${how}</div>
+          <button type="button" class="btn-unmark-completed-pd" data-pd-id="${esc(pdId)}" title="ยกเลิกสถานะผลิตเสร็จแล้ว - PD นี้จะกลับมารับการวางแผนได้อีกครั้ง (ต้อง Import กลับเข้า backlog เอง)" style="font-size: 9.5px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--accent-red); background: rgba(239, 68, 68, 0.08); color: var(--accent-red); cursor: pointer; font-weight: bold;">↩️ ยกเลิกสถานะ</button>
         `;
         listBody.appendChild(row);
       });
@@ -785,6 +840,10 @@ class App {
         });
       });
     };
+
+    if (searchEl) searchEl.addEventListener('input', renderList);
+    if (btnViewList) btnViewList.addEventListener('click', () => { viewMode = 'list'; renderList(); });
+    if (btnViewLog) btnViewLog.addEventListener('click', () => { viewMode = 'log'; renderList(); });
 
     btnOpen.addEventListener('click', () => {
       renderList();

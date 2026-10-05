@@ -42,6 +42,8 @@ class CentralState {
     // source Excel file or an old backlog snapshot.
     this.completedPdHistory = {};
     this.completedOpHistory = {}; // PD -> { step: true } operations force-completed by the user
+    // Audit log of every PD closed into completedPdHistory: [{ t: epoch ms, pd, method, detail, by }]
+    this.closeLog = [];
 
     // PD IDs marked as favorite (starred) by the user
     this.favoritePDs = {};
@@ -2539,6 +2541,7 @@ class CentralState {
       const cId = childIds[i];
       if (!this.completedPdHistory[cId]) {
         this.completedPdHistory[cId] = true;
+        this.logPdClose(cId, 'cascade-child', 'ตาม PD แม่ที่ปิดแล้ว');
         addedAny = true;
       }
     }
@@ -2548,6 +2551,35 @@ class CentralState {
       this.workOrders = (this.workOrders || []).filter(wo => !this.isPdInCompletedHistory(wo.id));
     }
     return addedAny;
+  }
+
+  // Record why / when PDs were closed (or re-opened). method: force-close | force-close-child | mark-complete |
+  // unmark | pd-range | qc-log | import-inferred | cascade-child ...
+  // Union of two close logs (local + cloud), de-duplicated, oldest first
+  mergeCloseLogs(a, b) {
+    const seen = new Set();
+    const out = [];
+    [].concat(a || [], b || []).forEach(e => {
+      if (!e || !e.pd) return;
+      const k = `${e.t}|${e.pd}|${e.method}`;
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push(e);
+    });
+    out.sort((x, y) => x.t - y.t);
+    return out.length > 20000 ? out.slice(out.length - 20000) : out;
+  }
+
+  logPdClose(pdIds, method, detail = '') {
+    const ids = [...new Set([].concat(pdIds || []).filter(Boolean))];
+    if (ids.length === 0) return;
+    if (!Array.isArray(this.closeLog)) this.closeLog = [];
+    const t = Date.now();
+    let by = '';
+    try { by = (this.storageSync && this.storageSync.getUserMode && this.storageSync.getUserMode() === 'plan') ? 'EDIT' : 'VIEW'; } catch (e) { by = ''; }
+    ids.forEach(pd => this.closeLog.push({ t, pd, method, detail, by }));
+    // Keep the log bounded (oldest entries drop first)
+    if (this.closeLog.length > 20000) this.closeLog.splice(0, this.closeLog.length - 20000);
   }
 
   markPdCompletedHistory(pdId, completed, cascadeChildren = true) {
@@ -2561,6 +2593,8 @@ class CentralState {
         delete this.completedPdHistory[id];
       }
     });
+    this.logPdClose(pdId, completed ? 'mark-complete' : 'unmark', completed ? 'ติ๊ก "ผลิตจริงเสร็จแล้ว"' : 'ยกเลิกสถานะผลิตเสร็จแล้ว');
+    this.logPdClose(childPdIds, completed ? 'mark-complete-child' : 'unmark-child', `ตาม PD แม่ ${pdId}`);
     this.savePlanToFile();
     this.notify();
     return childPdIds;
@@ -2593,12 +2627,15 @@ class CentralState {
   // Same as markPdCompletedAndRemove() but for many PDs at once (e.g. every PD
   // that falls inside a checked PD Range Filter entry) - one history snapshot
   // and one save/notify instead of one per PD. Also cascades to all child PDs.
-  markPdsCompletedAndRemoveBulk(pdIds) {
+  markPdsCompletedAndRemoveBulk(pdIds, meta = {}) {
     if (!pdIds || pdIds.length === 0) return;
     this.saveStateToHistory();
     const idSet = new Set(pdIds);
     const children = this.getDescendantPdIds(pdIds);
     for (let i = 0; i < children.length; i++) idSet.add(children[i]);
+    const method = meta.method || 'remove-completed';
+    this.logPdClose(pdIds, method, meta.detail || '');
+    this.logPdClose(children.filter(id => !pdIds.includes(id)), method + '-child', meta.detail || 'PD ลูกของ PD ที่ปิด');
     idSet.forEach(id => { this.completedPdHistory[id] = true; });
     this.scheduledJobs = this.scheduledJobs.filter(j => !idSet.has(j.woId));
     this.workOrders = this.workOrders.filter(wo => !idSet.has(wo.id));
@@ -2692,6 +2729,7 @@ class CentralState {
       requireChildPdsClosed: this.requireChildPdsClosed !== false,
       completedPdHistory: this.completedPdHistory || {},
       completedOpHistory: this.completedOpHistory || {},
+      closeLog: this.closeLog || [],
       favoritePDs: this.favoritePDs || {},
       pdMemos: this.pdMemos || {},
       removedStepHistory: this.removedStepHistory || {},
@@ -3049,6 +3087,7 @@ class CentralState {
           this.completedPdHistory = data.completedPdHistory;
         }
       }
+      if (Array.isArray(data.closeLog)) this.closeLog = this.mergeCloseLogs(this.closeLog, data.closeLog);
       if (data.favoritePDs) this.favoritePDs = data.favoritePDs;
       if (data.pdMemos) this.pdMemos = Object.assign({}, this.pdMemos || {}, data.pdMemos);
       if (data.removedStepHistory) this.removedStepHistory = data.removedStepHistory;
