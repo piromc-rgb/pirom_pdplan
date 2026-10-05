@@ -573,11 +573,30 @@ export class ResourcesController {
     let showLists = false;
     try { showLists = localStorage.getItem('chaken_project_summary_lists') === '1'; } catch (e) { /* ignore */ }
     const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    const num = (n, color) => `<span style="font-weight:800;color:${color || '#0f172a'};">${n}</span>`;
+    const num = (n, color) => `<span style="font-weight:800;color:${color || '#0f172a'};white-space:nowrap;">${n} PD</span>`;
+    // Project details shown at the top of each block: customer(s) and the planned production period on the Gantt
+    const fmtD = (d) => `${d.getDate()}/${d.getMonth() + 1}/${String(d.getFullYear()).slice(-2)}`;
+    const projectInfo = (proj) => {
+      const custs = new Set();
+      (this.state.scheduledJobs || []).forEach(j => { if ((j.project || 'General') === proj && j.customer && j.customer !== 'General') custs.add(j.customer); });
+      (this.state.workOrders || []).forEach(w => { if ((w.project || 'General') === proj && w.customer && w.customer !== 'General') custs.add(w.customer); });
+      const jobs = (this.state.scheduledJobs || []).filter(j => (j.project || 'General') === proj && typeof j.startHour === 'number' && !isNaN(j.startHour));
+      let period = '';
+      if (jobs.length > 0) {
+        const dS = this.state.workingHourToDate(Math.min(...jobs.map(j => j.startHour)));
+        const dE = this.state.workingHourToDate(Math.max(...jobs.map(j => j.startHour + ((typeof j.estHours === 'number' && j.estHours > 0) ? j.estHours : 1))));
+        if (dS && dE && !isNaN(dS.getTime()) && !isNaN(dE.getTime())) {
+          const days = Math.round((new Date(dE.getFullYear(), dE.getMonth(), dE.getDate()) - new Date(dS.getFullYear(), dS.getMonth(), dS.getDate())) / 86400000) + 1;
+          period = `${fmtD(dS)} - ${fmtD(dE)} (${days} วัน)`;
+        }
+      }
+      const row = (k, v) => `<div style="display:flex;gap:8px;font-size:11.5px;color:#334155;"><span style="color:#64748b;min-width:92px;">${k}</span><span style="font-weight:600;">${v}</span></div>`;
+      return `<div style="margin:2px 0 8px;display:flex;flex-direction:column;gap:2px;">${row('เลขที่โครงการ', esc(proj))}${row('ลูกค้า', custs.size ? esc([...custs].join(', ')) : '-')}${row('แผนผลิตบน Gantt', period || 'ยังไม่มีแผนงานผลิต')}</div>`;
+    };
     // One summary row; the PD numbers behind it can be expanded ("ดูรายการ PD") and opened with a click
     const line = (label, n, color, indent = false, ids = null) => `<div style="padding:5px 0;border-bottom:1px solid #f1f5f9;${indent ? 'padding-left:22px;color:#475569;' : ''}">
       <div style="display:flex;justify-content:space-between;gap:16px;"><span>${indent ? '↳ ' : ''}${label}</span>${num(n, color)}</div>
-      ${ids && ids.length ? `<details${showLists ? ' open' : ''} style="margin-top:3px;"><summary style="cursor:pointer;font-size:11px;color:#2563eb;">ดูรายการ PD (${ids.length})</summary><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;">${[...ids].sort().map(id => `<span class="project-summary-pd" data-pd="${esc(id)}" title="คลิกเพื่อเปิดรายละเอียด PD" style="font-size:11px;font-family:monospace;padding:2px 7px;border-radius:4px;background:#f1f5f9;border:1px solid #cbd5e1;color:#1e3a8a;cursor:pointer;">${esc(id)}</span>`).join('')}</div></details>` : ''}
+      ${ids && ids.length ? `<details class="ps-list"${showLists ? ' open' : ''} style="margin-top:3px;${showLists ? '' : 'display:none;'}"><summary style="cursor:pointer;font-size:11px;color:#2563eb;">ดูรายการ PD (${ids.length})</summary><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;">${[...ids].sort().map(id => `<span class="project-summary-pd" data-pd="${esc(id)}" title="คลิกเพื่อเปิดรายละเอียด PD" style="font-size:11px;font-family:monospace;padding:2px 7px;border-radius:4px;background:#f1f5f9;border:1px solid #cbd5e1;color:#1e3a8a;cursor:pointer;">${esc(id)}</span>`).join('')}</div></details>` : ''}
     </div>`;
     // Donut chart: exclusive split of the project's PDs (finished / in production = Board / waiting = Backlog / other) with %
     const PIE = [
@@ -596,7 +615,7 @@ export class ResourcesController {
         offset += len;
         return el;
       }).join('') : '';
-      const legend = PIE.filter(([, , , get]) => get(b) > 0).map(([, label, col, get]) => `<div style="display:flex;align-items:center;gap:6px;font-size:11px;white-space:nowrap;"><span style="width:10px;height:10px;border-radius:2px;background:${col};flex-shrink:0;"></span><span style="flex:1;">${label}</span><span style="font-weight:700;">${(get(b) / total * 100).toFixed(1)}%</span><span style="color:#64748b;min-width:34px;text-align:right;">${get(b)}</span></div>`).join('');
+      const legend = PIE.filter(([, , , get]) => get(b) > 0).map(([, label, col, get]) => `<div style="display:flex;align-items:center;gap:6px;font-size:11px;white-space:nowrap;"><span style="width:10px;height:10px;border-radius:2px;background:${col};flex-shrink:0;"></span><span style="flex:1;">${label}</span><span style="font-weight:700;">${(get(b) / total * 100).toFixed(1)}%</span><span style="color:#64748b;min-width:48px;text-align:right;white-space:nowrap;">${get(b)} PD</span></div>`).join('');
       return `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;min-width:210px;">
         <svg viewBox="0 0 120 120" width="130" height="130" role="img" aria-label="สัดส่วน PD"><circle cx="60" cy="60" r="${r}" fill="none" stroke="#e2e8f0" stroke-width="18"></circle>${arcs}<text x="60" y="58" text-anchor="middle" font-size="16" font-weight="800" fill="#0f172a">${total}</text><text x="60" y="73" text-anchor="middle" font-size="8.5" fill="#64748b">PD ทั้งหมด</text></svg>
         <div style="display:flex;flex-direction:column;gap:3px;width:100%;">${legend}</div>
@@ -617,7 +636,8 @@ export class ResourcesController {
     const breakdown = (b) => `<div style="display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap;"><div style="flex:1;min-width:360px;">${breakdownRows(b)}</div>${donut(b)}</div>`;
     const projectBlocks = sum.perProject.map(r => `
       <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;">
-        <div style="font-weight:700;margin-bottom:4px;">${esc(r.project)}</div>
+        <div style="font-weight:700;margin-bottom:2px;">โครงการ ${esc(r.project)}</div>
+        ${projectInfo(r.project)}
         ${breakdown(r)}
       </div>`).join('');
     const old = document.getElementById('project-summary-popup');
@@ -630,16 +650,17 @@ export class ResourcesController {
         <div style="padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <div>
             <div style="font-size:15px;font-weight:700;">📊 สรุปภาพรวมโครงการที่เลือก (${sum.perProject.length} โครงการ${sum.perProject.length <= 3 ? ': ' + sum.perProject.map(r => esc(r.project)).join(', ') : ''})</div>
-            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">นับจาก PD ทั้งหมดในไฟล์ Status Overview ของ SO / โครงการที่ติ๊กอยู่ในตัวกรอง เทียบกับสถานะใน Board / Backlog ปัจจุบัน</div>
+            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">นับจาก PD ทั้งหมดในไฟล์ Status Overview ของ SO / โครงการที่ติ๊กอยู่ในตัวกรอง เทียบกับสถานะใน Board / Backlog ปัจจุบัน · แสดงรายงานเมื่อ ${esc(new Date().toLocaleString('th-TH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }))}</div>
           </div>
           <div style="display:flex;align-items:center;gap:14px;flex-shrink:0;">
-            <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#334155;cursor:pointer;user-select:none;" title="เปิด/ปิดการแสดงรายการเลข PD ในแต่ละบรรทัด"><span>แสดงรายการ PD</span><span class="ios-toggle"><input type="checkbox" id="chk-project-summary-lists"${showLists ? ' checked' : ''}><span class="ios-toggle-slider"></span></span></label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#334155;cursor:pointer;user-select:none;" title="เปิด = แสดงรายการเลข PD ในแต่ละบรรทัด · ปิด = ซ่อนบรรทัด ดูรายการ PD"><span>แสดงรายการ PD</span><span class="ios-toggle"><input type="checkbox" id="chk-project-summary-lists"${showLists ? ' checked' : ''}><span class="ios-toggle-slider"></span></span></label>
             <button type="button" id="btn-close-project-summary" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
           </div>
         </div>
         <div style="padding:6px 18px 12px;overflow:auto;display:flex;flex-direction:column;gap:14px;">
           <div style="border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;padding:10px 14px;">
             <div style="font-weight:700;margin-bottom:4px;">${sum.perProject.length === 1 ? `โครงการ ${esc(sum.perProject[0].project)}` : `รวมทุกโครงการที่เลือก (${sum.perProject.length} โครงการ)`}</div>
+            ${sum.perProject.length === 1 ? projectInfo(sum.perProject[0].project) : ''}
             ${breakdown(o)}
           </div>
           ${sum.perProject.length > 1 ? `<div style="font-weight:700;">แยกรายโครงการ</div>${projectBlocks}` : ''}
@@ -657,7 +678,7 @@ export class ResourcesController {
     // Top-right switch: expand / collapse every PD list at once (remembered)
     overlay.querySelector('#chk-project-summary-lists')?.addEventListener('change', (e) => {
       const on = e.target.checked;
-      overlay.querySelectorAll('details').forEach(d => { d.open = on; });
+      overlay.querySelectorAll('details.ps-list').forEach(d => { d.style.display = on ? '' : 'none'; d.open = on; });
       try { localStorage.setItem('chaken_project_summary_lists', on ? '1' : '0'); } catch (err) { /* ignore */ }
     });
     overlay.querySelector('#btn-ok-project-summary').addEventListener('click', close);
