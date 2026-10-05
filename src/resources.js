@@ -591,19 +591,19 @@ export class ResourcesController {
         }
       }
       const row = (k, v) => `<div style="display:flex;gap:8px;font-size:11.5px;color:#334155;"><span style="color:#64748b;min-width:92px;">${k}</span><span style="font-weight:600;">${v}</span></div>`;
-      return `<div style="margin:2px 0 8px;display:flex;flex-direction:column;gap:2px;">${row('เลขที่โครงการ', esc(proj))}${row('ลูกค้า', custs.size ? esc([...custs].join(', ')) : '-')}${row('แผนผลิตบน Gantt', period || 'ยังไม่มีแผนงานผลิต')}</div>`;
+      return `<div style="margin:2px 0 8px;display:flex;flex-direction:column;gap:2px;">${row('ลูกค้า', custs.size ? esc([...custs].join(', ')) : '-')}${row('แผนผลิตบน Gantt', period || 'ยังไม่มีแผนงานผลิต')}</div>`;
     };
     // One summary row; the PD numbers behind it can be expanded ("ดูรายการ PD") and opened with a click
     const line = (label, n, color, indent = false, ids = null) => `<div style="padding:5px 0;border-bottom:1px solid #f1f5f9;${indent ? 'padding-left:22px;color:#475569;' : ''}">
-      <div style="display:flex;justify-content:space-between;gap:16px;"><span>${indent ? '↳ ' : ''}${label}</span>${num(n, color)}</div>
+      <div style="display:flex;justify-content:space-between;gap:16px;"><span>${indent ? '↳ ' : '• '}${label}</span>${num(n, color)}</div>
       ${ids && ids.length ? `<details class="ps-list"${showLists ? ' open' : ''} style="margin-top:3px;${showLists ? '' : 'display:none;'}"><summary style="cursor:pointer;font-size:11px;color:#2563eb;">ดูรายการ PD (${ids.length})</summary><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;">${[...ids].sort().map(id => `<span class="project-summary-pd" data-pd="${esc(id)}" title="คลิกเพื่อเปิดรายละเอียด PD" style="font-size:11px;font-family:monospace;padding:2px 7px;border-radius:4px;background:#f1f5f9;border:1px solid #cbd5e1;color:#1e3a8a;cursor:pointer;">${esc(id)}</span>`).join('')}</div></details>` : ''}
     </div>`;
     // Donut chart: exclusive split of the project's PDs (finished / in production = Board / waiting = Backlog / other) with %
     const PIE = [
       ['done', 'ผลิตเสร็จแล้ว', '#15803d', (b) => b.pie.complete + b.pie.completedList],
-      ['board', 'กำลังผลิต', '#0d9488', (b) => b.pie.board],
-      ['backlog', 'รอผลิต', '#7c3aed', (b) => b.pie.backlog],
-      ['other', 'อื่นๆ', '#d97706', (b) => b.pie.other]
+      ['board', 'กำลังผลิต', '#eab308', (b) => b.pie.board],
+      ['backlog', 'รอผลิต', '#dc2626', (b) => b.pie.backlog],
+      ['other', 'อื่นๆ', '#94a3b8', (b) => b.pie.other]
     ];
     const donut = (b) => {
       const total = b.total || 0;
@@ -650,7 +650,8 @@ export class ResourcesController {
         <div style="padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <div>
             <div style="font-size:15px;font-weight:700;">📊 สรุปภาพรวมโครงการที่เลือก (${sum.perProject.length} โครงการ${sum.perProject.length <= 3 ? ': ' + sum.perProject.map(r => esc(r.project)).join(', ') : ''})</div>
-            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">นับจาก PD ทั้งหมดในไฟล์ Status Overview ของ SO / โครงการที่ติ๊กอยู่ในตัวกรอง เทียบกับสถานะใน Board / Backlog ปัจจุบัน · แสดงรายงานเมื่อ ${esc(new Date().toLocaleString('th-TH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }))}</div>
+            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">นับจาก PD ทั้งหมดในไฟล์ Status Overview ของ SO / โครงการที่ติ๊กอยู่ในตัวกรอง เทียบกับสถานะใน Board / Backlog ปัจจุบัน</div>
+            <div style="color:#64748b;font-size:11.5px;margin-top:2px;white-space:nowrap;">แสดงรายงานเมื่อ ${esc(new Date().toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' }))} ${esc(new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))}</div>
           </div>
           <div style="display:flex;align-items:center;gap:14px;flex-shrink:0;">
             <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#334155;cursor:pointer;user-select:none;" title="เปิด = แสดงรายการเลข PD ในแต่ละบรรทัด · ปิด = ซ่อนบรรทัด ดูรายการ PD"><span>แสดงรายการ PD</span><span class="ios-toggle"><input type="checkbox" id="chk-project-summary-lists"${showLists ? ' checked' : ''}><span class="ios-toggle-slider"></span></span></label>
