@@ -268,6 +268,7 @@ def sync_plan_materials(target_filename="LN Status Overview.xlsx"):
         # Sheet 5 (Data)
         sheet5_data = parse_sheet("xl/worksheets/sheet5.xml")
         dwg_to_pd_map = {}
+        dwg_candidates = {}  # dwg -> {pd_id: {...}}: every PD of a Dwg, so a parent can pick its own child
         pd_op_status_map = {}
         for row in sheet5_data[1:]:
             pd_id = (row.get("G") or "").strip()
@@ -297,6 +298,10 @@ def sync_plan_materials(target_filename="LN Status Overview.xlsx"):
 
             if not dwg:
                 continue
+
+            cand = dwg_candidates.setdefault(dwg, {}).setdefault(pd_id, {"pdId": pd_id, "orderStatus": order_status, "project": project, "operations": []})
+            if not any(op["stepNum"] == step_num for op in cand["operations"]):
+                cand["operations"].append({"stepNum": step_num, "name": op_name, "machine": mc, "status": op_status})
 
             if dwg not in dwg_to_pd_map:
                 dwg_to_pd_map[dwg] = {
@@ -333,6 +338,10 @@ def sync_plan_materials(target_filename="LN Status Overview.xlsx"):
                         "machine": mc,
                         "status": op_status
                     })
+
+        for dwg, by_pd in dwg_candidates.items():
+            if len(by_pd) > 1 and dwg in dwg_to_pd_map:
+                dwg_to_pd_map[dwg]["candidates"] = list(by_pd.values())
 
         # Ensure any operation status from Sheet 8 (Plan + Mat) is also in pd_op_status_map
         for pd_id, mat_list in plan_materials.items():

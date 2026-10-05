@@ -2263,7 +2263,7 @@ class CentralState {
       const op1 = Math.min(...stepNums);
       const mats = [...new Set(rows.filter(r => Number(r.stepNum) === op1).map(r => String(r.mat || '').trim()).filter(m => m.length === 14))];
       mats.forEach(mat => {
-        const info = this.getChildPdInfo(mat);
+        const info = this.getChildPdInfo(mat, woId);
         if (info && info.found && !info.isRawMat && !info.isClosed && info.pdId && info.pdId !== woId && !seen.has(info.pdId)) {
           open.push({ pdId: info.pdId, kind: 'mat', mat });
           seen.add(info.pdId);
@@ -3004,7 +3004,39 @@ class CentralState {
     return '';
   }
 
-  getChildPdInfo(matCode) {
+  // Project / SO of a PD as known by the live plan (backlog or board); '' when unknown.
+  _pdProject(pdId) {
+    const wo = (this.workOrders || []).find(w => w.id === pdId);
+    const job = wo ? null : (this.scheduledJobs || []).find(j => (j.woId || j.id) === pdId);
+    return String((wo && wo.project) || (job && job.project) || '').trim();
+  }
+
+  // A Dwg can belong to several PDs. For a given parent PD, the child is the PD of that Dwg numbered closest AFTER
+  // the parent (same SO preferred, within 500 PD numbers); otherwise the map's default PD is used.
+  _pickChildCandidate(info, parentPdId) {
+    const cands = info && info.candidates;
+    if (!Array.isArray(cands) || cands.length < 2 || !parentPdId) return info;
+    const num = (id) => { const m = String(id || '').match(/\d+/); return m ? parseInt(m[0], 10) : NaN; };
+    const pNum = num(parentPdId);
+    if (isNaN(pNum)) return info;
+    const parentProject = this._pdProject(parentPdId);
+    const closest = (sameProjectOnly) => {
+      let best = null;
+      let bestDiff = Infinity;
+      cands.forEach(c => {
+        const d = num(c.pdId) - pNum;
+        if (!(d > 0) || d > 500 || c.pdId === parentPdId) return;
+        if (sameProjectOnly && String(c.project || '').trim() !== parentProject) return;
+        if (d < bestDiff) { best = c; bestDiff = d; }
+      });
+      return best;
+    };
+    const best = (parentProject && closest(true)) || closest(false);
+    if (!best) return info;
+    return { pdId: best.pdId, orderStatus: best.orderStatus, project: best.project, operations: best.operations, candidates: cands };
+  }
+
+  getChildPdInfo(matCode, parentPdId = null) {
     if (!matCode) return null;
     const trimmedMat = String(matCode).trim();
     if (trimmedMat.length === 10) {
@@ -3023,7 +3055,7 @@ class CentralState {
     if (trimmedMat.length !== 14) return null;
 
     // 1. Check in dwgToPdMap (built from Excel Data sheet)
-    const info = this.dwgToPdMap ? this.dwgToPdMap[trimmedMat] : null;
+    const info = this._pickChildCandidate(this.dwgToPdMap ? this.dwgToPdMap[trimmedMat] : null, parentPdId);
 
     // 2. Also check scheduledJobs and workOrders for real-time schedule / status
     const liveJobs = (this.scheduledJobs || []).filter(j => 

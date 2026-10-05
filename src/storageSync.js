@@ -1793,12 +1793,35 @@ export class StorageSyncManager {
     return changed;
   }
 
+  // Reads the Status Overview "Data" sheet (sheet named exactly "Data") from an already-loaded workbook / bytes and
+  // refreshes the Dwg -> PD map. Quietly does nothing when the sheet is missing.
+  refreshDwgMapFromWorkbook(workbookOrBytes) {
+    try {
+      const wc = this.state.workflowController;
+      if (!wc || typeof wc.parseAndStoreDataSheet !== 'function' || typeof XLSX === 'undefined') return false;
+      let wb = workbookOrBytes;
+      if (!wb || !wb.SheetNames) {
+        const names = XLSX.read(workbookOrBytes, { type: 'array', bookSheets: true }).SheetNames;
+        const dataName = names.find(n => (n || '').trim().toLowerCase() === 'data');
+        if (!dataName) return false;
+        wb = XLSX.read(workbookOrBytes, { type: 'array', sheets: dataName });
+      }
+      const dataName = wb.SheetNames.find(n => (n || '').trim().toLowerCase() === 'data');
+      if (!dataName || !wb.Sheets[dataName]) return false;
+      return wc.parseAndStoreDataSheet(XLSX.utils.sheet_to_json(wb.Sheets[dataName], { header: 1, defval: '' }));
+    } catch (e) {
+      console.warn('Refreshing Dwg -> PD map from the Data sheet failed:', e);
+      return false;
+    }
+  }
+
   // Detects a new / newer Status Overview file (local server or, on hosted pages, the Cloud API) and
   // reloads Plan + Mat from it automatically, so Mat. readiness never keeps showing stale cached data.
   async checkStatusOverviewUpdate() {
     if (typeof window === 'undefined' || this._soChecking) return;
     this._soChecking = true;
-    const KEY = 'chaken_status_overview_stamp';
+    // _v2: bumped when the Dwg->PD map gained per-Dwg candidate PDs, so every browser reloads the Overview once
+    const KEY = 'chaken_status_overview_stamp_v2';
     try {
       const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ||
         window.location.hostname.startsWith('192.168.') || window.location.port === '5173';
@@ -1960,6 +1983,7 @@ export class StorageSyncManager {
               }
               const before = this.snapshotOverviewState(cachedBefore);
               this.state.workflowController.parseAndStoreMaterials(matRaw2D);
+              this.refreshDwgMapFromWorkbook(bytes);
               this.updateAssemblyTreeAfterMaterials();
               await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, overview.filename || filename, this.state.pdOpStatusMap, this.state.materialInventory);
               this.reportOverviewUpdate(before, overview.filename || filename);
@@ -2066,6 +2090,7 @@ export class StorageSyncManager {
             const matWorksheet = workbook.Sheets[matSheetName];
             const matRaw2D = XLSX.utils.sheet_to_json(matWorksheet, { header: 1, defval: '' });
             this.state.workflowController.parseAndStoreMaterials(matRaw2D);
+            this.refreshDwgMapFromWorkbook(workbook);
             this.updateAssemblyTreeAfterMaterials();
             // บันทึกแคช Local (IndexedDB + Temp Local Disk) ทันที
             await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, filename, this.state.pdOpStatusMap);
@@ -2619,6 +2644,7 @@ export class StorageSyncManager {
               const matSheet = workbook.Sheets[matSheetName];
               const matRaw = XLSX.utils.sheet_to_json(matSheet, { header: 1, defval: '' });
               this.state.workflowController.parseAndStoreMaterials(matRaw);
+              this.refreshDwgMapFromWorkbook(workbook);
               this.updateAssemblyTreeAfterMaterials();
               parsedChosenFile = true;
               await this.savePlanMaterialsToCache(this.state.planMaterials, this.state.dwgToPdMap, file.name, this.state.pdOpStatusMap);

@@ -3976,7 +3976,7 @@ export class GanttController {
             let pendingOpCell = `<span style="color: var(--text-secondary);">-</span>`;
 
             if (is14Char) {
-              const childInfo = typeof this.state.getChildPdInfo === 'function' ? this.state.getChildPdInfo(matCode) : null;
+              const childInfo = typeof this.state.getChildPdInfo === 'function' ? this.state.getChildPdInfo(matCode, woId) : null;
               if (childInfo && childInfo.found && !childInfo.isRawMat) {
                 childPdCell = `
                   <button type="button" class="btn-open-child-pd" data-pd-id="${childInfo.pdId}" title="คลิกเพื่อเปิดดูรายละเอียดและขั้นตอนของ ${childInfo.pdId}" style="background: rgba(2, 132, 199, 0.15); border: 1.5px solid #0284c7; color: #0284c7; padding: 2px 7px; border-radius: 4px; font-family: monospace; font-size: 11px; font-weight: 800; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 3px;">

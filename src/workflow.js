@@ -1,6 +1,28 @@
 // MIE Trak Pro - Production Order Backlog Controller
 import { getPriorityWeight } from './scheduler.js';
 
+// Several PDs can share one Dwg (an old closed PD plus the PD just released for a new parent). The Dwg -> PD map keeps
+// one default PD per Dwg; this also remembers EVERY PD of a Dwg so a parent can pick its own child (nearest PD number
+// after the parent, same SO) instead of the first one found.
+function addDwgCandidate(candMap, dwg, pdId, orderStatus, project, opNum, name, machine, status) {
+  if (!candMap[dwg]) candMap[dwg] = {};
+  let c = candMap[dwg][pdId];
+  if (!c) c = candMap[dwg][pdId] = { pdId, orderStatus, project, operations: [] };
+  if (!c.orderStatus && orderStatus) c.orderStatus = orderStatus;
+  if (!c.project && project) c.project = project;
+  if (!c.operations.some(o => o.stepNum === opNum)) c.operations.push({ stepNum: opNum, name, machine, status });
+}
+
+function attachDwgCandidates(dwgToPdMap, candMap) {
+  Object.keys(candMap).forEach(dwg => {
+    const entry = dwgToPdMap[dwg];
+    if (!entry) return;
+    const list = Object.values(candMap[dwg]);
+    if (list.length > 1) entry.candidates = list;
+    else delete entry.candidates;
+  });
+}
+
 export class WorkflowController {
   constructor(state) {
     this.state = state;
@@ -1333,6 +1355,7 @@ export class WorkflowController {
         // Build Dwg to PD mapping for 14-char sub-assembly tracking and PD Operation Status map
         const dwgToPdMap = this.state.dwgToPdMap || {};
         const pdOpStatusMap = this.state.pdOpStatusMap || {};
+        const dwgCandidates = {};
         for (let i = 1; i < raw2D.length; i++) {
           const rawRow = raw2D[i];
           if (!rawRow || rawRow.length === 0) continue;
@@ -1359,6 +1382,7 @@ export class WorkflowController {
           }
 
           if (!dwg) continue;
+          addDwgCandidate(dwgCandidates, dwg, pdId, orderStatus, String(rawRow[col.project] || '').trim(), opNum, wcDesc || wcCode, wcCode, opStatus);
 
           if (!dwgToPdMap[dwg]) {
             dwgToPdMap[dwg] = {
@@ -1381,6 +1405,7 @@ export class WorkflowController {
             });
           }
         }
+        attachDwgCandidates(dwgToPdMap, dwgCandidates);
         this.state.dwgToPdMap = dwgToPdMap;
         this.state.pdOpStatusMap = pdOpStatusMap;
 
@@ -1745,6 +1770,78 @@ export class WorkflowController {
         });
       }).catch(() => hideSpin());
     }
+  }
+
+  // Rebuilds the Dwg -> PD map (14-char sub-assembly links) and the per-PD operation status map from the Status
+  // Overview "Data" sheet. The quick refresh paths only read "Plan + Mat", which left these maps stale and made
+  // new part PDs show "ไม่พบ PD". Plan + Mat statuses (already in pdOpStatusMap) only fill keys the Data sheet lacks.
+  parseAndStoreDataSheet(raw2D) {
+    if (!raw2D || raw2D.length <= 1) return false;
+    const headerRow = (raw2D[0] || []).map(h => String(h || '').trim().toLowerCase());
+    const findColIdx = (possibleNames, fallbackIdx) => {
+      for (const p of possibleNames) for (let i = 0; i < headerRow.length; i++) if (headerRow[i] === p) return i;
+      for (const p of possibleNames) for (let i = 0; i < headerRow.length; i++) if (headerRow[i].startsWith(p)) return i;
+      return fallbackIdx;
+    };
+    const col = {
+      project: findColIdx(['project', 'project code', 'projectcode', 'project name', 'projectname', 'so no', 'so number', 'so'], 4),
+      pd: findColIdx(['production order', 'productionorder', 'pd id', 'pd_id', 'pd no', 'pd_no', 'order'], 6),
+      dwg: findColIdx(['item_5', 'drawing', 'dwg', 'dwg_no', 'dwg no', 'part number'], 10),
+      step: findColIdx(['operation', 'step', 'oper', 'op'], 12),
+      wcCode: findColIdx(['work center code', 'wc code', 'machine code', 'work center', 'wc', 'item_4'], 13),
+      wcDesc: findColIdx(['r.ref.oper.desc', 'machine description', 'machine name', 'department'], 14),
+      opStatus: findColIdx(['operation status', 'op status'], 15),
+      orderStatus: findColIdx(['order status'], 17)
+    };
+    const dwgToPdMap = {};
+    const dataOps = {};
+    const dwgCandidates = {};
+    for (let i = 1; i < raw2D.length; i++) {
+      const rawRow = raw2D[i];
+      if (!rawRow || rawRow.length === 0) continue;
+      const dwg = String(rawRow[col.dwg] || '').trim();
+      const rawPd = String(rawRow[col.pd] || '').trim();
+      const pdMatch = rawPd.match(/^PD\d+[A-Z]?/i);
+      const pdId = pdMatch ? pdMatch[0].toUpperCase() : rawPd;
+      if (!pdId) continue;
+      const opNum = parseInt(rawRow[col.step]) || 10;
+      const opStatus = String(rawRow[col.opStatus] || '').trim();
+      const orderStatus = String(rawRow[col.orderStatus] || '').trim();
+      const wcDesc = String(rawRow[col.wcDesc] || '').trim();
+      const wcCode = String(rawRow[col.wcCode] || '').trim();
+
+      if (opStatus) {
+        if (!dataOps[pdId]) dataOps[pdId] = {};
+        dataOps[pdId][String(opNum)] = opStatus;
+        if (wcCode) {
+          const prevSt = dataOps[pdId][wcCode] || '';
+          if (!prevSt || prevSt.toLowerCase() === 'completed') dataOps[pdId][wcCode] = opStatus;
+        }
+      }
+      if (!dwg) continue;
+      addDwgCandidate(dwgCandidates, dwg, pdId, orderStatus, String(rawRow[col.project] || '').trim(), opNum, wcDesc || wcCode, wcCode, opStatus);
+      if (!dwgToPdMap[dwg]) {
+        dwgToPdMap[dwg] = { pdId, orderStatus, operations: [] };
+      } else if (orderStatus !== 'Closed' && dwgToPdMap[dwg].orderStatus === 'Closed') {
+        dwgToPdMap[dwg].pdId = pdId;
+        dwgToPdMap[dwg].orderStatus = orderStatus;
+        dwgToPdMap[dwg].operations = [];
+      }
+      if (pdId === dwgToPdMap[dwg].pdId) {
+        dwgToPdMap[dwg].operations.push({ stepNum: opNum, name: wcDesc || wcCode, machine: wcCode, status: opStatus });
+      }
+    }
+    if (Object.keys(dwgToPdMap).length === 0) return false;
+    attachDwgCandidates(dwgToPdMap, dwgCandidates);
+    // Plan + Mat statuses fill whatever the Data sheet does not provide
+    const planOps = this.state.pdOpStatusMap || {};
+    Object.keys(planOps).forEach(pdId => {
+      if (!dataOps[pdId]) dataOps[pdId] = {};
+      Object.keys(planOps[pdId]).forEach(k => { if (dataOps[pdId][k] === undefined) dataOps[pdId][k] = planOps[pdId][k]; });
+    });
+    this.state.dwgToPdMap = dwgToPdMap;
+    this.state.pdOpStatusMap = dataOps;
+    return true;
   }
 
   parseAndStoreMaterials(matRaw2D) {
