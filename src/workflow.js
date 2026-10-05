@@ -1192,7 +1192,7 @@ export class WorkflowController {
     return 'DEA012'; // default fallback
   }
 
-  showImportExcelReport({ filename, importedCount, skippedCompletedIds, inferredCompletedIds, stepsCompletedReport }) {
+  showImportExcelReport({ filename, importedCount, skippedCompletedIds, autoClosedIds = [], inferredCompletedIds, stepsCompletedReport }) {
     if (!this.importExcelReportModal || !this.importExcelReportBody) return;
 
     const section = (title, color, bodyHtml) => `
@@ -1217,7 +1217,13 @@ export class WorkflowController {
     );
 
     html += section(
-      `2) หายไปจากไฟล์ทั้งหมด - สันนิษฐานว่าผลิตเสร็จแล้ว (${inferredCompletedIds.length})`,
+      `2) ข้ามการนำเข้า - Operation Complete ครบทุกขั้นตอน ถือเป็น Order Status Closed อัตโนมัติ (${autoClosedIds.length})`,
+      '#0d9488',
+      autoClosedIds.length > 0 ? pdChips(autoClosedIds) : emptyNote
+    );
+
+    html += section(
+      `3) หายไปจากไฟล์ทั้งหมด - สันนิษฐานว่าผลิตเสร็จแล้ว (${inferredCompletedIds.length})`,
       'var(--accent-orange)',
       inferredCompletedIds.length > 0 ? pdChips(inferredCompletedIds) : emptyNote
     );
@@ -1236,7 +1242,7 @@ export class WorkflowController {
       `;
     }
     html += section(
-      `3) Operation ที่หายไปจาก PD เดิม - สันนิษฐานว่าเสร็จแล้ว (${stepsCompletedReport.length} PD)`,
+      `4) Operation ที่หายไปจาก PD เดิม - สันนิษฐานว่าเสร็จแล้ว (${stepsCompletedReport.length} PD)`,
       'var(--accent-cyan)',
       stepsHtml
     );
@@ -1400,6 +1406,8 @@ export class WorkflowController {
         const dwgToPdMap = this.state.dwgToPdMap || {};
         const pdOpStatusMap = this.state.pdOpStatusMap || {};
         const dwgCandidates = {};
+        // Per PD: how many operations exist and how many are Completed (rule: all Completed -> Order Status Closed)
+        const pdOpAgg = {};
         for (let i = 1; i < raw2D.length; i++) {
           const rawRow = raw2D[i];
           if (!rawRow || rawRow.length === 0) continue;
@@ -1413,6 +1421,11 @@ export class WorkflowController {
           const orderStatus = String(rawRow[col.orderStatus] || '').trim();
           const wcDesc = String(rawRow[col.wcDesc] || '').trim();
           const wcCode = String(rawRow[col.wcCode] || '').trim();
+
+          if (!pdOpAgg[pdId]) pdOpAgg[pdId] = { total: 0, done: 0, orderStatus };
+          pdOpAgg[pdId].total++;
+          if (/^complete(d)?$/i.test(opStatus)) pdOpAgg[pdId].done++;
+          if (orderStatus) pdOpAgg[pdId].orderStatus = orderStatus;
 
           if (opStatus) {
             if (!pdOpStatusMap[pdId]) pdOpStatusMap[pdId] = {};
@@ -1453,6 +1466,18 @@ export class WorkflowController {
         this.state.dwgToPdMap = dwgToPdMap;
         this.state.pdOpStatusMap = pdOpStatusMap;
 
+        // Rule: a PD whose operations are ALL Completed is Closed automatically (never imported, never planned).
+        const allOpsCompleteIds = new Set(Object.keys(pdOpAgg).filter(id => pdOpAgg[id].total > 0 && pdOpAgg[id].done === pdOpAgg[id].total));
+        const inImportRange = (pdId) => {
+          if (!parsedRanges) return true;
+          const n = parsePDNumber(pdId);
+          return n !== null && parsedRanges.some(r => n >= r.start && n <= r.end);
+        };
+        // For the import report: PDs closed by this rule only (not already Closed in the file or in the completed list)
+        const autoClosedIds = [...allOpsCompleteIds]
+          .filter(id => !this.state.isPdInCompletedHistory(id) && !/^close(d)?$/i.test(String(pdOpAgg[id].orderStatus || '').trim()) && inImportRange(id))
+          .sort();
+
         // Group rows by Production Order ID
         const groups = {};
 
@@ -1471,6 +1496,11 @@ export class WorkflowController {
             const opStatus = String(rawRow[col.opStatus] || '').trim().toLowerCase();
             if (opStatus === 'complete' || opStatus === 'completed') continue;
           }
+
+          // 2b. Every operation Completed -> Closed automatically: not imported
+          const rawPdForClose = String(rawRow[col.pd] || '').trim();
+          const pdForClose = (rawPdForClose.match(/^PD\d+[A-Z]?/i)?.[0] || rawPdForClose).toUpperCase();
+          if (pdForClose && allOpsCompleteIds.has(pdForClose)) continue;
 
           // 3. Priority filter
           const rawPriority = String(rawRow[col.priority] || '').trim();
@@ -1611,7 +1641,7 @@ export class WorkflowController {
           .map(wo => wo.id);
 
         const importedWOs = groupsAll.filter(wo => !this.state.isPdInCompletedHistory(wo.id));
-        if (importedWOs.length === 0 && skippedCompletedIds.length === 0) {
+        if (importedWOs.length === 0 && skippedCompletedIds.length === 0 && autoClosedIds.length === 0) {
           alert('ไม่พบ Production Order หรือขั้นตอนการผลิตในเงื่อนไขและช่วงที่กำหนด');
           return;
         }
@@ -1723,6 +1753,10 @@ export class WorkflowController {
         // Automatically link assembly relationships
         this.state.autoLinkAssemblies();
 
+        // PDs whose operations are all Completed are Closed now (also drops any that were already in the Backlog)
+        this.state.markCompletedPdsClosed();
+        this.state.purgeClosedPdsFromBacklog();
+
         // Save to file and refresh
         this.state.saveWorkOrdersToFile();
         this.state.savePlanToFile();
@@ -1733,6 +1767,7 @@ export class WorkflowController {
           filename,
           importedCount: importedWOs.length,
           skippedCompletedIds,
+          autoClosedIds,
           inferredCompletedIds,
           stepsCompletedReport
         });

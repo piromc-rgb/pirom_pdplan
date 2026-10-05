@@ -2337,19 +2337,30 @@ class CentralState {
   // Closed / เสร็จสิ้น without having to check the list again. Returns the number of entries changed.
   markCompletedPdsClosed() {
     const hist = this.completedPdHistory || {};
-    if (Object.keys(hist).length === 0) return 0;
+    // PDs whose operations are all Completed in the Status Overview are Closed automatically too
+    const autoClosed = new Set();
+    Object.keys(this.pdOpStatusMap || {}).forEach(pdId => { if (this.isPdAllOpsComplete(pdId)) autoClosed.add(pdId); });
+    const isClosedPd = (pdId) => Boolean(hist[pdId]) || autoClosed.has(pdId);
+    if (Object.keys(hist).length === 0 && autoClosed.size === 0) return 0;
     let changed = 0;
     Object.keys(this.planMaterials || {}).forEach(pdId => {
-      if (!hist[pdId]) return;
+      if (!isClosedPd(pdId)) return;
       (this.planMaterials[pdId] || []).forEach(r => {
         if (String(r.orderStatus || '').trim().toLowerCase() !== 'closed') { r.orderStatus = 'Closed'; changed++; }
       });
     });
     Object.values(this.dwgToPdMap || {}).forEach(entry => {
-      if (entry && hist[entry.pdId] && String(entry.orderStatus || '').trim().toLowerCase() !== 'closed') {
+      if (!entry) return;
+      if (isClosedPd(entry.pdId) && String(entry.orderStatus || '').trim().toLowerCase() !== 'closed') {
         entry.orderStatus = 'Closed';
         changed++;
       }
+      (entry.candidates || []).forEach(c => {
+        if (c && isClosedPd(c.pdId) && String(c.orderStatus || '').trim().toLowerCase() !== 'closed') {
+          c.orderStatus = 'Closed';
+          changed++;
+        }
+      });
     });
     return changed;
   }
@@ -2822,9 +2833,89 @@ class CentralState {
     }
   }
 
+  // Operation status of one step exactly as the imported Status Overview reports it (Data / Plan + Mat sheets),
+  // or null when the Overview has no record of that step.
+  _lookupOverviewStepStatus(woId, sNum, mach, origMach, dwgNo, stepOrJob) {
+    // 1. Check pdOpStatusMap (O(1) hash lookup from Status Overview Sheet 5 Data & Sheet 8 Plan + Mat)
+    const pdOps = woId && this.pdOpStatusMap ? this.pdOpStatusMap[woId] : null;
+    if (pdOps) {
+      if (sNum && pdOps[String(sNum)]) {
+        return pdOps[String(sNum)];
+      }
+      if (mach && pdOps[mach]) {
+        return pdOps[mach];
+      }
+      if (origMach && pdOps[origMach]) {
+        return pdOps[origMach];
+      }
+    }
+
+    // 3. Check planMaterials (O(1) hash lookup from Sheet 8 Plan + Mat)
+    const mats = woId && this.planMaterials ? this.planMaterials[woId] : null;
+    if (Array.isArray(mats) && mats.length > 0) {
+      if (sNum) {
+        const byStep = mats.find(m => Number(m.stepNum) === sNum && m.operStatus && String(m.operStatus).trim());
+        if (byStep) return String(byStep.operStatus).trim();
+      }
+      if (mach || origMach) {
+        const matchWc = (wc) => {
+          const w = String(wc || '').trim().toUpperCase();
+          return (mach && w === mach) || (origMach && w === origMach);
+        };
+        const byMachActive = mats.find(m => matchWc(m.wc) && m.operStatus && String(m.operStatus).trim().toLowerCase() !== 'completed');
+        if (byMachActive) return String(byMachActive.operStatus).trim();
+        const byMachAny = mats.find(m => matchWc(m.wc) && m.operStatus && String(m.operStatus).trim());
+        if (byMachAny) return String(byMachAny.operStatus).trim();
+      }
+    }
+
+    // 4. Check dwgToPdMap (O(1) hash lookup via cached reverse map)
+    if (this.dwgToPdMap) {
+      const cleanDwg = String(dwgNo || stepOrJob?.dwgNo || '').trim();
+      let dwgInfo = (cleanDwg && this.dwgToPdMap[cleanDwg]?.pdId === woId) ? this.dwgToPdMap[cleanDwg] : null;
+      if (!dwgInfo && woId) {
+        if (this._cachedDwgMapRef !== this.dwgToPdMap || !this._pdIdToDwgInfo) {
+          this._cachedDwgMapRef = this.dwgToPdMap;
+          this._pdIdToDwgInfo = new Map();
+          for (const info of Object.values(this.dwgToPdMap)) {
+            if (info && info.pdId) this._pdIdToDwgInfo.set(info.pdId, info);
+            // PDs that share a Dwg with the default PD are looked up through the candidates list
+            if (info && Array.isArray(info.candidates)) {
+              info.candidates.forEach(c => { if (c && c.pdId && !this._pdIdToDwgInfo.has(c.pdId)) this._pdIdToDwgInfo.set(c.pdId, c); });
+            }
+          }
+        }
+        dwgInfo = this._pdIdToDwgInfo.get(woId) || null;
+      }
+      if (dwgInfo && Array.isArray(dwgInfo.operations)) {
+        if (sNum) {
+          const byStep = dwgInfo.operations.find(op => Number(op.stepNum) === sNum && op.status && String(op.status).trim());
+          if (byStep) return String(byStep.status).trim();
+        }
+        if (mach || origMach) {
+          const matchOpMc = (mc) => {
+            const w = String(mc || '').trim().toUpperCase();
+            return (mach && w === mach) || (origMach && w === origMach);
+          };
+          const byMachActive = dwgInfo.operations.find(op => matchOpMc(op.machine) && op.status && String(op.status).trim().toLowerCase() !== 'completed');
+          if (byMachActive) return String(byMachActive.status).trim();
+          const byMachAny = dwgInfo.operations.find(op => matchOpMc(op.machine) && op.status && String(op.status).trim());
+          if (byMachAny) return String(byMachAny.status).trim();
+        }
+      }
+    }
+
+    return null;
+  }
+
   getStepOverviewStatus(woId, stepNum, machine = '', dwgNo = '', stepOrJob = null) {
     if (woId && typeof this.isPdInCompletedHistory === 'function' && this.isPdInCompletedHistory(woId)) {
-      return 'Completed';
+      // A PD in the completed list stays out of planning, but its steps show what the Status Overview really says
+      // (e.g. Ready to Start / Planned); "Completed" is only the fallback when the Overview has no record of the step.
+      const hSNum = Number(stepNum) || Number(stepOrJob?.stepNum) || 0;
+      const hMach = String(machine || stepOrJob?.machine || stepOrJob?.originalMachine || '').trim().toUpperCase();
+      const hOrig = String(stepOrJob?.originalMachine || '').trim().toUpperCase();
+      return this._lookupOverviewStepStatus(woId, hSNum, hMach, hOrig, dwgNo, stepOrJob) || 'Completed';
     }
     if (stepOrJob) {
       const curSt = String(stepOrJob.status || '').trim();
@@ -2888,6 +2979,10 @@ class CentralState {
           this._pdIdToDwgInfo = new Map();
           for (const info of Object.values(this.dwgToPdMap)) {
             if (info && info.pdId) this._pdIdToDwgInfo.set(info.pdId, info);
+            // PDs that share a Dwg with the default PD are looked up through the candidates list
+            if (info && Array.isArray(info.candidates)) {
+              info.candidates.forEach(c => { if (c && c.pdId && !this._pdIdToDwgInfo.has(c.pdId)) this._pdIdToDwgInfo.set(c.pdId, c); });
+            }
           }
         }
         dwgInfo = this._pdIdToDwgInfo.get(woId) || null;
@@ -2986,12 +3081,29 @@ class CentralState {
     }
   }
 
+  // True when every operation of the PD is Completed in the imported Status Overview (numeric step keys of
+  // pdOpStatusMap; work-center keys are duplicates of the same steps and are ignored).
+  isPdAllOpsComplete(pdId) {
+    const ops = this.pdOpStatusMap && this.pdOpStatusMap[pdId];
+    if (!ops) return false;
+    let steps = 0;
+    for (const k of Object.keys(ops)) {
+      if (!/^\d+$/.test(k)) continue;
+      steps++;
+      const st = String(ops[k] || '').trim().toLowerCase();
+      if (st !== 'completed' && st !== 'complete') return false;
+    }
+    return steps > 0;
+  }
+
   // Order Status of a PD as imported from the Status Overview: completed-PD list first, then the
   // "Plan + Mat" rows (PD level, present even when the PD is missing from the Data sheet's Dwg map),
   // then the Data sheet entries. Returns '' when the PD is unknown.
   getPdOrderStatus(pdId) {
     if (!pdId) return '';
     if (typeof this.isPdInCompletedHistory === 'function' && this.isPdInCompletedHistory(pdId)) return 'Closed';
+    // Rule: every operation Completed -> the Production Order is Closed automatically
+    if (this.isPdAllOpsComplete(pdId)) return 'Closed';
     const rows = (this.planMaterials || {})[pdId];
     if (Array.isArray(rows)) {
       const statuses = rows.map(r => String(r.orderStatus || '').trim()).filter(Boolean);
