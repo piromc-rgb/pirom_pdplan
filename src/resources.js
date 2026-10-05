@@ -555,7 +555,7 @@ export class ResourcesController {
         const confirmMsg = `คุณต้องการลบข้อมูลงานทั้งหมดที่มีระดับความสำคัญ (Priority): "${p}" ใช่หรือไม่?\n\n*คำเตือน: การดำเนินการนี้จะ Closed ใบสั่งผลิต (Production Order) ทั้งหมดที่มีระดับความสำคัญนี้ รวมถึง PD ลูก แล้วนำออกจาก Backlog และคิวงานบน Gantt อย่างถาวร`;
         if (confirm(confirmMsg)) {
           // Closed every Production Order of this priority (and its child PDs), then remove them from the plan
-          this.closePdsAndRemove(j => j.priority === p, w => w.priority === p);
+          this.closePdsAndRemove(j => j.priority === p, w => w.priority === p, `Priority: ${p}`);
         }
       });
 
@@ -565,11 +565,18 @@ export class ResourcesController {
 
   // Trash button of the Priority / Project lists: every Production Order inside (board + backlog) is recorded as
   // Closed (completed list, together with its child PDs) and taken off the plan, so it does not come back from the
-  // next Status Overview import or get planned again. Returns the number of PDs closed.
-  closePdsAndRemove(matchJob, matchWo) {
+  // next Status Overview import or get planned again. A popup lists every PD that was force-closed.
+  closePdsAndRemove(matchJob, matchWo, label = '') {
     const ids = new Set();
     this.state.scheduledJobs.forEach(j => { if (matchJob(j)) ids.add(j.woId || j.id); });
     this.state.workOrders.forEach(w => { if (matchWo(w)) ids.add(w.id); });
+    const direct = [...ids].sort();
+    // Child PDs that get closed along with them (worked out before the plan data is removed)
+    const directSet = new Set(direct);
+    const allChildren = direct.length > 0 ? (this.state.getDescendantPdIds(direct) || []).filter(id => !directSet.has(id)).sort() : [];
+    // Only the child PDs that were still open are listed as force-closed; the rest were already Closed before
+    const children = allChildren.filter(id => !this.state.isPdInCompletedHistory(id));
+    const alreadyClosedChildren = allChildren.length - children.length;
     if (ids.size > 0) this.state.markPdsCompletedAndRemoveBulk([...ids]);
     // Anything still matching (e.g. entries without a PD id) is removed as before
     this.state.scheduledJobs = this.state.scheduledJobs.filter(j => !matchJob(j));
@@ -577,8 +584,59 @@ export class ResourcesController {
     this.state.savePlanToFile();
     this.state.saveWorkOrdersToFile();
     this.state.notify();
-    this.state.ganttController?.showToast?.(`✅ Closed Production Order ${ids.size} รายการ (รวม PD ลูก) และนำออกจากแผนแล้ว`, 'success');
-    return ids.size;
+    this.showForceClosedPopup({ label, direct, children, alreadyClosedChildren });
+    return direct.length + children.length;
+  }
+
+  // Popup listing the PDs that were force-closed by a delete (trash) action.
+  showForceClosedPopup({ label, direct, children, alreadyClosedChildren = 0 }) {
+    const old = document.getElementById('force-closed-popup');
+    if (old) old.remove();
+    const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const chips = (ids, bg, border, color) => ids.length === 0
+      ? '<div style="color:#94a3b8;font-size:11px;">ไม่มี</div>'
+      : `<div style="display:flex;flex-wrap:wrap;gap:6px;">${ids.map(id => `<span style="font-size:11px;font-family:monospace;padding:3px 8px;border-radius:4px;background:${bg};border:1px solid ${border};color:${color};">${esc(id)}</span>`).join('')}</div>`;
+    const total = direct.length + children.length;
+    const overlay = document.createElement('div');
+    overlay.id = 'force-closed-popup';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.innerHTML = `
+      <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:760px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
+        <div style="padding:14px 18px 8px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div>
+            <div style="font-size:15px;font-weight:700;">⛔ Force Close Production Order (${total} PD)</div>
+            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">${esc(label)} · ปิด ${direct.length} PD ของรายการนี้${children.length ? ` + PD ลูก ${children.length} PD` : ''} และนำออกจาก Backlog / Gantt แล้ว</div>
+          </div>
+          <button type="button" id="btn-close-force-closed" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
+        </div>
+        <div style="padding:6px 18px 10px;overflow:auto;display:flex;flex-direction:column;gap:12px;">
+          <div>
+            <div style="font-weight:700;color:#b91c1c;margin-bottom:6px;">1) PD ของรายการนี้ที่ถูก Force close (${direct.length})</div>
+            ${chips(direct, 'rgba(185,28,28,0.08)', 'rgba(185,28,28,0.35)', '#7f1d1d')}
+          </div>
+          <div>
+            <div style="font-weight:700;color:#b45309;margin-bottom:6px;">2) PD ลูกที่ถูก Force close ตามไปด้วย (${children.length})${alreadyClosedChildren ? ` <span style="font-weight:400;color:#64748b;">· ไม่นับ PD ลูก ${alreadyClosedChildren} PD ที่ Closed อยู่แล้ว</span>` : ''}</div>
+            ${chips(children, 'rgba(245,158,11,0.12)', 'rgba(245,158,11,0.4)', '#92400e')}
+          </div>
+          <div style="color:#64748b;font-size:11px;">บันทึกเป็น Closed ในรายการผลิตเสร็จแล้ว จะไม่ถูกนำเข้า Backlog หรือวางแผนอีก (ส่งขึ้น Drive/Cloud เมื่อกด Save ในโหมดวางแผน)</div>
+        </div>
+        <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e2e8f0;">
+          <button type="button" id="btn-copy-force-closed" style="padding:6px 14px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;">📋 คัดลอกรายการ PD</button>
+          <button type="button" id="btn-ok-force-closed" style="padding:6px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">ปิด</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('#btn-close-force-closed').addEventListener('click', close);
+    overlay.querySelector('#btn-ok-force-closed').addEventListener('click', close);
+    overlay.querySelector('#btn-copy-force-closed').addEventListener('click', (e) => {
+      const text = [...direct, ...children].join('\n');
+      const btn = e.currentTarget;
+      const done = () => { btn.textContent = '✅ คัดลอกแล้ว'; };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(() => prompt('คัดลอกรายการ PD:', text));
+      else prompt('คัดลอกรายการ PD:', text);
+    });
   }
 
   renderProjectFilters() {
@@ -783,7 +841,7 @@ export class ResourcesController {
         const confirmMsg = `คุณต้องการลบข้อมูลงานทั้งหมดที่มีเลขที่ SO / Project: "${proj}" ใช่หรือไม่?\n\n*คำเตือน: การดำเนินการนี้จะ Closed ใบสั่งผลิต (Production Order) ทั้งหมดของโครงการนี้ รวมถึง PD ลูก แล้วนำออกจาก Backlog และคิวงานบน Gantt อย่างถาวร`;
         if (confirm(confirmMsg)) {
           // Closed every Production Order of this SO / Project (and its child PDs), then remove them from the plan
-          this.closePdsAndRemove(j => (j.project || 'General') === proj, w => (w.project || 'General') === proj);
+          this.closePdsAndRemove(j => (j.project || 'General') === proj, w => (w.project || 'General') === proj, `SO / Project: ${proj}`);
         }
       });
       
