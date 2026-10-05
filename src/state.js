@@ -2528,29 +2528,12 @@ class CentralState {
     return Array.from(descendants);
   }
 
-  // Ensures that any PD already in completedPdHistory also cascades its completed status
-  // to all of its descendant child PDs (and removes them from active schedule/backlog).
+  // DISABLED: closing a parent PD used to close every child PD automatically. A child PD can be shared by
+  // several parent PDs (and may still be open in the Status Overview), so that silently pushed PDs out of the
+  // Backlog into the completed list. The completed list now only holds Closed PDs and PDs closed explicitly
+  // (Force close, which shows the child PDs in its confirm popup first).
   cascadeCompletedPdsToChildren() {
-    if (!this.completedPdHistory) return false;
-    const initialIds = Object.keys(this.completedPdHistory).filter(id => this.completedPdHistory[id]);
-    if (initialIds.length === 0) return false;
-
-    let addedAny = false;
-    const childIds = this.getDescendantPdIds(initialIds);
-    for (let i = 0; i < childIds.length; i++) {
-      const cId = childIds[i];
-      if (!this.completedPdHistory[cId]) {
-        this.completedPdHistory[cId] = true;
-        this.logPdClose(cId, 'cascade-child', 'ตาม PD แม่ที่ปิดแล้ว');
-        addedAny = true;
-      }
-    }
-
-    if (addedAny) {
-      this.scheduledJobs = (this.scheduledJobs || []).filter(j => !this.isPdInCompletedHistory(j.woId));
-      this.workOrders = (this.workOrders || []).filter(wo => !this.isPdInCompletedHistory(wo.id));
-    }
-    return addedAny;
+    return false;
   }
 
   // Record why / when PDs were closed (or re-opened). method: force-close | force-close-child | mark-complete |
@@ -2582,7 +2565,7 @@ class CentralState {
     if (this.closeLog.length > 20000) this.closeLog.splice(0, this.closeLog.length - 20000);
   }
 
-  markPdCompletedHistory(pdId, completed, cascadeChildren = true) {
+  markPdCompletedHistory(pdId, completed, cascadeChildren = false) {
     if (!pdId) return [];
     const childPdIds = cascadeChildren ? this.getDescendantPdIds(pdId) : [];
     const allIds = [pdId, ...childPdIds];

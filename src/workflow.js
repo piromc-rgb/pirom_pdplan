@@ -1651,9 +1651,9 @@ export class WorkflowController {
         // Condition 2: a PD that existed in the backlog before this import, isn't
         // already marked completed, and doesn't appear anywhere in this import's
         // data at all - infer it finished production and never bring it back.
-        const inferredCompletedIds = workOrdersBeforeImport
-          .filter(wo => !groupsAllMap.has(wo.id) && !this.state.isPdInCompletedHistory(wo.id))
-          .map(wo => wo.id);
+        // DISABLED: guessing "not in this import = finished" wiped Backlog PDs that were merely outside the
+        // import filters / file. Such PDs now simply stay in the Backlog.
+        const inferredCompletedIds = [];
 
         // Condition 3: a PD survives the import, but one or more of its previous
         // operations (identified by machine + operation name, since step numbers
