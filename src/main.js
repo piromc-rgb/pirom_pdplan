@@ -909,46 +909,6 @@ class App {
       });
     }
 
-    // 2a. Reschedule Button - re-run the scheduling pass over the whole board
-    // (e.g. after editing Priority, Work Center settings, or Lock/Unlock
-    // Project) without needing to change the time scale to trigger it.
-    const btnReschedule = document.getElementById('btn-reschedule');
-    if (btnReschedule) {
-      btnReschedule.addEventListener('click', () => {
-        if (!confirm('คำนวณแผนงานทั้งหมดใหม่ตาม Scheduling Model ปัจจุบันใช่หรือไม่?\n(ตำแหน่งงานที่ยังไม่ Completed ทั้งกระดานอาจเปลี่ยนแปลง)')) {
-          return;
-        }
-
-        const origHtml = btnReschedule.innerHTML;
-        const spinTok = typeof window.showIosSpinner === 'function' ? window.showIosSpinner(450) : null;
-        btnReschedule.disabled = true;
-        btnReschedule.style.opacity = '0.75';
-        btnReschedule.style.pointerEvents = 'none';
-        btnReschedule.innerHTML = `
-          <span class="spin" style="margin-right: 4px; display: inline-block;">⏳</span>
-          กำลังคำนวณ...
-        `;
-
-        setTimeout(() => {
-          try {
-            state.recomputeSchedule();
-            if (this.gantt && typeof this.gantt.showToast === 'function') {
-              this.gantt.showToast('✓ คำนวณแผนงานทั้งหมดใหม่เรียบร้อยแล้ว');
-            }
-          } catch (err) {
-            console.error('Error during reschedule:', err);
-            alert('เกิดข้อผิดพลาดในการคำนวณแผนงาน: ' + (err.message || err));
-          } finally {
-            btnReschedule.disabled = false;
-            btnReschedule.style.opacity = '';
-            btnReschedule.style.pointerEvents = '';
-            btnReschedule.innerHTML = origHtml;
-            if (typeof window.hideIosSpinner === 'function') window.hideIosSpinner(spinTok);
-          }
-        }, 50);
-      });
-    }
-
     // 2b. Show Late PDs Button
     const btnShowLatePDs = document.getElementById('btn-show-late-pds');
     if (btnShowLatePDs) {
