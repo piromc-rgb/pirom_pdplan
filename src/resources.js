@@ -638,26 +638,26 @@ export class ResourcesController {
     const extraBoxes = (b) => {
       const total = b.total || 0;
       const pctOf = (n) => total > 0 ? (n / total * 100).toFixed(1) + '%' : '-';
-      const typeRow = (label, n, color) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:5px 0;border-bottom:1px solid #f1f5f9;"><span style="display:flex;align-items:center;gap:8px;"><span style="width:10px;height:10px;border-radius:2px;background:${color};flex-shrink:0;"></span>${label}</span><span style="white-space:nowrap;"><span style="font-weight:800;">${n} PD</span> <span style="color:#64748b;font-size:11px;min-width:44px;display:inline-block;text-align:right;">${pctOf(n)}</span></span></div>`;
-      const left = `<div style="flex:1;min-width:300px;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;">
-        <div style="font-weight:700;margin-bottom:4px;">ประเภท PD ตาม Operation</div>
-        ${typeRow('Operation <b>DEC001</b> อย่างเดียว', b.opTypes.dec, '#0ea5e9')}
-        ${typeRow('Operation <b>DED001</b> อย่างเดียว', b.opTypes.ded, '#8b5cf6')}
-        ${typeRow('ที่เหลือ = ผลิต Part', b.opTypes.part, '#16a34a')}
+      const typeRow = (label, n, color) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:3px 0;border-bottom:1px solid #f1f5f9;"><span style="display:flex;align-items:center;gap:8px;"><span style="width:10px;height:10px;border-radius:2px;background:${color};flex-shrink:0;"></span>${label}</span><span style="white-space:nowrap;"><span style="font-weight:800;">${n} PD</span> <span style="color:#64748b;font-size:11px;min-width:44px;display:inline-block;text-align:right;">${pctOf(n)}</span></span></div>`;
+      const left = `<div style="flex:1;min-width:280px;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:11.5px;">
+        <div style="font-weight:700;margin-bottom:2px;">จำนวน PD ที่มี Operation</div>
+        ${typeRow('<b>DEC001</b> อย่างเดียว', b.opTypes.dec, '#0ea5e9')}
+        ${typeRow('<b>DED001</b> อย่างเดียว', b.opTypes.ded, '#8b5cf6')}
+        ${typeRow('ที่เหลือ เป็นผลิต Part', b.opTypes.part, '#16a34a')}
         ${b.opTypes.unknown ? typeRow('ไม่มีข้อมูล Operation', b.opTypes.unknown, '#94a3b8') : ''}
-        <div style="color:#94a3b8;font-size:10.5px;margin-top:6px;">นับ PD ทั้งหมด ${total} PD จาก Work Center ของแต่ละ Operation</div>
+        <div style="color:#94a3b8;font-size:10.5px;margin-top:6px;">รวม ${total} PD</div>
       </div>`;
       const top = Object.entries(b.wcHours || {}).sort((x, y) => y[1] - x[1]).slice(0, 6);
       const maxH = top.length ? top[0][1] : 0;
       const fmtH = (h) => Number(h.toFixed(1)).toLocaleString('en-US');
-      const wcRows = top.map(([wc, h], i) => `<div style="padding:4px 0;border-bottom:1px solid #f1f5f9;">
+      const wcRows = top.map(([wc, h], i) => `<div style="padding:2px 0;border-bottom:1px solid #f1f5f9;">
           <div style="display:flex;justify-content:space-between;gap:12px;"><span>${i + 1}. ${esc(this.state.getMachineDisplayName(wc))}</span><span style="font-weight:800;white-space:nowrap;">${fmtH(h)} ชม.</span></div>
-          <div style="height:5px;border-radius:3px;background:#e2e8f0;margin-top:3px;"><div style="height:5px;border-radius:3px;background:#2563eb;width:${maxH > 0 ? (h / maxH * 100).toFixed(1) : 0}%;"></div></div>
+          <div style="height:4px;border-radius:2px;background:#e2e8f0;margin-top:2px;"><div style="height:4px;border-radius:2px;background:#2563eb;width:${maxH > 0 ? (h / maxH * 100).toFixed(1) : 0}%;"></div></div>
         </div>`).join('');
-      const right = `<div style="flex:1;min-width:300px;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;">
-        <div style="font-weight:700;margin-bottom:4px;">Work Center ที่ใช้ชั่วโมงสูงสุด 6 อันดับ</div>
+      const right = `<div style="flex:1;min-width:280px;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:11.5px;">
+        <div style="font-weight:700;margin-bottom:2px;">จำนวน ชม. ที่ใช้ของ Work Center 6 อันดับแรก</div>
         ${wcRows || '<div style="color:#94a3b8;padding:8px 0;">ยังไม่มีข้อมูลชั่วโมงงานใน Board / Backlog</div>'}
-        <div style="color:#94a3b8;font-size:10.5px;margin-top:6px;">ชั่วโมงประมาณการ (Est) ของงานใน Board + Backlog</div>
+        <div style="color:#94a3b8;font-size:10.5px;margin-top:6px;">ชม. Est ของงานใน Board + Backlog</div>
       </div>`;
       return `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:stretch;">${left}${right}</div>`;
     };
