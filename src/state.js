@@ -3167,7 +3167,7 @@ class CentralState {
     const idx = this.getPdProjectIndex();
     const boardIds = new Set((this.scheduledJobs || []).map(j => j.woId || j.id));
     const backlogIds = new Set((this.workOrders || []).map(w => w.id));
-    const blank = () => ({ total: 0, allComplete: 0, board: 0, backlog: 0, backlogMatNotReady: 0, backlogWaitChild: 0, inCompletedList: 0, other: 0 });
+    const blank = () => ({ total: 0, allComplete: 0, board: 0, backlog: 0, backlogMatNotReady: 0, backlogWaitChild: 0, inCompletedList: 0, other: 0, ids: { board: [], backlog: [], matNotReady: [], waitChild: [], inCompletedList: [], other: [] } });
     const perProject = new Map();
     const overall = blank();
     idx.forEach((proj, pdId) => {
@@ -3180,19 +3180,19 @@ class CentralState {
       if (allComplete) both(b => { b.allComplete++; });
       const onBoard = boardIds.has(pdId);
       const wo = backlogIds.has(pdId) ? (this.workOrders || []).find(w => w.id === pdId) : null;
-      if (onBoard) both(b => { b.board++; });
+      if (onBoard) both(b => { b.board++; b.ids.board.push(pdId); });
       if (wo && !onBoard) {
-        both(b => { b.backlog++; });
+        both(b => { b.backlog++; b.ids.backlog.push(pdId); });
         const op1 = Math.min(...((wo.steps || []).map(st => Number(st.stepNum) || 10)));
         const mats = (wo.steps || []).length > 0 ? (this.getStepMaterialsList(pdId, op1) || []) : [];
-        if (mats.some(m => m.status && m.status.tone === 'notready')) both(b => { b.backlogMatNotReady++; });
-        if (this.isPdBlockedByChildren(pdId)) both(b => { b.backlogWaitChild++; });
+        if (mats.some(m => m.status && m.status.tone === 'notready')) both(b => { b.backlogMatNotReady++; b.ids.matNotReady.push(pdId); });
+        if (this.isPdBlockedByChildren(pdId)) both(b => { b.backlogWaitChild++; b.ids.waitChild.push(pdId); });
       }
       // Not all-ops-complete in the Status Overview and neither on the Board nor in the Backlog: it was
       // closed into the "Production Order ที่ผลิตเสร็จแล้ว" list, otherwise it simply is not imported yet
       if (!allComplete && !onBoard && !wo) {
-        if (this.isPdInCompletedHistory(pdId)) both(b => { b.inCompletedList++; });
-        else both(b => { b.other++; });
+        if (this.isPdInCompletedHistory(pdId)) both(b => { b.inCompletedList++; b.ids.inCompletedList.push(pdId); });
+        else both(b => { b.other++; b.ids.other.push(pdId); });
       }
     });
     return { overall, perProject: [...perProject.entries()].map(([project, v]) => ({ project, ...v })).sort((a, b) => b.total - a.total || a.project.localeCompare(b.project)) };

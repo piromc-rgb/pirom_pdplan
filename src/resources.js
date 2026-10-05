@@ -572,16 +572,20 @@ export class ResourcesController {
     const o = sum.overall;
     const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const num = (n, color) => `<span style="font-weight:800;color:${color || '#0f172a'};">${n}</span>`;
-    const line = (label, n, color, indent = false) => `<div style="display:flex;justify-content:space-between;gap:16px;padding:5px 0;border-bottom:1px solid #f1f5f9;${indent ? 'padding-left:22px;color:#475569;' : ''}"><span>${indent ? '↳ ' : ''}${label}</span>${num(n, color)}</div>`;
+    // One summary row; the PD numbers behind it can be expanded ("ดูรายการ PD") and opened with a click
+    const line = (label, n, color, indent = false, ids = null) => `<div style="padding:5px 0;border-bottom:1px solid #f1f5f9;${indent ? 'padding-left:22px;color:#475569;' : ''}">
+      <div style="display:flex;justify-content:space-between;gap:16px;"><span>${indent ? '↳ ' : ''}${label}</span>${num(n, color)}</div>
+      ${ids && ids.length ? `<details style="margin-top:3px;"><summary style="cursor:pointer;font-size:11px;color:#2563eb;">ดูรายการ PD (${ids.length})</summary><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;">${[...ids].sort().map(id => `<span class="project-summary-pd" data-pd="${esc(id)}" title="คลิกเพื่อเปิดรายละเอียด PD" style="font-size:11px;font-family:monospace;padding:2px 7px;border-radius:4px;background:#f1f5f9;border:1px solid #cbd5e1;color:#1e3a8a;cursor:pointer;">${esc(id)}</span>`).join('')}</div></details>` : ''}
+    </div>`;
     const breakdown = (b) => [
       line('จำนวน PD ทั้งหมด (ดูจากไฟล์ Status Overview)', b.total, '#2563eb'),
       line('จำนวน PD ที่ทุก Operation Complete', b.allComplete, '#15803d'),
-      line('จำนวน PD ที่อยู่ในแผน (อยู่ใน Board)', b.board, '#0d9488'),
-      line('จำนวน PD ที่อยู่ใน Backlog', b.backlog, '#7c3aed'),
-      line('อยู่ใน Backlog ที่ Mat ยังไม่พร้อม', b.backlogMatNotReady, b.backlogMatNotReady ? '#b91c1c' : '#475569', true),
-      line('อยู่ใน Backlog ที่รอ PD ลูกเสร็จ', b.backlogWaitChild, b.backlogWaitChild ? '#b45309' : '#475569', true),
-      b.inCompletedList ? line('อยู่ในรายการ "Production Order ที่ผลิตเสร็จแล้ว" (Op ใน Status Overview ยังไม่ Complete ทั้งหมด)', b.inCompletedList, '#15803d') : '',
-      b.other ? line('ยังไม่ Complete แต่ไม่อยู่ใน Board / Backlog / รายการผลิตเสร็จแล้ว', b.other, '#92400e') : ''
+      line('จำนวน PD ที่อยู่ในแผน (อยู่ใน Board)', b.board, '#0d9488', false, b.ids.board),
+      line('จำนวน PD ที่อยู่ใน Backlog', b.backlog, '#7c3aed', false, b.ids.backlog),
+      line('อยู่ใน Backlog ที่ Mat ยังไม่พร้อม', b.backlogMatNotReady, b.backlogMatNotReady ? '#b91c1c' : '#475569', true, b.ids.matNotReady),
+      line('อยู่ใน Backlog ที่รอ PD ลูกเสร็จ', b.backlogWaitChild, b.backlogWaitChild ? '#b45309' : '#475569', true, b.ids.waitChild),
+      b.inCompletedList ? line('อยู่ในรายการ "Production Order ที่ผลิตเสร็จแล้ว" (Op ใน Status Overview ยังไม่ Complete ทั้งหมด)', b.inCompletedList, '#15803d', false, b.ids.inCompletedList) : '',
+      b.other ? line('ยังไม่ Complete แต่ไม่อยู่ใน Board / Backlog / รายการผลิตเสร็จแล้ว', b.other, '#92400e', false, b.ids.other) : ''
     ].join('');
     const projectBlocks = sum.perProject.map(r => `
       <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;">
@@ -608,6 +612,7 @@ export class ResourcesController {
             ${breakdown(o)}
           </div>
           ${sum.perProject.length > 1 ? `<div style="font-weight:700;">แยกรายโครงการ</div>${projectBlocks}` : ''}
+          ${Object.keys(this.state.dwgToPdMap || {}).length === 0 ? '<div style="padding:8px 12px;border-radius:6px;background:#fef3c7;color:#92400e;font-size:11.5px;">⚠️ ยังไม่ได้โหลดไฟล์ Status Overview — "จำนวน PD ทั้งหมด" จึงนับได้เฉพาะ PD ที่อยู่ใน Board / Backlog เท่านั้น (ตัวเลขอาจไม่ครบ)</div>' : ''}
           <div style="color:#94a3b8;font-size:10.5px;">Backlog ที่ Mat ไม่พร้อม และ Backlog ที่รอ PD ลูก เป็นส่วนหนึ่งของ PD ใน Backlog (PD เดียวอาจนับทั้งสองรายการ)</div>
         </div>
         <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;border-top:1px solid #e2e8f0;">
@@ -619,6 +624,12 @@ export class ResourcesController {
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     overlay.querySelector('#btn-close-project-summary').addEventListener('click', close);
     overlay.querySelector('#btn-ok-project-summary').addEventListener('click', close);
+    // Click a PD number to open its detail window on top of this popup
+    overlay.querySelectorAll('.project-summary-pd').forEach(el => el.addEventListener('click', () => {
+      const pdModal = document.getElementById('pd-plan-modal');
+      if (pdModal) pdModal.style.zIndex = '100001';
+      window.dispatchEvent(new CustomEvent('open-pd-modal', { detail: { woId: el.dataset.pd } }));
+    }));
   }
 
   // Which PDs a trash action would force-close: the PDs of the list entry (board + backlog) and the child PDs that
