@@ -596,7 +596,7 @@ export class ResourcesController {
     // One summary row; the PD numbers behind it can be expanded ("ดูรายการ PD") and opened with a click
     const line = (label, n, color, indent = false, ids = null) => `<div style="padding:5px 0;border-bottom:1px solid #f1f5f9;${indent ? 'padding-left:22px;color:#475569;' : ''}">
       <div style="display:flex;justify-content:space-between;gap:16px;"><span>${indent ? '↳ ' : '• '}${label}</span>${num(n, color)}</div>
-      ${ids && ids.length ? `<details class="ps-list"${showLists ? ' open' : ''} style="margin-top:3px;${showLists ? '' : 'display:none;'}"><summary style="cursor:pointer;font-size:11px;color:#2563eb;">ดูรายการ PD (${ids.length})</summary><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;">${[...ids].sort().map(id => `<span class="project-summary-pd" data-pd="${esc(id)}" title="คลิกเพื่อเปิดรายละเอียด PD" style="font-size:11px;font-family:monospace;padding:2px 7px;border-radius:4px;background:#f1f5f9;border:1px solid #cbd5e1;color:#1e3a8a;cursor:pointer;">${esc(id)}</span>`).join('')}</div></details>` : ''}
+      ${ids && ids.length ? `<details class="ps-list" style="margin-top:3px;${showLists ? '' : 'display:none;'}"><summary style="cursor:pointer;font-size:11px;color:#2563eb;">ดูรายการ PD (${ids.length})</summary><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;">${[...ids].sort().map(id => `<span class="project-summary-pd" data-pd="${esc(id)}" title="คลิกเพื่อเปิดรายละเอียด PD" style="font-size:11px;font-family:monospace;padding:2px 7px;border-radius:4px;background:#f1f5f9;border:1px solid #cbd5e1;color:#1e3a8a;cursor:pointer;">${esc(id)}</span>`).join('')}</div></details>` : ''}
     </div>`;
     // Donut chart: exclusive split of the project's PDs (finished / in production = Board / waiting = Backlog / other) with %
     const PIE = [
@@ -654,7 +654,7 @@ export class ResourcesController {
             <div style="color:#64748b;font-size:11.5px;margin-top:2px;white-space:nowrap;">แสดงรายงานเมื่อ ${esc(new Date().toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' }))} ${esc(new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))}</div>
           </div>
           <div style="display:flex;align-items:center;gap:14px;flex-shrink:0;">
-            <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#334155;cursor:pointer;user-select:none;" title="เปิด = แสดงรายการเลข PD ในแต่ละบรรทัด · ปิด = ซ่อนบรรทัด ดูรายการ PD"><span>แสดงรายการ PD</span><span class="ios-toggle"><input type="checkbox" id="chk-project-summary-lists"${showLists ? ' checked' : ''}><span class="ios-toggle-slider"></span></span></label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#334155;cursor:pointer;user-select:none;" title="เปิด = แสดงบรรทัด ดูรายการ PD (ยุบไว้ กดเพื่อขยาย) · ปิด = ซ่อนบรรทัด ดูรายการ PD"><span>แสดงรายการ PD</span><span class="ios-toggle"><input type="checkbox" id="chk-project-summary-lists"${showLists ? ' checked' : ''}><span class="ios-toggle-slider"></span></span></label>
             <button type="button" id="btn-close-project-summary" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
           </div>
         </div>
@@ -679,7 +679,7 @@ export class ResourcesController {
     // Top-right switch: expand / collapse every PD list at once (remembered)
     overlay.querySelector('#chk-project-summary-lists')?.addEventListener('change', (e) => {
       const on = e.target.checked;
-      overlay.querySelectorAll('details.ps-list').forEach(d => { d.style.display = on ? '' : 'none'; d.open = on; });
+      overlay.querySelectorAll('details.ps-list').forEach(d => { d.style.display = on ? '' : 'none'; d.open = false; });
       try { localStorage.setItem('chaken_project_summary_lists', on ? '1' : '0'); } catch (err) { /* ignore */ }
     });
     overlay.querySelector('#btn-ok-project-summary').addEventListener('click', close);
