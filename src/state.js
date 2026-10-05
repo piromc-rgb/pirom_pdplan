@@ -3167,7 +3167,7 @@ class CentralState {
     const idx = this.getPdProjectIndex();
     const boardIds = new Set((this.scheduledJobs || []).map(j => j.woId || j.id));
     const backlogIds = new Set((this.workOrders || []).map(w => w.id));
-    const blank = () => ({ total: 0, allComplete: 0, board: 0, backlog: 0, backlogMatNotReady: 0, backlogWaitChild: 0, other: 0 });
+    const blank = () => ({ total: 0, allComplete: 0, board: 0, backlog: 0, backlogMatNotReady: 0, backlogWaitChild: 0, inCompletedList: 0, other: 0 });
     const perProject = new Map();
     const overall = blank();
     idx.forEach((proj, pdId) => {
@@ -3188,8 +3188,12 @@ class CentralState {
         if (mats.some(m => m.status && m.status.tone === 'notready')) both(b => { b.backlogMatNotReady++; });
         if (this.isPdBlockedByChildren(pdId)) both(b => { b.backlogWaitChild++; });
       }
-      // Not complete and neither on the Board nor in the Backlog (e.g. closed list / not imported yet)
-      if (!allComplete && !onBoard && !wo) both(b => { b.other++; });
+      // Not all-ops-complete in the Status Overview and neither on the Board nor in the Backlog: it was
+      // closed into the "Production Order ที่ผลิตเสร็จแล้ว" list, otherwise it simply is not imported yet
+      if (!allComplete && !onBoard && !wo) {
+        if (this.isPdInCompletedHistory(pdId)) both(b => { b.inCompletedList++; });
+        else both(b => { b.other++; });
+      }
     });
     return { overall, perProject: [...perProject.entries()].map(([project, v]) => ({ project, ...v })).sort((a, b) => b.total - a.total || a.project.localeCompare(b.project)) };
   }

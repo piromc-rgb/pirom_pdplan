@@ -580,7 +580,8 @@ export class ResourcesController {
       line('จำนวน PD ที่อยู่ใน Backlog', b.backlog, '#7c3aed'),
       line('อยู่ใน Backlog ที่ Mat ยังไม่พร้อม', b.backlogMatNotReady, b.backlogMatNotReady ? '#b91c1c' : '#475569', true),
       line('อยู่ใน Backlog ที่รอ PD ลูกเสร็จ', b.backlogWaitChild, b.backlogWaitChild ? '#b45309' : '#475569', true),
-      b.other ? line('ยังไม่ Complete แต่ไม่อยู่ทั้ง Board และ Backlog', b.other, '#92400e') : ''
+      b.inCompletedList ? line('อยู่ในรายการ "Production Order ที่ผลิตเสร็จแล้ว" (Op ใน Status Overview ยังไม่ Complete ทั้งหมด)', b.inCompletedList, '#15803d') : '',
+      b.other ? line('ยังไม่ Complete แต่ไม่อยู่ใน Board / Backlog / รายการผลิตเสร็จแล้ว', b.other, '#92400e') : ''
     ].join('');
     const projectBlocks = sum.perProject.map(r => `
       <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;">
