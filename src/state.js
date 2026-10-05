@@ -3151,7 +3151,7 @@ class CentralState {
     const idx = this.getPdProjectIndex();
     const boardIds = new Set((this.scheduledJobs || []).map(j => j.woId || j.id));
     const backlogIds = new Set((this.workOrders || []).map(w => w.id));
-    const blank = () => ({ total: 0, allComplete: 0, board: 0, backlog: 0, backlogMatNotReady: 0, backlogWaitChild: 0, backlogBoth: 0, backlogReady: 0, inCompletedList: 0, other: 0, ids: { board: [], backlog: [], matNotReady: [], waitChild: [], both: [], ready: [], inCompletedList: [], other: [] } });
+    const blank = () => ({ total: 0, allComplete: 0, board: 0, backlog: 0, backlogMatNotReady: 0, backlogWaitChild: 0, backlogBoth: 0, backlogReady: 0, inCompletedList: 0, other: 0, pie: { complete: 0, board: 0, backlog: 0, completedList: 0, other: 0 }, ids: { board: [], backlog: [], matNotReady: [], waitChild: [], both: [], ready: [], inCompletedList: [], other: [] } });
     const perProject = new Map();
     const overall = blank();
     idx.forEach((proj, pdId) => {
@@ -3177,6 +3177,10 @@ class CentralState {
         else if (waitChild) both(b => { b.backlogWaitChild++; b.ids.waitChild.push(pdId); });
         else both(b => { b.backlogReady++; b.ids.ready.push(pdId); });
       }
+      // Exclusive split of the total for the pie chart (every PD lands in exactly one slice):
+      // all Operations Complete > on the Board > in the Backlog > in the completed list > other
+      const pieKey = allComplete ? 'complete' : onBoard ? 'board' : wo ? 'backlog' : this.isPdInCompletedHistory(pdId) ? 'completedList' : 'other';
+      both(b => { b.pie[pieKey]++; });
       // Not all-ops-complete in the Status Overview and neither on the Board nor in the Backlog: it was
       // closed into the "Production Order ที่ผลิตเสร็จแล้ว" list, otherwise it simply is not imported yet
       if (!allComplete && !onBoard && !wo) {
