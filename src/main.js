@@ -806,6 +806,17 @@ class App {
       });
     };
 
+    // "↩️ ยกเลิกสถานะทั้งหมด": undo every Force close (PDs that are Complete only because of the Status Overview file stay)
+    const btnUnmarkAll = document.getElementById('btn-completed-unmark-all');
+    if (btnUnmarkAll) btnUnmarkAll.addEventListener('click', () => {
+      const n = Object.keys(state.completedOpHistory || {}).length;
+      if (n === 0) { state.ganttController?.showToast?.('ไม่มี PD ที่ Force close ไว้ให้ยกเลิก'); return; }
+      if (!confirm(`ยกเลิกสถานะ Force close ของ ${n} PD ใช่หรือไม่?\n\nOperation ที่ถูกตั้งเป็น Complete จะกลับเป็น Planned (จะได้สถานะจริงจากไฟล์ Status Overview เมื่อโหลดไฟล์ใหม่)\nPD ที่ Complete ครบตามไฟล์ Status Overview จะยังอยู่ในรายการ\nในโหมด EDIT ต้องกด Save เพื่อส่งขึ้น Cloud`)) return;
+      const ids = state.clearAllForceClosed();
+      renderList();
+      state.ganttController?.showToast?.(`↩️ ยกเลิกสถานะ ${ids.length} PD แล้ว — กด Import from Excel เพื่อนำกลับเข้า Backlog`, 'success');
+    });
+
     if (searchEl) searchEl.addEventListener('input', renderList);
 
     btnOpen.addEventListener('click', () => {

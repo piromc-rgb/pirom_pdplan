@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-Brm9vsi8.js"></script>
+    <script type="module" crossorigin src="./assets/index-Dcq42QY9.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-T1l8V0Oo.css">
   </head>
   <body>
@@ -1558,6 +1558,7 @@
           <p style="font-size: 10.5px; color: var(--text-secondary); margin: 0 0 12px 0;">PD ในรายการนี้คือ PD ที่ทุก Operation เป็น Complete เท่านั้น (จากไฟล์ Status Overview หรือ Force close) จะไม่ถูกนำกลับเข้าแผนอีก ไม่ว่าจะ reload หน้า, sync ข้อมูลใหม่ หรือรัน AI Auto-Optimize (รายละเอียด Part Name / Customer ไม่แสดง เพราะถูกนำออกจากแผนแล้วถาวร)</p>
           <div style="display: flex; gap: 8px; align-items: center; margin: 0 0 10px 0; flex-wrap: wrap;">
             <input type="text" id="completed-pd-list-search" placeholder="ค้นหาเลข PD..." style="flex: 1; min-width: 140px; font-size: 11.5px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border-glass); background: var(--bg-card); color: var(--text-primary);">
+            <button type="button" id="btn-completed-unmark-all" class="btn" style="font-size: 11px; padding: 5px 10px; border-radius: 6px; cursor: pointer; border: 1px solid var(--accent-red); color: var(--accent-red); white-space: nowrap;" title="ยกเลิก Force close ของทุก PD (PD ที่ Complete ครบตามไฟล์ Status Overview ยังอยู่ในรายการ)">↩️ ยกเลิกสถานะทั้งหมด</button>
           </div>
           <div class="modal-body" style="overflow-y: auto; max-height: 420px;">
             <div id="completed-pd-list-body" style="display: flex; flex-direction: column; gap: 6px;">

@@ -2365,6 +2365,23 @@ class CentralState {
     return Boolean(pdId && this.isPdAllOpsComplete(pdId));
   }
 
+  // Undo every Force close at once: the PDs lose their forced Complete Operations (they go back to Planned until the
+  // next Status Overview load restores the real status). Returns the PD ids that were un-forced.
+  clearAllForceClosed() {
+    const ids = Object.keys(this.completedOpHistory || {}).filter(id => Object.keys(this.completedOpHistory[id] || {}).length > 0);
+    ids.forEach(id => {
+      const steps = Object.keys(this.completedOpHistory[id]);
+      delete this.completedOpHistory[id];
+      const ops = this.pdOpStatusMap && this.pdOpStatusMap[id];
+      if (ops) steps.forEach(st => { ops[String(st)] = 'Planned'; });
+    });
+    if (ids.length > 0) {
+      this.savePlanToFile();
+      this.notify();
+    }
+    return ids;
+  }
+
   // True only when the PD was closed explicitly (Force close): used to take such a PD off the Board. A PD that is merely
   // Complete in the Status Overview file stays on the Board as before (its bars show as Completed).
   isPdForceClosed(pdId) {
