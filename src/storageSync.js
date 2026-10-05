@@ -123,28 +123,6 @@ export class StorageSyncManager {
     this.userModeOptionView = document.getElementById('user-mode-option-view');
     this.userModeOptionPlan = document.getElementById('user-mode-option-plan');
 
-    // Header button: force-reload the newest Status Overview file
-    const btnReloadOverview = document.getElementById('btn-reload-status-overview');
-    if (btnReloadOverview) {
-      btnReloadOverview.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (btnReloadOverview.disabled) return;
-        btnReloadOverview.disabled = true;
-        const prevText = btnReloadOverview.textContent;
-        btnReloadOverview.textContent = '⏳';
-        try {
-          await this.fetchPlanMaterials(true);
-          this.showToast(`🔄 โหลด Status Overview ล่าสุดแล้ว${this.resolvedOverviewName ? `: ${this.resolvedOverviewName}` : ''}`);
-        } catch (err) {
-          this.showToast(`⚠️ โหลด Status Overview ไม่สำเร็จ: ${err.message || err}`, 'error');
-        } finally {
-          btnReloadOverview.textContent = prevText;
-          btnReloadOverview.disabled = false;
-        }
-      });
-    }
-
     if (this.btnEditModeSave) {
       this.btnEditModeSave.addEventListener('click', (e) => {
         e.preventDefault();
@@ -520,8 +498,8 @@ export class StorageSyncManager {
     this.resolvedOverviewName = name;
     const badge = document.getElementById('badge-status-overview-file');
     if (badge) badge.textContent = this.isStatusOverviewAuto() ? `AUTO → ${name}` : name;
-    const headerName = document.getElementById('header-status-overview-name');
-    if (headerName) headerName.textContent = name;
+    const headerBadge = document.getElementById('header-status-overview-file');
+    if (headerBadge) headerBadge.textContent = `| 📄 ${name}`;
   }
 
   // Resolves which Status Overview file is actually active (mainly for the "AUTO" setting,
