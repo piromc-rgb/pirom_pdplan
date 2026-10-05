@@ -577,6 +577,8 @@ export class ResourcesController {
     // Only the child PDs that were still open are listed as force-closed; the rest were already Closed before
     const children = allChildren.filter(id => !this.state.isPdInCompletedHistory(id));
     const alreadyClosedChildren = allChildren.length - children.length;
+    // Every Operation of the force-closed PDs becomes Complete (and stays Complete when a newer Status Overview is loaded)
+    const opsMarked = this.state.forceCompleteOps([...direct, ...children]);
     if (ids.size > 0) this.state.markPdsCompletedAndRemoveBulk([...ids]);
     // Anything still matching (e.g. entries without a PD id) is removed as before
     this.state.scheduledJobs = this.state.scheduledJobs.filter(j => !matchJob(j));
@@ -584,12 +586,12 @@ export class ResourcesController {
     this.state.savePlanToFile();
     this.state.saveWorkOrdersToFile();
     this.state.notify();
-    this.showForceClosedPopup({ label, direct, children, alreadyClosedChildren });
+    this.showForceClosedPopup({ label, direct, children, alreadyClosedChildren, opsMarked });
     return direct.length + children.length;
   }
 
   // Popup listing the PDs that were force-closed by a delete (trash) action.
-  showForceClosedPopup({ label, direct, children, alreadyClosedChildren = 0 }) {
+  showForceClosedPopup({ label, direct, children, alreadyClosedChildren = 0, opsMarked = 0 }) {
     const old = document.getElementById('force-closed-popup');
     if (old) old.remove();
     const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -618,6 +620,7 @@ export class ResourcesController {
             <div style="font-weight:700;color:#b45309;margin-bottom:6px;">2) PD ลูกที่ถูก Force close ตามไปด้วย (${children.length})${alreadyClosedChildren ? ` <span style="font-weight:400;color:#64748b;">· ไม่นับ PD ลูก ${alreadyClosedChildren} PD ที่ Closed อยู่แล้ว</span>` : ''}</div>
             ${chips(children, 'rgba(245,158,11,0.12)', 'rgba(245,158,11,0.4)', '#92400e')}
           </div>
+          <div style="color:#0f766e;font-size:11.5px;font-weight:600;">✔ Operation ทุกขั้นตอนของ PD เหล่านี้ถูกตั้งเป็น Complete แล้ว${opsMarked ? ` (${opsMarked} Operation)` : ''} และจะไม่ถูกอัปเดตกลับตาม Status Overview ที่ดึงมาใหม่</div>
           <div style="color:#64748b;font-size:11px;">บันทึกเป็น Closed ในรายการผลิตเสร็จแล้ว จะไม่ถูกนำเข้า Backlog หรือวางแผนอีก (ส่งขึ้น Drive/Cloud เมื่อกด Save ในโหมดวางแผน)</div>
         </div>
         <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e2e8f0;">

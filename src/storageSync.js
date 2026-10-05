@@ -1125,9 +1125,11 @@ export class StorageSyncManager {
       }
       if (data.favoritePDs) this.state.favoritePDs = data.favoritePDs;
       if (data.removedStepHistory) this.state.removedStepHistory = data.removedStepHistory;
+      if (data.completedOpHistory && typeof data.completedOpHistory === 'object') this.state.completedOpHistory = data.completedOpHistory;
       if (data.planMaterials) this.state.planMaterials = data.planMaterials;
       if (data.dwgToPdMap) this.state.dwgToPdMap = data.dwgToPdMap;
       if (data.pdOpStatusMap) this.state.pdOpStatusMap = data.pdOpStatusMap;
+      else if (this.state._pdOpStatusMap && typeof this.state._applyCompletedOpHistory === 'function') this.state._applyCompletedOpHistory(this.state._pdOpStatusMap);
       if (typeof this.state.cascadeCompletedPdsToChildren === 'function') {
         this.state.cascadeCompletedPdsToChildren();
       }

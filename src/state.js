@@ -41,6 +41,7 @@ class CentralState {
     // finished PD never comes back onto the board just because it's still in the
     // source Excel file or an old backlog snapshot.
     this.completedPdHistory = {};
+    this.completedOpHistory = {}; // PD -> { step: true } operations force-completed by the user
 
     // PD IDs marked as favorite (starred) by the user
     this.favoritePDs = {};
@@ -2690,6 +2691,7 @@ class CentralState {
       groupSameItem: this.groupSameItem !== false,
       requireChildPdsClosed: this.requireChildPdsClosed !== false,
       completedPdHistory: this.completedPdHistory || {},
+      completedOpHistory: this.completedOpHistory || {},
       favoritePDs: this.favoritePDs || {},
       pdMemos: this.pdMemos || {},
       removedStepHistory: this.removedStepHistory || {},
@@ -3024,6 +3026,10 @@ class CentralState {
       this.lockedProjects = data.lockedProjects || {};
       if (data.groupSameItem !== undefined) this.groupSameItem = Boolean(data.groupSameItem);
       if (data.requireChildPdsClosed !== undefined) this.requireChildPdsClosed = Boolean(data.requireChildPdsClosed);
+      if (data.completedOpHistory && typeof data.completedOpHistory === 'object') {
+        this.completedOpHistory = data.completedOpHistory;
+        if (this._pdOpStatusMap) this._applyCompletedOpHistory(this._pdOpStatusMap);
+      }
       if (data.priorityColors) this.priorityColors = data.priorityColors;
       if (data.projectColors) this.projectColors = data.projectColors;
       if (data.customerColors) this.customerColors = data.customerColors;
@@ -3079,6 +3085,59 @@ class CentralState {
       }
       this.notify();
     }
+  }
+
+  // pdOpStatusMap (PD -> { step / work-center -> Operation status }) comes from the Status Overview. Whenever a newer
+  // one is loaded, an operation that was already Completed stays Completed (it is not updated back to the new
+  // Status Overview value), and operations force-completed by the user (completedOpHistory) are always Completed.
+  get pdOpStatusMap() { return this._pdOpStatusMap; }
+  set pdOpStatusMap(next) {
+    const prev = this._pdOpStatusMap;
+    if (next && typeof next === 'object') {
+      if (prev && prev !== next) {
+        const isDone = (v) => { const t = String(v || '').trim().toLowerCase(); return t === 'completed' || t === 'complete'; };
+        for (const pdId of Object.keys(prev)) {
+          const oldOps = prev[pdId];
+          const newOps = next[pdId];
+          if (!oldOps || !newOps) continue;
+          for (const k of Object.keys(oldOps)) {
+            if (isDone(oldOps[k]) && newOps[k] !== undefined && !isDone(newOps[k])) newOps[k] = 'Completed';
+          }
+        }
+      }
+      this._applyCompletedOpHistory(next);
+    }
+    this._pdOpStatusMap = next;
+  }
+
+  _applyCompletedOpHistory(map) {
+    const hist = this.completedOpHistory || {};
+    Object.keys(hist).forEach(pdId => {
+      if (!map[pdId]) map[pdId] = {};
+      Object.keys(hist[pdId] || {}).forEach(step => { if (hist[pdId][step]) map[pdId][String(step)] = 'Completed'; });
+    });
+  }
+
+  // Force-completes every operation of the given PDs (used when a PD is force-closed): recorded in
+  // completedOpHistory so it survives reloads and newer Status Overview files. Returns the number of operations.
+  forceCompleteOps(pdIds) {
+    let marked = 0;
+    (pdIds || []).forEach(pdId => {
+      const steps = new Set();
+      (this.scheduledJobs || []).forEach(j => { if ((j.woId || j.id) === pdId && j.stepNum) steps.add(Number(j.stepNum)); });
+      const wo = (this.workOrders || []).find(w => w.id === pdId);
+      if (wo) (wo.steps || []).forEach(s => { if (s.stepNum) steps.add(Number(s.stepNum)); });
+      const ops = this.pdOpStatusMap && this.pdOpStatusMap[pdId];
+      if (ops) Object.keys(ops).forEach(k => { if (/^\d+$/.test(k)) steps.add(Number(k)); });
+      ((this.planMaterials || {})[pdId] || []).forEach(r => { if (r.stepNum) steps.add(Number(r.stepNum)); });
+      if (steps.size === 0) return;
+      if (!this.completedOpHistory) this.completedOpHistory = {};
+      const rec = this.completedOpHistory[pdId] || (this.completedOpHistory[pdId] = {});
+      steps.forEach(st => { if (!rec[st]) { rec[st] = true; marked++; } });
+    });
+    if (!this._pdOpStatusMap) this._pdOpStatusMap = {};
+    this._applyCompletedOpHistory(this._pdOpStatusMap);
+    return marked;
   }
 
   // True when every operation of the PD is Completed in the imported Status Overview (numeric step keys of
