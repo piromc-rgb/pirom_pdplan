@@ -3165,7 +3165,7 @@ class CentralState {
     const idx = this.getPdProjectIndex();
     const boardIds = new Set((this.scheduledJobs || []).map(j => j.woId || j.id));
     const backlogIds = new Set((this.workOrders || []).map(w => w.id));
-    const blank = () => ({ total: 0, allComplete: 0, board: 0, backlog: 0, backlogMatNotReady: 0, backlogWaitChild: 0, backlogBoth: 0, backlogReady: 0, inCompletedList: 0, other: 0, pie: { complete: 0, board: 0, backlog: 0, completedList: 0, other: 0 }, ids: { board: [], backlog: [], matNotReady: [], waitChild: [], both: [], ready: [], inCompletedList: [], other: [] } });
+    const blank = () => ({ total: 0, allComplete: 0, board: 0, backlog: 0, backlogMatNotReady: 0, backlogWaitChild: 0, backlogBoth: 0, backlogReady: 0, inCompletedList: 0, other: 0, opTypes: { dec: 0, ded: 0, part: 0, unknown: 0 }, wcHours: {}, pie: { complete: 0, board: 0, backlog: 0, completedList: 0, other: 0 }, ids: { board: [], backlog: [], matNotReady: [], waitChild: [], both: [], ready: [], inCompletedList: [], other: [] } });
     const perProject = new Map();
     const overall = blank();
     idx.forEach((proj, pdId) => {
@@ -3174,6 +3174,15 @@ class CentralState {
       const bucket = perProject.get(key) || perProject.set(key, blank()).get(key);
       const both = (fn) => [bucket, overall].forEach(fn);
       both(b => { b.total++; });
+      // PD type by the Work Centers of its Operations: only DEC001 / only DED001 / anything else = Part production
+      const wcSet = new Set(Object.keys((this.pdOpStatusMap || {})[pdId] || {}).filter(k => !/^\d+$/.test(k)).map(k => String(k).trim().toUpperCase()));
+      if (wcSet.size === 0) {
+        const woX = (this.workOrders || []).find(w => w.id === pdId);
+        ((woX && woX.steps) || []).forEach(st => { if (st.machine) wcSet.add(String(st.machine).trim().split(/[\s-]+/)[0].toUpperCase()); });
+        (this.scheduledJobs || []).forEach(j => { if ((j.woId || j.id) === pdId && j.machine) wcSet.add(String(j.machine).trim().split(/[\s-]+/)[0].toUpperCase()); });
+      }
+      const typeKey = wcSet.size === 0 ? 'unknown' : (wcSet.size === 1 && wcSet.has('DEC001')) ? 'dec' : (wcSet.size === 1 && wcSet.has('DED001')) ? 'ded' : 'part';
+      both(b => { b.opTypes[typeKey]++; });
       const allComplete = this.isPdAllOpsComplete(pdId);
       if (allComplete) both(b => { b.allComplete++; });
       const onBoard = boardIds.has(pdId);
@@ -3202,6 +3211,16 @@ class CentralState {
         else both(b => { b.other++; b.ids.other.push(pdId); });
       }
     });
+    // Planned hours (Est) per Work Center for the PDs in the plan: Board tasks + Backlog steps of the selected projects
+    const addHours = (proj, machine, hours) => {
+      const key = String(proj || 'General').trim() || 'General';
+      const b = perProject.get(key);
+      if (!b || !machine || !(hours > 0)) return;
+      const wc = String(machine).trim();
+      [b, overall].forEach(x => { x.wcHours[wc] = (x.wcHours[wc] || 0) + hours; });
+    };
+    (this.scheduledJobs || []).forEach(j => addHours(j.project, j.machine, Number(j.estHours) || 0));
+    (this.workOrders || []).forEach(w => (w.steps || []).forEach(st => addHours(w.project, st.machine, Number(st.estHours) || 0)));
     return { overall, perProject: [...perProject.entries()].map(([project, v]) => ({ project, ...v })).sort((a, b) => b.total - a.total || a.project.localeCompare(b.project)) };
   }
 

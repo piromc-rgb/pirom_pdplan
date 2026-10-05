@@ -634,6 +634,33 @@ export class ResourcesController {
       b.other ? line('ยังไม่ Complete แต่ไม่อยู่ใน Board / Backlog / รายการผลิตเสร็จแล้ว', b.other, '#92400e', false, b.ids.other) : ''
     ].join('');
     const breakdown = (b) => `<div style="display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap;"><div style="flex:1;min-width:360px;">${breakdownRows(b)}</div>${donut(b)}</div>`;
+    // Two side-by-side boxes under the summary: PD type by Operation Work Center (left) and the 6 busiest Work Centers (right)
+    const extraBoxes = (b) => {
+      const total = b.total || 0;
+      const pctOf = (n) => total > 0 ? (n / total * 100).toFixed(1) + '%' : '-';
+      const typeRow = (label, n, color) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:5px 0;border-bottom:1px solid #f1f5f9;"><span style="display:flex;align-items:center;gap:8px;"><span style="width:10px;height:10px;border-radius:2px;background:${color};flex-shrink:0;"></span>${label}</span><span style="white-space:nowrap;"><span style="font-weight:800;">${n} PD</span> <span style="color:#64748b;font-size:11px;min-width:44px;display:inline-block;text-align:right;">${pctOf(n)}</span></span></div>`;
+      const left = `<div style="flex:1;min-width:300px;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;">
+        <div style="font-weight:700;margin-bottom:4px;">ประเภท PD ตาม Operation</div>
+        ${typeRow('Operation <b>DEC001</b> อย่างเดียว', b.opTypes.dec, '#0ea5e9')}
+        ${typeRow('Operation <b>DED001</b> อย่างเดียว', b.opTypes.ded, '#8b5cf6')}
+        ${typeRow('ที่เหลือ = ผลิต Part', b.opTypes.part, '#16a34a')}
+        ${b.opTypes.unknown ? typeRow('ไม่มีข้อมูล Operation', b.opTypes.unknown, '#94a3b8') : ''}
+        <div style="color:#94a3b8;font-size:10.5px;margin-top:6px;">นับ PD ทั้งหมด ${total} PD จาก Work Center ของแต่ละ Operation</div>
+      </div>`;
+      const top = Object.entries(b.wcHours || {}).sort((x, y) => y[1] - x[1]).slice(0, 6);
+      const maxH = top.length ? top[0][1] : 0;
+      const fmtH = (h) => Number(h.toFixed(1)).toLocaleString('en-US');
+      const wcRows = top.map(([wc, h], i) => `<div style="padding:4px 0;border-bottom:1px solid #f1f5f9;">
+          <div style="display:flex;justify-content:space-between;gap:12px;"><span>${i + 1}. ${esc(this.state.getMachineDisplayName(wc))}</span><span style="font-weight:800;white-space:nowrap;">${fmtH(h)} ชม.</span></div>
+          <div style="height:5px;border-radius:3px;background:#e2e8f0;margin-top:3px;"><div style="height:5px;border-radius:3px;background:#2563eb;width:${maxH > 0 ? (h / maxH * 100).toFixed(1) : 0}%;"></div></div>
+        </div>`).join('');
+      const right = `<div style="flex:1;min-width:300px;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;">
+        <div style="font-weight:700;margin-bottom:4px;">Work Center ที่ใช้ชั่วโมงสูงสุด 6 อันดับ</div>
+        ${wcRows || '<div style="color:#94a3b8;padding:8px 0;">ยังไม่มีข้อมูลชั่วโมงงานใน Board / Backlog</div>'}
+        <div style="color:#94a3b8;font-size:10.5px;margin-top:6px;">ชั่วโมงประมาณการ (Est) ของงานใน Board + Backlog</div>
+      </div>`;
+      return `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:stretch;">${left}${right}</div>`;
+    };
     const projectBlocks = sum.perProject.map(r => `
       <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;">
         <div style="font-weight:700;margin-bottom:2px;">โครงการ ${esc(r.project)}</div>
@@ -664,6 +691,7 @@ export class ResourcesController {
             ${sum.perProject.length === 1 ? projectInfo(sum.perProject[0].project) : ''}
             ${breakdown(o)}
           </div>
+          ${extraBoxes(o)}
           ${sum.perProject.length > 1 ? `<div style="font-weight:700;">แยกรายโครงการ</div>${projectBlocks}` : ''}
           ${Object.keys(this.state.dwgToPdMap || {}).length === 0 ? '<div style="padding:8px 12px;border-radius:6px;background:#fef3c7;color:#92400e;font-size:11.5px;">⚠️ ยังไม่ได้โหลดไฟล์ Status Overview — "จำนวน PD ทั้งหมด" จึงนับได้เฉพาะ PD ที่อยู่ใน Board / Backlog เท่านั้น (ตัวเลขอาจไม่ครบ)</div>' : ''}
           <div style="color:#94a3b8;font-size:10.5px;">บรรทัดย่อยของ Backlog แยกกลุ่มไม่ซ้ำกัน รวมกันได้เท่ากับจำนวน PD ใน Backlog</div>
