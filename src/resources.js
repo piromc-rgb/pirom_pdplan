@@ -579,25 +579,24 @@ export class ResourcesController {
       <div style="display:flex;justify-content:space-between;gap:16px;"><span>${indent ? '↳ ' : ''}${label}</span>${num(n, color)}</div>
       ${ids && ids.length ? `<details${showLists ? ' open' : ''} style="margin-top:3px;"><summary style="cursor:pointer;font-size:11px;color:#2563eb;">ดูรายการ PD (${ids.length})</summary><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;">${[...ids].sort().map(id => `<span class="project-summary-pd" data-pd="${esc(id)}" title="คลิกเพื่อเปิดรายละเอียด PD" style="font-size:11px;font-family:monospace;padding:2px 7px;border-radius:4px;background:#f1f5f9;border:1px solid #cbd5e1;color:#1e3a8a;cursor:pointer;">${esc(id)}</span>`).join('')}</div></details>` : ''}
     </div>`;
-    // Donut chart: exclusive split of the project's PDs (Complete / Board / Backlog / completed list / other) with %
+    // Donut chart: exclusive split of the project's PDs (finished / in production = Board / waiting = Backlog / other) with %
     const PIE = [
-      ['complete', 'Operation Complete ครบ', '#15803d'],
-      ['board', 'อยู่ใน Board', '#0d9488'],
-      ['backlog', 'อยู่ใน Backlog', '#7c3aed'],
-      ['completedList', 'ในรายการผลิตเสร็จแล้ว', '#65a30d'],
-      ['other', 'อื่นๆ', '#d97706']
+      ['done', 'ผลิตเสร็จแล้ว', '#15803d', (b) => b.pie.complete + b.pie.completedList],
+      ['board', 'กำลังผลิต', '#0d9488', (b) => b.pie.board],
+      ['backlog', 'รอผลิต', '#7c3aed', (b) => b.pie.backlog],
+      ['other', 'อื่นๆ', '#d97706', (b) => b.pie.other]
     ];
     const donut = (b) => {
       const total = b.total || 0;
       const r = 42, c = 2 * Math.PI * r;
       let offset = 0;
-      const arcs = total > 0 ? PIE.filter(([k]) => b.pie[k] > 0).map(([k, , col]) => {
-        const len = b.pie[k] / total * c;
+      const arcs = total > 0 ? PIE.filter(([, , , get]) => get(b) > 0).map(([, , col, get]) => {
+        const len = get(b) / total * c;
         const el = `<circle cx="60" cy="60" r="${r}" fill="none" stroke="${col}" stroke-width="18" stroke-dasharray="${len.toFixed(2)} ${(c - len).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 60 60)"></circle>`;
         offset += len;
         return el;
       }).join('') : '';
-      const legend = PIE.filter(([k]) => b.pie[k] > 0).map(([k, label, col]) => `<div style="display:flex;align-items:center;gap:6px;font-size:11px;white-space:nowrap;"><span style="width:10px;height:10px;border-radius:2px;background:${col};flex-shrink:0;"></span><span style="flex:1;">${label}</span><span style="font-weight:700;">${(b.pie[k] / total * 100).toFixed(1)}%</span><span style="color:#64748b;min-width:34px;text-align:right;">${b.pie[k]}</span></div>`).join('');
+      const legend = PIE.filter(([, , , get]) => get(b) > 0).map(([, label, col, get]) => `<div style="display:flex;align-items:center;gap:6px;font-size:11px;white-space:nowrap;"><span style="width:10px;height:10px;border-radius:2px;background:${col};flex-shrink:0;"></span><span style="flex:1;">${label}</span><span style="font-weight:700;">${(get(b) / total * 100).toFixed(1)}%</span><span style="color:#64748b;min-width:34px;text-align:right;">${get(b)}</span></div>`).join('');
       return `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;min-width:210px;">
         <svg viewBox="0 0 120 120" width="130" height="130" role="img" aria-label="สัดส่วน PD"><circle cx="60" cy="60" r="${r}" fill="none" stroke="#e2e8f0" stroke-width="18"></circle>${arcs}<text x="60" y="58" text-anchor="middle" font-size="16" font-weight="800" fill="#0f172a">${total}</text><text x="60" y="73" text-anchor="middle" font-size="8.5" fill="#64748b">PD ทั้งหมด</text></svg>
         <div style="display:flex;flex-direction:column;gap:3px;width:100%;">${legend}</div>
