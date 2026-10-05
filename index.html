@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-B0Xen21t.js"></script>
+    <script type="module" crossorigin src="./assets/index-CJg3CN0y.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-T1l8V0Oo.css">
   </head>
   <body>
@@ -1323,6 +1323,9 @@
           </div>
           <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-glass); padding-top: 15px;">
             <div style="display: flex; align-items: center; gap: 14px;">
+              <button class="btn" id="btn-force-close-this-pd" title="Force close: ปิด PD นี้ (และ PD ลูกที่ยังไม่ปิด) ตั้งทุก Operation เป็น Complete และนำออกจาก Backlog / Gantt" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(185, 28, 28, 0.15); border: 1px solid #b91c1c; color: #b91c1c; font-weight: bold; transition: all 0.2s;">
+                ⛔ Force close
+              </button>
               <button class="btn" id="btn-delete-this-pd" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--accent-red); color: var(--accent-red); font-weight: bold; transition: all 0.2s;">
                 🗑️ ลบ PD นี้
               </button>

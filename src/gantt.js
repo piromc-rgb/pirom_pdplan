@@ -3525,6 +3525,7 @@ export class GanttController {
     const btnSave = document.getElementById('btn-save-pd-changes');
     const btnExport = document.getElementById('btn-export-pd-csv');
     const btnDelete = document.getElementById('btn-delete-this-pd');
+    const btnForceClose = document.getElementById('btn-force-close-this-pd');
     const inputCompletedHistory = document.getElementById('chk-pd-completed-history');
 
     // If Status Overview maps (pdOpStatusMap / planMaterials) are not loaded yet, fetch once in background and refresh modal
@@ -4265,6 +4266,23 @@ export class GanttController {
 
         this.closePDPlanModal();
         this.showToast(`✓ บันทึกข้อมูล Production Order ${woId} สำเร็จ`);
+      });
+    }
+
+    // Force close PD button handler: same confirm popup / log as the Force close trash buttons, for this one PD
+    if (btnForceClose) {
+      const cleanBtnForceClose = btnForceClose.cloneNode(true);
+      btnForceClose.parentNode.replaceChild(cleanBtnForceClose, btnForceClose);
+      cleanBtnForceClose.addEventListener('click', () => {
+        const rc = this.state.resourcesController;
+        if (!rc || typeof rc.confirmClosePds !== 'function') return;
+        rc.confirmClosePds(
+          j => (j.woId || j.id) === woId,
+          w => w.id === woId,
+          `PD: ${woId} (ปุ่ม Force close ในหน้า PD)`,
+          [woId],
+          () => this.closePDPlanModal()
+        );
       });
     }
 

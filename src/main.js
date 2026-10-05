@@ -150,6 +150,7 @@ class App {
     state.workflowController = this.workflow;
     this.gantt = new GanttController(state);
     this.resources = new ResourcesController(state);
+    state.resourcesController = this.resources;
     this.kiosk = new KioskController(state);
     this.dailySchedule = new DailyScheduleController(state);
     this.assemblyTree = new AssemblyTreeController(state, this.gantt);

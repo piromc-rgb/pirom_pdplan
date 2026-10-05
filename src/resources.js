@@ -634,8 +634,8 @@ export class ResourcesController {
 
   // Which PDs a trash action would force-close: the PDs of the list entry (board + backlog) and the child PDs that
   // are still open. Pure preview, nothing is changed.
-  previewForceClose(matchJob, matchWo) {
-    const ids = new Set();
+  previewForceClose(matchJob, matchWo, extraIds = []) {
+    const ids = new Set(extraIds);
     this.state.scheduledJobs.forEach(j => { if (matchJob(j)) ids.add(j.woId || j.id); });
     this.state.workOrders.forEach(w => { if (matchWo(w)) ids.add(w.id); });
     const direct = [...ids].sort();
@@ -664,14 +664,15 @@ export class ResourcesController {
   }
 
   // Popup that lists the PDs about to be force-closed; nothing happens until "ยืนยันลบ" is pressed.
-  confirmClosePds(matchJob, matchWo, label = '') {
-    const preview = this.previewForceClose(matchJob, matchWo);
+  confirmClosePds(matchJob, matchWo, label = '', extraIds = [], onDone = null) {
+    const preview = this.previewForceClose(matchJob, matchWo, extraIds);
     this.showForceClosePopup({
       label,
       ...preview,
       onConfirm: () => {
         const r = this.closePdsAndRemove(matchJob, matchWo, preview, label);
         this.state.ganttController?.showToast?.(`✅ ยืนยันลบแล้ว: Force close ${r.closed} PD และตั้ง ${r.opsMarked} Operation เป็น Complete`, 'success');
+        if (typeof onDone === 'function') onDone(r);
       }
     });
   }
@@ -686,7 +687,7 @@ export class ResourcesController {
     const total = direct.length + children.length;
     const overlay = document.createElement('div');
     overlay.id = 'force-closed-popup';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:100002;display:flex;align-items:center;justify-content:center;padding:16px;';
     overlay.innerHTML = `
       <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:760px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
         <div style="padding:14px 18px 8px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
