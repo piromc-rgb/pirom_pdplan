@@ -3524,9 +3524,7 @@ export class GanttController {
     const btnAddStep = document.getElementById('btn-add-step-to-edit-pd');
     const btnSave = document.getElementById('btn-save-pd-changes');
     const btnExport = document.getElementById('btn-export-pd-csv');
-    const btnDelete = document.getElementById('btn-delete-this-pd');
     const btnForceClose = document.getElementById('btn-force-close-this-pd');
-    const inputCompletedHistory = document.getElementById('chk-pd-completed-history');
 
     // If Status Overview maps (pdOpStatusMap / planMaterials) are not loaded yet, fetch once in background and refresh modal
     const needsOverviewLoad = (
@@ -3650,7 +3648,6 @@ export class GanttController {
     if (inputQty) inputQty.value = qty;
     if (inputPriority) inputPriority.value = priority;
     if (inputMemo) inputMemo.value = memo;
-    if (inputCompletedHistory) inputCompletedHistory.checked = this.state.isPdInCompletedHistory(woId);
 
     if (inputTargetDate) {
       if (dueHour !== null && dueHour !== undefined) {
@@ -4286,25 +4283,6 @@ export class GanttController {
       });
     }
 
-    // Delete PD button handler
-    if (btnDelete) {
-      const cleanBtnDelete = btnDelete.cloneNode(true);
-      btnDelete.parentNode.replaceChild(cleanBtnDelete, btnDelete);
-      cleanBtnDelete.addEventListener('click', () => {
-        const childPds = typeof this.state.getDescendantPdIds === 'function' ? this.state.getDescendantPdIds(woId) : [];
-        const confirmMsg = childPds.length > 0
-          ? `คุณต้องการลบ Production Order: ${woId} พร้อม PD ลูกทั้งหมดอีก ${childPds.length} รายการ (${childPds.slice(0, 10).join(', ')}${childPds.length > 10 ? '...' : ''}) ใช่หรือไม่?\n(การลบจะนำขั้นตอนและข้อมูลทั้งหมดของ PD แม่และ PD ลูกออกจากระบบ)`
-          : `คุณต้องการลบ Production Order: ${woId} นี้ใช่หรือไม่?\n(การลบจะนำขั้นตอนและข้อมูลทั้งหมดของ PD นี้ออกจากระบบ)`;
-        if (confirm(confirmMsg)) {
-          const deletedChildren = this.state.deleteProductionOrder(woId) || [];
-          this.closePDPlanModal();
-          this.showToast(deletedChildren.length > 0
-            ? `🗑️ ลบ Production Order ${woId} และ PD ลูกทั้งหมด (${deletedChildren.length} รายการ) เรียบร้อยแล้ว`
-            : `🗑️ ลบ Production Order ${woId} เรียบร้อยแล้ว`);
-        }
-      });
-    }
-
     // Export CSV button handler
     if (btnExport) {
       const cleanBtnExport = btnExport.cloneNode(true);
@@ -4340,27 +4318,6 @@ export class GanttController {
           });
         });
         this.exportPDPlanToCSV(woId, jobsForExport);
-      });
-    }
-
-    // "ผลิตจริงเสร็จแล้ว" checkbox handler
-    if (inputCompletedHistory) {
-      const cleanInputCompletedHistory = inputCompletedHistory.cloneNode(true);
-      cleanInputCompletedHistory.checked = this.state.isPdInCompletedHistory(woId);
-      inputCompletedHistory.parentNode.replaceChild(cleanInputCompletedHistory, inputCompletedHistory);
-      cleanInputCompletedHistory.addEventListener('change', () => {
-        const isChecked = cleanInputCompletedHistory.checked;
-        const childPds = this.state.markPdCompletedHistory(woId, isChecked) || [];
-        this.showPDPlanModal(woId);
-        if (childPds.length > 0) {
-          this.showToast(isChecked
-            ? `✅ บันทึกว่า ${woId} และ PD ลูกทั้งหมด (${childPds.length} รายการ) ผลิตจริงเสร็จแล้ว`
-            : `↩️ ยกเลิกสถานะผลิตเสร็จแล้วของ ${woId} และ PD ลูกทั้งหมด (${childPds.length} รายการ)`);
-        } else {
-          this.showToast(isChecked
-            ? `✅ บันทึกว่า ${woId} ผลิตจริงเสร็จแล้ว - จะไม่ถูกนำกลับเข้าแผนอีก`
-            : `↩️ ยกเลิกสถานะผลิตเสร็จแล้วของ ${woId}`);
-        }
       });
     }
 
