@@ -409,14 +409,14 @@ Are you sure you want to delete all Production Orders in the Backlog?`)&&(this.s
       <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:980px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
         <div style="padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <div>
-            <div style="font-size:15px;font-weight:700;">📊 สรุปภาพรวมโครงการที่เลือก (${t.perProject.length} โครงการ)</div>
+            <div style="font-size:15px;font-weight:700;">📊 สรุปภาพรวมโครงการที่เลือก (${t.perProject.length} โครงการ${t.perProject.length<=3?`: `+t.perProject.map(e=>r(e.project)).join(`, `):``})</div>
             <div style="color:#64748b;font-size:11.5px;margin-top:3px;">นับจาก PD ทั้งหมดในไฟล์ Status Overview ของ SO / โครงการที่ติ๊กอยู่ในตัวกรอง เทียบกับสถานะใน Board / Backlog ปัจจุบัน</div>
           </div>
           <button type="button" id="btn-close-project-summary" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
         </div>
         <div style="padding:6px 18px 12px;overflow:auto;display:flex;flex-direction:column;gap:14px;">
           <div style="border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;padding:10px 14px;">
-            <div style="font-weight:700;margin-bottom:4px;">รวมทุกโครงการที่เลือก (${t.perProject.length} โครงการ)</div>
+            <div style="font-weight:700;margin-bottom:4px;">${t.perProject.length===1?`โครงการ ${r(t.perProject[0].project)}`:`รวมทุกโครงการที่เลือก (${t.perProject.length} โครงการ)`}</div>
             ${o(n)}
           </div>
           ${t.perProject.length>1?`<div style="font-weight:700;">แยกรายโครงการ</div>${s}`:``}
