@@ -1101,7 +1101,6 @@ export class StorageSyncManager {
           localStorage.setItem('pdplan_completed_pds', JSON.stringify(this.state.completedPdHistory));
         } catch (e) {}
       }
-      if (Array.isArray(data.closeLog) && typeof this.state.mergeCloseLogs === 'function') this.state.closeLog = this.state.mergeCloseLogs(this.state.closeLog, data.closeLog);
       if (data.favoritePDs) this.state.favoritePDs = data.favoritePDs;
       if (data.removedStepHistory) this.state.removedStepHistory = data.removedStepHistory;
       if (data.completedOpHistory && typeof data.completedOpHistory === 'object') this.state.completedOpHistory = data.completedOpHistory;

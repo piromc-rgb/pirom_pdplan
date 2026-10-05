@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-DfGM0sIO.js"></script>
+    <script type="module" crossorigin src="./assets/index-BlWF92wW.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-T1l8V0Oo.css">
   </head>
   <body>
@@ -1566,10 +1566,8 @@
           <p style="font-size: 10.5px; color: var(--text-secondary); margin: 0 0 12px 0;">PD ในรายการนี้จะไม่ถูกนำกลับเข้าแผนอีก ไม่ว่าจะ reload หน้า, sync ข้อมูลใหม่ หรือรัน AI Auto-Optimize (รายละเอียด Part Name / Customer ไม่แสดง เพราะถูกนำออกจากแผนแล้วถาวร)</p>
           <div style="display: flex; gap: 8px; align-items: center; margin: 0 0 10px 0; flex-wrap: wrap;">
             <input type="text" id="completed-pd-list-search" placeholder="ค้นหาเลข PD..." style="flex: 1; min-width: 140px; font-size: 11.5px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border-glass); background: var(--bg-card); color: var(--text-primary);">
-            <button type="button" id="btn-completed-view-list" class="btn" style="font-size: 11px; padding: 5px 10px; border-radius: 6px; cursor: pointer;">รายการ PD</button>
             <button type="button" id="btn-completed-check-wrong" class="btn" style="font-size: 11px; padding: 5px 10px; border-radius: 6px; cursor: pointer; border: 1px solid #b45309; color: #b45309;" title="เทียบกับไฟล์ Status Overview ล่าสุด: หา PD ที่อยู่ในรายการนี้ แต่ในไฟล์ยังไม่ Closed และยังมี Operation ค้าง (ไม่ได้ Force close) เพื่อคืนสถานะ">🔍 ตรวจ PD ที่ปิดผิด</button>
             <button type="button" id="btn-completed-clear-all" class="btn" style="font-size: 11px; padding: 5px 10px; border-radius: 6px; cursor: pointer; border: 1px solid var(--accent-red); color: var(--accent-red);" title="ล้างรายการผลิตเสร็จแล้วทั้งหมด (PD ที่ Closed ในไฟล์ Status Overview หรือ Operation Complete ครบยังถูกข้ามตามเดิม)">🧹 เคลียร์ทั้งหมด</button>
-            <button type="button" id="btn-completed-view-log" class="btn" style="font-size: 11px; padding: 5px 10px; border-radius: 6px; cursor: pointer;" title="ประวัติการปิด PD (Force close, ผลิตเสร็จแล้ว, ปิดตาม PD แม่, Import ฯลฯ)">📜 Log การปิด PD</button>
           </div>
           <div class="modal-body" style="overflow-y: auto; max-height: 420px;">
             <div id="completed-pd-list-body" style="display: flex; flex-direction: column; gap: 6px;">
