@@ -582,8 +582,10 @@ export class ResourcesController {
       line('จำนวน PD ที่ทุก Operation Complete', b.allComplete, '#15803d'),
       line('จำนวน PD ที่อยู่ในแผน (อยู่ใน Board)', b.board, '#0d9488', false, b.ids.board),
       line('จำนวน PD ที่อยู่ใน Backlog', b.backlog, '#7c3aed', false, b.ids.backlog),
-      line('อยู่ใน Backlog ที่ Mat ยังไม่พร้อม', b.backlogMatNotReady, b.backlogMatNotReady ? '#b91c1c' : '#475569', true, b.ids.matNotReady),
-      line('อยู่ใน Backlog ที่รอ PD ลูกเสร็จ', b.backlogWaitChild, b.backlogWaitChild ? '#b45309' : '#475569', true, b.ids.waitChild),
+      line('อยู่ใน Backlog ที่ Mat ยังไม่พร้อม (อย่างเดียว)', b.backlogMatNotReady, b.backlogMatNotReady ? '#b91c1c' : '#475569', true, b.ids.matNotReady),
+      line('อยู่ใน Backlog ที่รอ PD ลูกเสร็จ (อย่างเดียว)', b.backlogWaitChild, b.backlogWaitChild ? '#b45309' : '#475569', true, b.ids.waitChild),
+      line('อยู่ใน Backlog ที่ Mat ยังไม่พร้อม และรอ PD ลูกเสร็จ (ทั้งสองอย่าง)', b.backlogBoth, b.backlogBoth ? '#9a3412' : '#475569', true, b.ids.both),
+      b.backlogReady ? line('อยู่ใน Backlog ที่พร้อมวางแผน (Mat พร้อม และไม่รอ PD ลูก)', b.backlogReady, '#15803d', true, b.ids.ready) : '',
       b.inCompletedList ? line('อยู่ในรายการ "Production Order ที่ผลิตเสร็จแล้ว" (Op ใน Status Overview ยังไม่ Complete ทั้งหมด)', b.inCompletedList, '#15803d', false, b.ids.inCompletedList) : '',
       b.other ? line('ยังไม่ Complete แต่ไม่อยู่ใน Board / Backlog / รายการผลิตเสร็จแล้ว', b.other, '#92400e', false, b.ids.other) : ''
     ].join('');
@@ -613,7 +615,7 @@ export class ResourcesController {
           </div>
           ${sum.perProject.length > 1 ? `<div style="font-weight:700;">แยกรายโครงการ</div>${projectBlocks}` : ''}
           ${Object.keys(this.state.dwgToPdMap || {}).length === 0 ? '<div style="padding:8px 12px;border-radius:6px;background:#fef3c7;color:#92400e;font-size:11.5px;">⚠️ ยังไม่ได้โหลดไฟล์ Status Overview — "จำนวน PD ทั้งหมด" จึงนับได้เฉพาะ PD ที่อยู่ใน Board / Backlog เท่านั้น (ตัวเลขอาจไม่ครบ)</div>' : ''}
-          <div style="color:#94a3b8;font-size:10.5px;">Backlog ที่ Mat ไม่พร้อม และ Backlog ที่รอ PD ลูก เป็นส่วนหนึ่งของ PD ใน Backlog (PD เดียวอาจนับทั้งสองรายการ)</div>
+          <div style="color:#94a3b8;font-size:10.5px;">บรรทัดย่อยของ Backlog แยกกลุ่มไม่ซ้ำกัน รวมกันได้เท่ากับจำนวน PD ใน Backlog</div>
         </div>
         <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;border-top:1px solid #e2e8f0;">
           <button type="button" id="btn-ok-project-summary" style="padding:6px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">ปิด</button>

@@ -3151,7 +3151,7 @@ class CentralState {
     const idx = this.getPdProjectIndex();
     const boardIds = new Set((this.scheduledJobs || []).map(j => j.woId || j.id));
     const backlogIds = new Set((this.workOrders || []).map(w => w.id));
-    const blank = () => ({ total: 0, allComplete: 0, board: 0, backlog: 0, backlogMatNotReady: 0, backlogWaitChild: 0, inCompletedList: 0, other: 0, ids: { board: [], backlog: [], matNotReady: [], waitChild: [], inCompletedList: [], other: [] } });
+    const blank = () => ({ total: 0, allComplete: 0, board: 0, backlog: 0, backlogMatNotReady: 0, backlogWaitChild: 0, backlogBoth: 0, backlogReady: 0, inCompletedList: 0, other: 0, ids: { board: [], backlog: [], matNotReady: [], waitChild: [], both: [], ready: [], inCompletedList: [], other: [] } });
     const perProject = new Map();
     const overall = blank();
     idx.forEach((proj, pdId) => {
@@ -3169,8 +3169,13 @@ class CentralState {
         both(b => { b.backlog++; b.ids.backlog.push(pdId); });
         const op1 = Math.min(...((wo.steps || []).map(st => Number(st.stepNum) || 10)));
         const mats = (wo.steps || []).length > 0 ? (this.getStepMaterialsList(pdId, op1) || []) : [];
-        if (mats.some(m => m.status && m.status.tone === 'notready')) both(b => { b.backlogMatNotReady++; b.ids.matNotReady.push(pdId); });
-        if (this.isPdBlockedByChildren(pdId)) both(b => { b.backlogWaitChild++; b.ids.waitChild.push(pdId); });
+        const matNot = mats.some(m => m.status && m.status.tone === 'notready');
+        const waitChild = this.isPdBlockedByChildren(pdId);
+        // The three Backlog sub-groups are mutually exclusive so they add up to the Backlog total
+        if (matNot && waitChild) both(b => { b.backlogBoth++; b.ids.both.push(pdId); });
+        else if (matNot) both(b => { b.backlogMatNotReady++; b.ids.matNotReady.push(pdId); });
+        else if (waitChild) both(b => { b.backlogWaitChild++; b.ids.waitChild.push(pdId); });
+        else both(b => { b.backlogReady++; b.ids.ready.push(pdId); });
       }
       // Not all-ops-complete in the Status Overview and neither on the Board nor in the Backlog: it was
       // closed into the "Production Order ที่ผลิตเสร็จแล้ว" list, otherwise it simply is not imported yet
