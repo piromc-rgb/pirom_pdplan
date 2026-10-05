@@ -1263,7 +1263,7 @@ export class ResourcesController {
         <input type="checkbox" class="wc-visibility-checkbox" style="width: auto; margin: 0; cursor: pointer; flex-shrink: 0;" ${isWcChecked ? 'checked' : ''} title="Hide / Unhide Work Center บนบอร์ด Gantt (ซ่อน/แสดง)">
         <div style="flex: 1; min-width: 0;">
           <div class="oee-info">
-            <span class="oee-name">${this.state.getMachineDisplayName(machine)}${oeeData.active === 'Scheduled' ? '' : ` <span class="badge-status" style="font-size: 8px; color: var(--text-secondary)">(${oeeData.active})</span>`}</span>
+            <span class="oee-name">${this.state.getMachineDisplayName(machine)}</span>
             <span class="oee-percent" style="color: ${percentColor}; font-weight: ${percentWeight};">${oeeData.oee}%</span>
           </div>
           <div class="oee-bar-bg" title="Machine Capacity Load: ${oeeData.util}%">
