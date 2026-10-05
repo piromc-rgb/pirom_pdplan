@@ -1445,11 +1445,13 @@ export class WorkflowController {
             dwgToPdMap[dwg] = {
               pdId,
               orderStatus,
+              project: String(rawRow[col.project] || '').trim(),
               operations: []
             };
           } else if (orderStatus !== 'Closed' && dwgToPdMap[dwg].orderStatus === 'Closed') {
             dwgToPdMap[dwg].pdId = pdId;
             dwgToPdMap[dwg].orderStatus = orderStatus;
+            dwgToPdMap[dwg].project = String(rawRow[col.project] || '').trim();
             dwgToPdMap[dwg].operations = [];
           }
 
@@ -1900,10 +1902,11 @@ export class WorkflowController {
       if (!dwg) continue;
       addDwgCandidate(dwgCandidates, dwg, pdId, orderStatus, String(rawRow[col.project] || '').trim(), opNum, wcDesc || wcCode, wcCode, opStatus);
       if (!dwgToPdMap[dwg]) {
-        dwgToPdMap[dwg] = { pdId, orderStatus, operations: [] };
+        dwgToPdMap[dwg] = { pdId, orderStatus, project: String(rawRow[col.project] || '').trim(), operations: [] };
       } else if (orderStatus !== 'Closed' && dwgToPdMap[dwg].orderStatus === 'Closed') {
         dwgToPdMap[dwg].pdId = pdId;
         dwgToPdMap[dwg].orderStatus = orderStatus;
+        dwgToPdMap[dwg].project = String(rawRow[col.project] || '').trim();
         dwgToPdMap[dwg].operations = [];
       }
       if (pdId === dwgToPdMap[dwg].pdId) {

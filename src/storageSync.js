@@ -1822,8 +1822,9 @@ export class StorageSyncManager {
   async checkStatusOverviewUpdate() {
     if (typeof window === 'undefined' || this._soChecking) return;
     this._soChecking = true;
-    // _v2: bumped when the Dwg->PD map gained per-Dwg candidate PDs, so every browser reloads the Overview once
-    const KEY = 'chaken_status_overview_stamp_v2';
+    // _v3: bumped when the Dwg->PD map gained the project of every PD (project summary), so every browser reloads
+    // the Overview once
+    const KEY = 'chaken_status_overview_stamp_v3';
     try {
       const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ||
         window.location.hostname.startsWith('192.168.') || window.location.port === '5173';

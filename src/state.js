@@ -3140,6 +3140,54 @@ class CentralState {
     return marked;
   }
 
+  // PD -> project (SO) for every PD of the imported Status Overview (Dwg map entries + candidates), completed with
+  // the live plan (backlog / board) for PDs the Dwg map does not know.
+  getPdProjectIndex() {
+    if (this._pdProjectIndexRef === this.dwgToPdMap && this._pdProjectIndex && this._pdProjectIndexJobs === (this.scheduledJobs || []).length + ':' + (this.workOrders || []).length) {
+      return this._pdProjectIndex;
+    }
+    const idx = new Map();
+    Object.values(this.dwgToPdMap || {}).forEach(entry => {
+      if (!entry) return;
+      if (entry.pdId && entry.project) idx.set(entry.pdId, entry.project);
+      (entry.candidates || []).forEach(c => { if (c && c.pdId && c.project) idx.set(c.pdId, c.project); });
+    });
+    (this.workOrders || []).forEach(w => { if (w.id && !idx.has(w.id)) idx.set(w.id, w.project || 'General'); });
+    (this.scheduledJobs || []).forEach(j => { const id = j.woId || j.id; if (id && !idx.has(id)) idx.set(id, j.project || 'General'); });
+    this._pdProjectIndexRef = this.dwgToPdMap;
+    this._pdProjectIndexJobs = (this.scheduledJobs || []).length + ':' + (this.workOrders || []).length;
+    this._pdProjectIndex = idx;
+    return idx;
+  }
+
+  // Overview of the given projects (SO): PD totals, Assembly vs other PDs, Order Status split and PDs waiting for Mat.
+  // "Assembly" = a PD that has child PDs (14-char sub-assembly materials); everything else is a part PD.
+  buildProjectSummary(projectKeys) {
+    const wanted = new Set((projectKeys || []).map(p => String(p || 'General').trim() || 'General'));
+    const idx = this.getPdProjectIndex();
+    const blank = () => ({ total: 0, assembly: 0, others: 0, statuses: {}, matNotReady: 0 });
+    const perProject = new Map();
+    const overall = blank();
+    idx.forEach((proj, pdId) => {
+      const key = String(proj || 'General').trim() || 'General';
+      if (!wanted.has(key)) return;
+      const rows = (this.planMaterials || {})[pdId] || [];
+      const isAssembly = rows.some(r => String(r.mat || '').trim().length === 14);
+      const bucket = perProject.get(key) || perProject.set(key, blank()).get(key);
+      [bucket, overall].forEach(b => { b.total++; if (isAssembly) b.assembly++; else b.others++; });
+      if (isAssembly) return;
+      const status = String(this.getPdOrderStatus(pdId) || 'Unknown').trim() || 'Unknown';
+      const label = status.toLowerCase() === 'closed' ? 'Closed' : status;
+      [bucket, overall].forEach(b => { b.statuses[label] = (b.statuses[label] || 0) + 1; });
+      if (label !== 'Closed' && rows.length > 0) {
+        const op1 = Math.min(...rows.map(r => Number(r.stepNum) || 10));
+        const mat = this.getStepMaterialIssueSummary(pdId, op1);
+        if (mat && mat.tone === 'notready') [bucket, overall].forEach(b => { b.matNotReady++; });
+      }
+    });
+    return { overall, perProject: [...perProject.entries()].map(([project, v]) => ({ project, ...v })).sort((a, b) => b.total - a.total || a.project.localeCompare(b.project)) };
+  }
+
   // True when every operation of the PD is Completed in the imported Status Overview (numeric step keys of
   // pdOpStatusMap; work-center keys are duplicates of the same steps and are ignored).
   isPdAllOpsComplete(pdId) {
