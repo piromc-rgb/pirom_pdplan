@@ -786,10 +786,10 @@
               <h4>Gantt Project Filter (กรองตาม SO / โครงการ)</h4>
               <p class="tool-desc" style="font-size: 10px; color: var(--text-secondary); margin-bottom: 8px;">เลือกเลขที่ SO / โครงการที่จะให้แสดงผลบนบอร์ด Gantt:</p>
               <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-                <button id="btn-project-select-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold;">เลือกทั้งหมด</button>
-                <button id="btn-project-deselect-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-weight: bold;">ล้างทั้งหมด</button>
+                <button id="btn-project-select-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; white-space: nowrap; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold;">Select All</button>
+                <button id="btn-project-deselect-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; white-space: nowrap; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-weight: bold;">Deselect All</button>
+                <button id="btn-project-summary" class="btn" title="สรุปภาพรวมของโครงการที่เลือกอยู่ในตัวกรอง: จำนวน PD, อยู่ใน Board / Backlog, Mat ไม่พร้อม, รอ PD ลูก" style="flex: 1; font-size: 9.5px; padding: 4px 6px; white-space: nowrap; background: rgba(37, 99, 235, 0.1); border: 1px solid #2563eb; color: #1d4ed8; border-radius: 4px; cursor: pointer; font-weight: bold;">Recap</button>
               </div>
-              <button id="btn-project-summary" class="btn" title="สรุปภาพรวมของโครงการที่เลือกอยู่ในตัวกรอง: จำนวน PD, Assembly / PD อื่นๆ, Order Status, PD ที่รอ Mat" style="width: 100%; margin-bottom: 8px; font-size: 10.5px; font-weight: 700; padding: 6px 8px; background: rgba(37, 99, 235, 0.1); border: 1px solid #2563eb; color: #1d4ed8; border-radius: 6px; cursor: pointer;">📊 สรุปภาพรวมโครงการที่เลือก</button>
 
               <input type="text" id="project-search-input" placeholder="ค้นหาโครงการ..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); outline: none; margin-bottom: 8px;">
 
