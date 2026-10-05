@@ -508,7 +508,7 @@ Are you sure you want to delete all Production Orders in the Backlog?`)&&(this.s
         <input type="checkbox" class="wc-visibility-checkbox" style="width: auto; margin: 0; cursor: pointer; flex-shrink: 0;" ${u?`checked`:``} title="Hide / Unhide Work Center บนบอร์ด Gantt (ซ่อน/แสดง)">
         <div style="flex: 1; min-width: 0;">
           <div class="oee-info">
-            <span class="oee-name">${this.state.getMachineDisplayName(e)} <span class="badge-status" style="font-size: 8px; color: var(--text-secondary)">(${r.active})</span></span>
+            <span class="oee-name">${this.state.getMachineDisplayName(e)}${r.active===`Scheduled`?``:` <span class="badge-status" style="font-size: 8px; color: var(--text-secondary)">(${r.active})</span>`}</span>
             <span class="oee-percent" style="color: ${s}; font-weight: ${c};">${r.oee}%</span>
           </div>
           <div class="oee-bar-bg" title="Machine Capacity Load: ${r.util}%">
