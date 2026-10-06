@@ -3145,6 +3145,38 @@ class CentralState {
   // Items (item_5) of a project with Description and Quantity Ordered, from the imported Status Overview
   // (Dwg map entries + candidates). The live plan (backlog / board) fills whatever the file does not give.
   // Returns [{ itemCode, description, qty }] sorted by item code.
+  // Progress of each machine in the project's machine list (Setup รายการเครื่องจักร): the PDs of its assembly set
+  // are split by the same status colours as the Assembly tree legend (green done / yellow in production / red waiting).
+  getProjectMachineProgress(project) {
+    const proj = String(project || 'General').trim() || 'General';
+    const norm = (p) => String(p || 'General').trim() || 'General';
+    const catalog = new Map(this.getProjectItemCatalog(proj).map(c => [c.itemCode, c]));
+    const rootPdFor = (code) => {
+      const e = (this.dwgToPdMap || {})[code];
+      if (e && e.pdId && norm(e.project) === proj) return e.pdId;
+      const c = e && (e.candidates || []).find(x => x && x.pdId && norm(x.project) === proj);
+      if (c) return c.pdId;
+      const wo = (this.workOrders || []).find(w => w.dwgNo === code && norm(w.project) === proj);
+      if (wo) return wo.id;
+      const j = (this.scheduledJobs || []).find(x => x.dwgNo === code && norm(x.project) === proj);
+      return j ? (j.woId || j.id) : null;
+    };
+    return ((this.projectMachineLists || {})[proj] || []).filter(r => r && r.itemCode).map(r => {
+      const pdId = rootPdFor(r.itemCode);
+      const out = { project: proj, itemCode: r.itemCode, description: (catalog.get(r.itemCode) || {}).description || '', qty: r.qty, targetDate: r.targetDate || '', pdId, total: 0, done: 0, working: 0, waiting: 0 };
+      if (pdId && this.assemblyTree && typeof this.assemblyTree.buildAssemblyTree === 'function') {
+        const { allTreeNodes } = this.assemblyTree.buildAssemblyTree(pdId);
+        (allTreeNodes || []).filter(n => !n.isRawMat).forEach(n => {
+          out.total++;
+          if (n.status === 'released') out.done++;
+          else if (n.status === 'working') out.working++;
+          else out.waiting++;
+        });
+      }
+      return out;
+    });
+  }
+
   getProjectItemCatalog(project) {
     const proj = String(project || 'General').trim() || 'General';
     const items = new Map();

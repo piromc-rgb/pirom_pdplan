@@ -634,6 +634,36 @@ export class ResourcesController {
       b.other ? line('ยังไม่ Complete แต่ไม่อยู่ใน Board / Backlog / รายการผลิตเสร็จแล้ว', b.other, '#92400e', false, b.ids.other) : ''
     ].join('');
     const breakdown = (b) => `<div style="display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap;"><div style="flex:1;min-width:360px;">${breakdownRows(b)}</div>${donut(b)}</div>`;
+    // Long stacked bars: % finished / in production / waiting for every machine of the project's machine list
+    // (same row = machine name + bar), full width like the summary box above it.
+    const machineBars = () => {
+      const projects = sum.perProject.map(r => r.project);
+      const rows = projects.flatMap(pr => this.state.getProjectMachineProgress(pr));
+      const COLORS = { done: '#15803d', working: '#eab308', waiting: '#dc2626' };
+      const legend = [['done', 'ผลิตเสร็จแล้ว'], ['working', 'กำลังผลิต'], ['waiting', 'รอผลิต']].map(([k, t]) => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;"><span style="width:10px;height:10px;border-radius:2px;background:${COLORS[k]};"></span>${t}</span>`).join('');
+      const multi = projects.length > 1;
+      const body = rows.length === 0
+        ? '<div style="color:#94a3b8;padding:8px 0;font-size:11.5px;">ยังไม่ได้ Setup รายการเครื่องจักรของโครงการ (ดับเบิลคลิกเลขโครงการในตัวกรองเพื่อ Setup)</div>'
+        : rows.map((r, i) => {
+          const t = r.total || 0;
+          const pc = (n) => t > 0 ? n / t * 100 : 0;
+          const seg = (k, n) => pc(n) > 0 ? `<div title="${t ? `${n} จาก ${t} PD` : ''}" style="width:${pc(n).toFixed(2)}%;background:${COLORS[k]};color:${k === 'working' ? '#422006' : '#fff'};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;overflow:hidden;white-space:nowrap;">${pc(n) >= 7 ? pc(n).toFixed(0) + '%' : ''}</div>` : '';
+          const bar = t > 0
+            ? `<div style="display:flex;height:18px;border-radius:4px;overflow:hidden;background:#e2e8f0;">${seg('done', r.done)}${seg('working', r.working)}${seg('waiting', r.waiting)}</div>`
+            : `<div style="height:18px;border-radius:4px;background:#f1f5f9;color:#94a3b8;font-size:10px;display:flex;align-items:center;justify-content:center;">ไม่พบ PD ของเครื่องนี้</div>`;
+          const sumTxt = t > 0 ? `${pc(r.done).toFixed(0)}% · ${pc(r.working).toFixed(0)}% · ${pc(r.waiting).toFixed(0)}%` : '-';
+          return `<div style="display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid #f1f5f9;">
+            <div style="width:34%;min-width:200px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;" title="${esc(r.itemCode)} ${esc(r.description)}">${i + 1}. ${multi ? `<span style="color:#64748b;">${esc(r.project)}</span> ` : ''}<span style="font-family:monospace;font-weight:700;">${esc(r.itemCode)}</span> <span style="color:#475569;">${esc(r.description)}</span></div>
+            <div style="flex:1;min-width:160px;">${bar}</div>
+            <div style="width:96px;text-align:right;font-size:10.5px;color:#475569;white-space:nowrap;" title="ผลิตเสร็จแล้ว · กำลังผลิต · รอผลิต (${t} PD)">${sumTxt}</div>
+          </div>`;
+        }).join('');
+      return `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px;"><span style="font-weight:700;">ความคืบหน้ารายการเครื่องจักรในโครงการ</span><span style="display:flex;gap:14px;">${legend}</span></div>
+        ${body}
+      </div>`;
+    };
+
     // Two side-by-side boxes under the summary: PD type by Operation Work Center (left) and the 6 busiest Work Centers (right)
     const extraBoxes = (b) => {
       const total = b.total || 0;
@@ -691,6 +721,7 @@ export class ResourcesController {
             ${sum.perProject.length === 1 ? projectInfo(sum.perProject[0].project) : ''}
             ${breakdown(o)}
           </div>
+          ${machineBars()}
           ${extraBoxes(o)}
           ${sum.perProject.length > 1 ? `<div style="font-weight:700;">แยกรายโครงการ</div>${projectBlocks}` : ''}
           ${Object.keys(this.state.dwgToPdMap || {}).length === 0 ? '<div style="padding:8px 12px;border-radius:6px;background:#fef3c7;color:#92400e;font-size:11.5px;">⚠️ ยังไม่ได้โหลดไฟล์ Status Overview — "จำนวน PD ทั้งหมด" จึงนับได้เฉพาะ PD ที่อยู่ใน Board / Backlog เท่านั้น (ตัวเลขอาจไม่ครบ)</div>' : ''}
