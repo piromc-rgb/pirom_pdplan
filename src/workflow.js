@@ -1210,10 +1210,11 @@ export class WorkflowController {
   // the Backlog without running a full import: nothing else in the Backlog / plan is touched (a full import with a PD
   // filter would treat every PD outside the filter as finished). Closed / completed PDs and PDs that are already in
   // the Backlog or on the Board are skipped. Returns a summary { added, skipped: {reason: [ids]}, missing }.
-  async addPdsToBacklog(pdIds, includeChildren = true) {
+  // ranges: [{ from: 'PD2610982', to: 'PD2610986' }] - every PD of the Status Overview whose number lies in the range is added
+  async addPdsToBacklog(pdIds, includeChildren = true, ranges = []) {
     const state = this.state;
     const wanted = [...new Set((pdIds || []).map(x => String(x || '').trim().toUpperCase()).filter(Boolean))];
-    if (wanted.length === 0) return { added: [], skipped: {}, missing: [], filename: '' };
+    if (wanted.length === 0 && (!ranges || ranges.length === 0)) return { added: [], skipped: {}, missing: [], filename: '' };
     if (typeof XLSX === 'undefined') throw new Error('ไม่พบไลบรารี XLSX (ตรวจสอบอินเทอร์เน็ต)');
     const overview = state.storageSync && typeof state.storageSync.fetchStatusOverview === 'function'
       ? await state.storageSync.fetchStatusOverview({ silent: true, noUpload: true })
@@ -1225,9 +1226,6 @@ export class WorkflowController {
     if (!dataName) throw new Error('ไม่พบชีต Data ในไฟล์ Status Overview');
     const wb = XLSX.read(bytes, { type: 'array', sheets: dataName });
     const raw2D = XLSX.utils.sheet_to_json(wb.Sheets[dataName], { header: 1, defval: '' });
-
-    const targets = new Set(wanted);
-    if (includeChildren) (state.getDescendantPdIds(wanted) || []).forEach(id => targets.add(String(id).toUpperCase()));
 
     const headerRow = (raw2D[0] || []).map(h => String(h || '').trim().toLowerCase());
     const findColIdx = (possibleNames, fallbackIdx) => {
@@ -1250,6 +1248,28 @@ export class WorkflowController {
       cycleTime: findColIdx(['cycle time', 'cycletime'], 21),
       setupTime: findColIdx(['average setup time', 'setup time', 'setup'], 23)
     };
+
+    // Expand "PDstart-PDfinish" ranges against the PDs that exist in the Status Overview
+    const rangeMissing = [];
+    if (ranges && ranges.length > 0) {
+      const numOf = (id) => { const m = String(id).match(/\d+/); return m ? parseInt(m[0], 10) : null; };
+      const filePds = new Set();
+      for (let i = 1; i < raw2D.length; i++) {
+        const rawPd = String((raw2D[i] || [])[col.pd] || '').trim();
+        const id = (rawPd.match(/^PD\d+[A-Z]?/i)?.[0] || rawPd).toUpperCase();
+        if (id) filePds.add(id);
+      }
+      ranges.forEach(r => {
+        const a = numOf(r.from), b = numOf(r.to);
+        if (a === null || b === null) { rangeMissing.push(`${r.from}-${r.to}`); return; }
+        const lo = Math.min(a, b), hi = Math.max(a, b);
+        let hit = 0;
+        filePds.forEach(id => { const n = numOf(id); if (n !== null && n >= lo && n <= hi) { wanted.push(id); hit++; } });
+        if (hit === 0) rangeMissing.push(`${r.from}-${r.to}`);
+      });
+    }
+    const targets = new Set(wanted);
+    if (includeChildren) (state.getDescendantPdIds([...targets]) || []).forEach(id => targets.add(String(id).toUpperCase()));
 
     const groups = {};
     for (let i = 1; i < raw2D.length; i++) {
@@ -1294,7 +1314,7 @@ export class WorkflowController {
     const skip = (reason, id) => { (skipped[reason] = skipped[reason] || []).push(id); };
     const onBoard = new Set((state.scheduledJobs || []).map(j => j.woId || j.id));
     const inBacklog = new Set((state.workOrders || []).map(w => w.id));
-    const missing = [...targets].filter(id => !groups[id]).sort();
+    const missing = [...[...targets].filter(id => !groups[id]).sort(), ...rangeMissing];
     const toAdd = [];
     Object.values(groups).sort((a, b) => a.id.localeCompare(b.id)).forEach(wo => {
       if (state.isPdClosedForPlanning(wo.id)) return skip('Closed / ผลิตเสร็จแล้ว', wo.id);
@@ -1342,12 +1362,16 @@ export class WorkflowController {
     const toast = (m, t) => this.state.ganttController?.showToast?.(m, t);
     const mode = this.state.storageSync && typeof this.state.storageSync.getUserMode === 'function' ? this.state.storageSync.getUserMode() : 'plan';
     if (mode !== 'plan') { toast('⚠️ กรุณาสลับเป็นโหมดวางแผนก่อน จึงจะเพิ่ม PD เข้า Backlog ได้', 'error'); return; }
-    const input = window.prompt('ระบุเลข PD ที่ต้องการเพิ่มเข้า Backlog (คั่นด้วยจุลภาคหรือเว้นวรรค)\nระบบจะเพิ่ม PD ลูกทั้งหมดของ PD เหล่านี้ให้ด้วย', '');
+    const input = window.prompt('ระบุเลข PD ที่ต้องการเพิ่มเข้า Backlog (คั่นด้วยจุลภาคหรือเว้นวรรค)\nระบุเป็นช่วงได้: PDเริ่ม-PDจบ หรือ PDเริ่ม to PDจบ เช่น PD2610982-PD2610986\nระบบจะเพิ่ม PD ลูกทั้งหมดของ PD เหล่านี้ให้ด้วย', '');
     if (!input || !input.trim()) return;
-    const ids = input.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
+    // Ranges first ("PDstart-PDfinish" / "PDstart to PDfinish" / "PDstart ถึง PDfinish"), the rest are single PD numbers
+    const ranges = [];
+    const rest = input.replace(/(PD\d+[A-Z]?)\s*(?:-|–|—|~|to|ถึง)\s*(PD\d+[A-Z]?)/gi, (m, a, b) => { ranges.push({ from: a.toUpperCase(), to: b.toUpperCase() }); return ' '; });
+    const ids = rest.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
+    if (ids.length === 0 && ranges.length === 0) return;
     try {
       toast('⏳ กำลังอ่านไฟล์ Status Overview เพื่อเพิ่ม PD เข้า Backlog...', 'info');
-      const r = await this.addPdsToBacklog(ids, true);
+      const r = await this.addPdsToBacklog(ids, true, ranges);
       const skippedText = Object.entries(r.skipped).map(([reason, list]) => `${reason}: ${list.length}`).join(' · ');
       toast(`✅ เพิ่มเข้า Backlog ${r.added.length} PD${skippedText ? ` (ข้าม ${skippedText})` : ''}${r.missing.length ? ` · ไม่พบในไฟล์ ${r.missing.length}` : ''}`, r.added.length ? 'success' : 'info');
     } catch (err) {
