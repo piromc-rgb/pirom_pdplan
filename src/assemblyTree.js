@@ -1303,8 +1303,11 @@ export class AssemblyTreeController {
       const isCompletedHistory = typeof this.state.isPdInCompletedHistory === 'function' ? this.state.isPdInCompletedHistory(id) : false;
       const orderStatusStr = String(dwgInfo?.orderStatus || '').toLowerCase();
 
+      // "done" = really finished (every Operation Complete / closed). A merely Released order is not done.
+      const isDone = isComplete || isCompletedHistory || orderStatusStr === 'closed';
+
       let status = 'waiting';
-      if (isComplete || isCompletedHistory || orderStatusStr === 'released' || orderStatusStr === 'closed') {
+      if (isDone || orderStatusStr === 'released') {
         status = 'released';
       } else if (isRunning || completedSteps > 0 || orderStatusStr === 'active' || orderStatusStr === 'running') {
         status = 'working';
@@ -1328,6 +1331,7 @@ export class AssemblyTreeController {
         parentId: parentKey,
         isRawMat: false,
         status,
+        isDone,
         totalSteps,
         completedSteps,
         stepNames: stepNames.length > 0 ? stepNames.slice(0, 3).join(', ') : (orderStatusStr ? orderStatusStr.toUpperCase() : 'ASSEMBLY'),
@@ -1420,6 +1424,13 @@ export class AssemblyTreeController {
       }
 
       node.hasChildren = node.children.length > 0;
+
+      // RULE: an assembly (parent) PD is "In process" while its child PDs are not all Completed - even when its own
+      // Order Status is Released - so it only turns green once every child PD is done (and it is done itself).
+      const childPdNodes = node.children.filter(c => !c.isRawMat);
+      if (childPdNodes.length > 0 && !node.isDone && childPdNodes.some(c => !c.isDone)) {
+        node.status = 'working';
+      }
       return node;
     };
 
