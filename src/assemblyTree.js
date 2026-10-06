@@ -2069,6 +2069,19 @@ export class AssemblyTreeController {
     if (!tree) return;
     const rootNode = tree;
 
+    // Legend: share of PDs per status colour (all PDs of this assembly set, warehouse raw material rows excluded)
+    {
+      const pdNodes = allNodes.filter(n => !n.isRawMat);
+      const total = pdNodes.length;
+      const counts = { released: 0, working: 0, waiting: 0 };
+      pdNodes.forEach(n => { if (counts[n.status] !== undefined) counts[n.status]++; });
+      document.querySelectorAll('.assembly-legend-pct').forEach(el => {
+        const c = counts[el.dataset.status] || 0;
+        el.textContent = total > 0 ? `${(c / total * 100).toFixed(1)}%` : '-';
+        el.title = `${c} จาก ${total} PD`;
+      });
+    }
+
     // Update Top-Left Header Box
     if (this.headerPartNo) {
       this.headerPartNo.textContent = rootNode ? (rootNode.dwgNo && rootNode.dwgNo !== rootNode.id ? `${rootNode.id} (${rootNode.dwgNo})` : rootNode.id) : '-';
