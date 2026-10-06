@@ -634,34 +634,60 @@ export class ResourcesController {
       b.other ? line('ยังไม่ Complete แต่ไม่อยู่ใน Board / Backlog / รายการผลิตเสร็จแล้ว', b.other, '#92400e', false, b.ids.other) : ''
     ].join('');
     const breakdown = (b) => `<div style="display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap;"><div style="flex:1;min-width:360px;">${breakdownRows(b)}</div>${donut(b)}</div>`;
-    // Long stacked bars: % finished / in production / waiting for every machine of the project's machine list
-    // (same row = machine name + bar), full width like the summary box above it.
-    const machineBars = () => {
+    // Second page of the popup ("📋 Progress แยกเครื่อง"): production progress of every machine in the project's machine
+    // list, earliest delivery target first (machines without a target date last), with a button back to the first page.
+    const machineDetail = () => {
       const projects = sum.perProject.map(r => r.project);
-      const rows = projects.flatMap(pr => this.state.getProjectMachineProgress(pr));
+      const multi = projects.length > 1;
+      const parseD = (txt) => {
+        const m = String(txt || '').trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})$/);
+        if (!m) return null;
+        const y = Number(m[3]) < 100 ? 2000 + Number(m[3]) : Number(m[3]);
+        const d = new Date(y, Number(m[2]) - 1, Number(m[1]));
+        return isNaN(d.getTime()) ? null : d;
+      };
+      const rows = projects.flatMap(pr => this.state.getProjectMachineProgress(pr))
+        .map((r, idx) => ({ ...r, _d: parseD(r.targetDate), _idx: idx }))
+        .sort((x, y) => (x._d && y._d) ? (x._d - y._d || x._idx - y._idx) : (x._d ? -1 : y._d ? 1 : x._idx - y._idx));
       const COLORS = { done: '#15803d', working: '#eab308', waiting: '#dc2626' };
       const legend = [['done', 'ผลิตเสร็จแล้ว'], ['working', 'กำลังผลิต'], ['waiting', 'รอผลิต']].map(([k, t]) => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;"><span style="width:10px;height:10px;border-radius:2px;background:${COLORS[k]};"></span>${t}</span>`).join('');
-      const multi = projects.length > 1;
-      const body = rows.length === 0
-        ? '<div style="color:#94a3b8;padding:8px 0;font-size:11.5px;">ยังไม่ได้ Setup รายการเครื่องจักรของโครงการ (ดับเบิลคลิกเลขโครงการในตัวกรองเพื่อ Setup)</div>'
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const fmtDate = (d) => d ? `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}` : '-';
+      const bodyRows = rows.length === 0
+        ? '<tr><td colspan="9" style="padding:14px;color:#94a3b8;text-align:center;">ยังไม่ได้ Setup รายการเครื่องจักรของโครงการ (ดับเบิลคลิกเลขโครงการในตัวกรองเพื่อ Setup)</td></tr>'
         : rows.map((r, i) => {
           const t = r.total || 0;
           const pc = (n) => t > 0 ? n / t * 100 : 0;
-          const seg = (k, n) => pc(n) > 0 ? `<div title="${t ? `${n} จาก ${t} PD` : ''}" style="width:${pc(n).toFixed(2)}%;background:${COLORS[k]};color:${k === 'working' ? '#422006' : '#fff'};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;overflow:hidden;white-space:nowrap;">${pc(n) >= 7 ? pc(n).toFixed(0) + '%' : ''}</div>` : '';
+          const seg = (k, n) => pc(n) > 0 ? `<div title="${n} จาก ${t} PD" style="width:${pc(n).toFixed(2)}%;background:${COLORS[k]};color:${k === 'working' ? '#422006' : '#fff'};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;overflow:hidden;white-space:nowrap;">${pc(n) >= 7 ? pc(n).toFixed(0) + '%' : ''}</div>` : '';
           const bar = t > 0
             ? `<div style="display:flex;height:18px;border-radius:4px;overflow:hidden;background:#e2e8f0;">${seg('done', r.done)}${seg('working', r.working)}${seg('waiting', r.waiting)}</div>`
             : `<div style="height:18px;border-radius:4px;background:#f1f5f9;color:#94a3b8;font-size:10px;display:flex;align-items:center;justify-content:center;">ไม่พบ PD ของเครื่องนี้</div>`;
-          const sumTxt = t > 0 ? `${pc(r.done).toFixed(0)}% · ${pc(r.working).toFixed(0)}% · ${pc(r.waiting).toFixed(0)}%` : '-';
-          return `<div style="display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid #f1f5f9;">
-            <div style="width:34%;min-width:200px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;" title="${esc(r.itemCode)} ${esc(r.description)}">${i + 1}. ${multi ? `<span style="color:#64748b;">${esc(r.project)}</span> ` : ''}<span style="font-family:monospace;font-weight:700;">${esc(r.itemCode)}</span> <span style="color:#475569;">${esc(r.description)}</span></div>
-            <div style="flex:1;min-width:160px;">${bar}</div>
-            <div style="width:96px;text-align:right;font-size:10.5px;color:#475569;white-space:nowrap;" title="ผลิตเสร็จแล้ว · กำลังผลิต · รอผลิต (${t} PD)">${sumTxt}</div>
-          </div>`;
+          const late = r._d && r._d < today && pc(r.done) < 100;
+          const pct = (n, col) => t > 0 ? `<span style="color:${col};font-weight:700;">${pc(n).toFixed(1)}%</span>` : '-';
+          return `<tr style="border-top:1px solid #e2e8f0;">
+            <td style="padding:5px 8px;text-align:center;color:#64748b;">${i + 1}</td>
+            <td style="padding:5px 8px;white-space:nowrap;">${multi ? `<span style="color:#64748b;">${esc(r.project)}</span> ` : ''}<span style="font-family:monospace;font-weight:700;">${esc(r.itemCode)}</span></td>
+            <td style="padding:5px 8px;color:#334155;">${esc(r.description)}</td>
+            <td style="padding:5px 8px;text-align:right;">${r.qty ?? '-'}</td>
+            <td style="padding:5px 8px;white-space:nowrap;${late ? 'color:#b91c1c;font-weight:700;' : ''}" title="${late ? 'เลยกำหนดส่งมอบแล้ว แต่ยังผลิตไม่เสร็จ' : ''}">${fmtDate(r._d)}</td>
+            <td style="padding:5px 8px;text-align:right;">${t}</td>
+            <td style="padding:5px 8px;min-width:200px;width:34%;">${bar}</td>
+            <td style="padding:5px 8px;text-align:right;white-space:nowrap;" title="${r.done} PD">${pct(r.done, '#15803d')}</td>
+            <td style="padding:5px 8px;text-align:right;white-space:nowrap;" title="${r.working} PD">${pct(r.working, '#a16207')}</td>
+            <td style="padding:5px 8px;text-align:right;white-space:nowrap;" title="${r.waiting} PD">${pct(r.waiting, '#dc2626')}</td>
+          </tr>`;
         }).join('');
-      return `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px;"><span style="font-weight:700;">ความคืบหน้ารายการเครื่องจักรในโครงการ</span><span style="display:flex;gap:14px;">${legend}</span></div>
-        ${body}
-      </div>`;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+          <button type="button" id="btn-ps-back" style="padding:6px 14px;border:1px solid #2563eb;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-weight:700;cursor:pointer;">← กลับหน้าแรก</button>
+          <span style="display:flex;gap:14px;">${legend}</span>
+        </div>
+        <div style="color:#64748b;font-size:11.5px;">เรียงตามเป้าการส่งมอบ (ส่งก่อนอยู่บน) · ไม่มีเป้าส่งมอบจะอยู่ท้ายสุด · % = สัดส่วน PD ในชุดประกอบของเครื่องนั้น</div>
+        <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px;">
+          <table style="border-collapse:collapse;width:100%;font-size:12px;">
+            <thead><tr style="background:#f1f5f9;text-align:left;"><th style="padding:6px 8px;text-align:center;">#</th><th style="padding:6px 8px;">Item Code</th><th style="padding:6px 8px;">Description</th><th style="padding:6px 8px;text-align:right;">QTY</th><th style="padding:6px 8px;">เป้าส่งมอบ</th><th style="padding:6px 8px;text-align:right;">PD</th><th style="padding:6px 8px;">Progress</th><th style="padding:6px 8px;text-align:right;">เสร็จ</th><th style="padding:6px 8px;text-align:right;">กำลังผลิต</th><th style="padding:6px 8px;text-align:right;">รอผลิต</th></tr></thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </div>`;
     };
 
     // Two side-by-side boxes under the summary: PD type by Operation Work Center (left) and the 6 busiest Work Centers (right)
@@ -706,26 +732,31 @@ export class ResourcesController {
       <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:980px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
         <div style="padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <div>
-            <div style="font-size:15px;font-weight:700;">📊 สรุปภาพรวมโครงการที่เลือก (${sum.perProject.length} โครงการ${sum.perProject.length <= 3 ? ': ' + sum.perProject.map(r => esc(r.project)).join(', ') : ''})</div>
+            <div id="ps-title" style="font-size:15px;font-weight:700;">📊 สรุปภาพรวมโครงการที่เลือก (${sum.perProject.length} โครงการ${sum.perProject.length <= 3 ? ': ' + sum.perProject.map(r => esc(r.project)).join(', ') : ''})</div>
             <div style="color:#64748b;font-size:11.5px;margin-top:3px;">นับจาก PD ทั้งหมดในไฟล์ Status Overview ของ SO / โครงการที่ติ๊กอยู่ในตัวกรอง เทียบกับสถานะใน Board / Backlog ปัจจุบัน</div>
             <div style="color:#64748b;font-size:11.5px;margin-top:2px;white-space:nowrap;">แสดงรายงานเมื่อ ${esc(new Date().toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' }))} ${esc(new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))}</div>
           </div>
-          <div style="display:flex;align-items:center;gap:14px;flex-shrink:0;">
+          <div id="ps-header-actions" style="display:flex;align-items:flex-start;gap:14px;flex-shrink:0;">
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
             <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#334155;cursor:pointer;user-select:none;" title="เปิด = แสดงบรรทัด ดูรายการ PD (ยุบไว้ กดเพื่อขยาย) · ปิด = ซ่อนบรรทัด ดูรายการ PD"><span>แสดงรายการ PD</span><span class="ios-toggle"><input type="checkbox" id="chk-project-summary-lists"${showLists ? ' checked' : ''}><span class="ios-toggle-slider"></span></span></label>
+              <button type="button" id="btn-ps-machine-view" style="padding:4px 10px;border:1px solid #2563eb;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;" title="ดู Progress การผลิตแยกเครื่อง เรียงตามเป้าการส่งมอบ">📋 Progress แยกเครื่อง</button>
+            </div>
             <button type="button" id="btn-close-project-summary" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
           </div>
         </div>
         <div style="padding:6px 18px 12px;overflow:auto;display:flex;flex-direction:column;gap:14px;">
+          <div id="ps-main-view" style="display:flex;flex-direction:column;gap:14px;">
           <div style="border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;padding:10px 14px;">
             <div style="font-weight:700;margin-bottom:4px;">${sum.perProject.length === 1 ? `โครงการ ${esc(sum.perProject[0].project)}` : `รวมทุกโครงการที่เลือก (${sum.perProject.length} โครงการ)`}</div>
             ${sum.perProject.length === 1 ? projectInfo(sum.perProject[0].project) : ''}
             ${breakdown(o)}
           </div>
-          ${machineBars()}
           ${extraBoxes(o)}
           ${sum.perProject.length > 1 ? `<div style="font-weight:700;">แยกรายโครงการ</div>${projectBlocks}` : ''}
           ${Object.keys(this.state.dwgToPdMap || {}).length === 0 ? '<div style="padding:8px 12px;border-radius:6px;background:#fef3c7;color:#92400e;font-size:11.5px;">⚠️ ยังไม่ได้โหลดไฟล์ Status Overview — "จำนวน PD ทั้งหมด" จึงนับได้เฉพาะ PD ที่อยู่ใน Board / Backlog เท่านั้น (ตัวเลขอาจไม่ครบ)</div>' : ''}
           <div style="color:#94a3b8;font-size:10.5px;">บรรทัดย่อยของ Backlog แยกกลุ่มไม่ซ้ำกัน รวมกันได้เท่ากับจำนวน PD ใน Backlog</div>
+          </div>
+          <div id="ps-machine-view" style="display:none;flex-direction:column;gap:12px;">${machineDetail()}</div>
         </div>
         <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;border-top:1px solid #e2e8f0;">
           <button type="button" id="btn-ok-project-summary" style="padding:6px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">ปิด</button>
@@ -742,6 +773,20 @@ export class ResourcesController {
       try { localStorage.setItem('chaken_project_summary_lists', on ? '1' : '0'); } catch (err) { /* ignore */ }
     });
     overlay.querySelector('#btn-ok-project-summary').addEventListener('click', close);
+    // Page switch: first page <-> per-machine progress page
+    const mainView = overlay.querySelector('#ps-main-view');
+    const machineView = overlay.querySelector('#ps-machine-view');
+    const titleEl = overlay.querySelector('#ps-title');
+    const actionsEl = overlay.querySelector('#ps-header-actions > div');
+    const mainTitle = titleEl.textContent;
+    const showPage = (machine) => {
+      mainView.style.display = machine ? 'none' : 'flex';
+      machineView.style.display = machine ? 'flex' : 'none';
+      if (actionsEl) actionsEl.style.display = machine ? 'none' : 'flex';
+      titleEl.textContent = machine ? `📋 Progress การผลิตแยกเครื่อง (${sum.perProject.length} โครงการ: ${sum.perProject.map(r => r.project).slice(0, 3).join(', ')}${sum.perProject.length > 3 ? '…' : ''})` : mainTitle;
+    };
+    overlay.querySelector('#btn-ps-machine-view')?.addEventListener('click', () => showPage(true));
+    overlay.querySelector('#btn-ps-back')?.addEventListener('click', () => showPage(false));
     // Click a PD number to open its detail window on top of this popup
     overlay.querySelectorAll('.project-summary-pd').forEach(el => el.addEventListener('click', () => {
       const pdModal = document.getElementById('pd-plan-modal');
