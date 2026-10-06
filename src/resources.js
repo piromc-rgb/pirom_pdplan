@@ -729,7 +729,7 @@ export class ResourcesController {
     overlay.id = 'project-summary-popup';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
     overlay.innerHTML = `
-      <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:980px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
+      <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:1275px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
         <div style="padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <div>
             <div id="ps-title" style="font-size:15px;font-weight:700;">📊 สรุปภาพรวมโครงการที่เลือก (${sum.perProject.length} โครงการ${sum.perProject.length <= 3 ? ': ' + sum.perProject.map(r => esc(r.project)).join(', ') : ''})</div>
