@@ -77,6 +77,8 @@ class CentralState {
     // to run consecutively / simultaneously on machines, reducing setup changeovers.
     this.groupSameItem = true;
     this.requireChildPdsClosed = true; // Gear option: plan a PD only after all its child PDs are Closed
+    // Per project (SO): the machine list keyed in on the project setup page [{ id, itemCode, qty, targetDate 'dd/mm/yyyy' }]
+    this.projectMachineLists = {};
 
     // Whether the Assembly Set list (left sidebar) only shows assemblies that still
     // have at least one job passing the current Priority/Project/Customer/Work
@@ -2697,6 +2699,7 @@ class CentralState {
       activeScale: this.activeScale,
       groupSameItem: this.groupSameItem !== false,
       requireChildPdsClosed: this.requireChildPdsClosed !== false,
+      projectMachineLists: this.projectMachineLists || {},
       completedPdHistory: this.completedPdHistory || {},
       completedOpHistory: this.completedOpHistory || {},
       favoritePDs: this.favoritePDs || {},
@@ -3033,6 +3036,7 @@ class CentralState {
       this.lockedProjects = data.lockedProjects || {};
       if (data.groupSameItem !== undefined) this.groupSameItem = Boolean(data.groupSameItem);
       if (data.requireChildPdsClosed !== undefined) this.requireChildPdsClosed = Boolean(data.requireChildPdsClosed);
+      if (data.projectMachineLists && typeof data.projectMachineLists === 'object') this.projectMachineLists = data.projectMachineLists;
       if (data.completedOpHistory && typeof data.completedOpHistory === 'object') {
         this.completedOpHistory = data.completedOpHistory;
         if (this._pdOpStatusMap) this._applyCompletedOpHistory(this._pdOpStatusMap);
@@ -3136,6 +3140,32 @@ class CentralState {
     if (!this._pdOpStatusMap) this._pdOpStatusMap = {};
     this._applyCompletedOpHistory(this._pdOpStatusMap);
     return marked;
+  }
+
+  // Items (item_5) of a project with Description and Quantity Ordered, from the imported Status Overview
+  // (Dwg map entries + candidates). The live plan (backlog / board) fills whatever the file does not give.
+  // Returns [{ itemCode, description, qty }] sorted by item code.
+  getProjectItemCatalog(project) {
+    const proj = String(project || 'General').trim() || 'General';
+    const items = new Map();
+    const add = (itemCode, description, qty) => {
+      const code = String(itemCode || '').trim();
+      if (!code) return;
+      const cur = items.get(code) || { itemCode: code, description: '', qty: null };
+      if (!cur.description && description) cur.description = String(description).trim();
+      if ((cur.qty === null || cur.qty === undefined) && qty !== null && qty !== undefined && qty !== '') cur.qty = Number(qty);
+      items.set(code, cur);
+    };
+    const norm = (p) => String(p || 'General').trim() || 'General';
+    Object.keys(this.dwgToPdMap || {}).forEach(code => {
+      const e = this.dwgToPdMap[code];
+      if (!e) return;
+      if (norm(e.project) === proj && e.project) add(code, e.description, e.qty);
+      (e.candidates || []).forEach(c => { if (c && c.project && norm(c.project) === proj) add(code, c.description, c.qty); });
+    });
+    (this.workOrders || []).forEach(w => { if (norm(w.project) === proj && w.dwgNo) add(w.dwgNo, w.partName, w.qty); });
+    (this.scheduledJobs || []).forEach(j => { if (norm(j.project) === proj && j.dwgNo) add(j.dwgNo, j.partName, j.qty); });
+    return [...items.values()].sort((a, b) => a.itemCode.localeCompare(b.itemCode));
   }
 
   // PD -> project (SO) for every PD of the imported Status Overview (Dwg map entries + candidates), completed with

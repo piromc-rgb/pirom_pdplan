@@ -719,6 +719,195 @@ export class ResourcesController {
     }));
   }
 
+  // Double-click on a project number: setup page for the machines (items) of that project.
+  // Each row = one machine: Item code (item_5 of the Status Overview Data sheet), Description (looked up, not typed),
+  // QTY (quantity ordered, from the file but editable) and the delivery-to-machine target date (d/m/y).
+  openProjectMachineSetup(project) {
+    const state = this.state;
+    const proj = String(project || 'General').trim() || 'General';
+    const catalog = state.getProjectItemCatalog(proj);
+    const byCode = new Map(catalog.map(c => [c.itemCode, c]));
+    const mode = state.storageSync && typeof state.storageSync.getUserMode === 'function' ? state.storageSync.getUserMode() : 'plan';
+    const editable = mode === 'plan';
+    const uid = () => 'm' + Math.random().toString(36).slice(2, 9);
+    let rows = ((state.projectMachineLists || {})[proj] || []).map(r => ({ id: r.id || uid(), itemCode: r.itemCode || '', qty: r.qty ?? '', targetDate: r.targetDate || '', qtyAuto: false }));
+    if (rows.length === 0 && editable) rows.push({ id: uid(), itemCode: '', qty: '', targetDate: '', qtyAuto: false });
+
+    const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const parseDate = (txt) => {
+      const m = String(txt || '').trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})$/);
+      if (!m) return null;
+      let y = Number(m[3]);
+      if (y < 100) y += 2000;
+      const d = new Date(y, Number(m[2]) - 1, Number(m[1]));
+      if (d.getFullYear() !== y || d.getMonth() !== Number(m[2]) - 1 || d.getDate() !== Number(m[1])) return null;
+      return `${String(Number(m[1])).padStart(2, '0')}/${String(Number(m[2])).padStart(2, '0')}/${y}`;
+    };
+
+    const old = document.getElementById('project-machine-setup-modal');
+    if (old) old.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'project-machine-setup-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.innerHTML = `
+      <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:1000px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
+        <div style="padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div>
+            <div style="font-size:15px;font-weight:700;">⚙️ Setup รายการเครื่องจักร — SO / โครงการ <span style="color:#2563eb;">${esc(proj)}</span></div>
+            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">1 แถว = 1 รายการเครื่องจักร · Item Code ดึงจากชีต Data ของไฟล์ Status Overview (เลือกจากรายการของโครงการนี้ได้) · Description แสดงอัตโนมัติ · เป้าส่งเครื่องกรอกเป็น d/m/y</div>
+            ${editable ? '' : '<div style="margin-top:6px;padding:4px 8px;border-radius:6px;background:#fef3c7;color:#92400e;font-size:11.5px;display:inline-block;">โหมดดูแผน: ดูได้อย่างเดียว (สลับเป็นโหมดวางแผนเพื่อแก้ไขและบันทึก)</div>'}
+          </div>
+          <button type="button" id="pms-x" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
+        </div>
+        <div style="padding:4px 18px 10px;overflow:auto;">
+          <datalist id="pms-items">${catalog.map(c => `<option value="${esc(c.itemCode)}">${esc(c.description)}</option>`).join('')}</datalist>
+          <table style="border-collapse:collapse;width:100%;font-size:12.5px;">
+            <thead><tr style="background:#f1f5f9;text-align:center;">
+              <th style="padding:6px 8px;width:34px;">#</th>
+              <th style="padding:6px 8px;width:190px;">Item Code</th>
+              <th style="padding:6px 8px;">Description</th>
+              <th style="padding:6px 8px;width:90px;">QTY</th>
+              <th style="padding:6px 8px;width:130px;">เป้าส่งเครื่อง (d/m/y)</th>
+              <th style="padding:6px 8px;width:120px;text-align:center;">ย้าย / ลบ</th>
+            </tr></thead>
+            <tbody id="pms-body"></tbody>
+          </table>
+          ${editable ? '<button type="button" id="pms-add" style="margin-top:8px;padding:6px 14px;border:1px dashed #2563eb;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-weight:700;cursor:pointer;">＋ เพิ่มแถว</button>' : ''}
+          <span id="pms-count" style="margin-left:10px;color:#64748b;font-size:11.5px;"></span>
+        </div>
+        <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e2e8f0;">
+          <button type="button" id="pms-cancel" style="padding:6px 16px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;">${editable ? 'ยกเลิก' : 'ปิด'}</button>
+          ${editable ? '<button type="button" id="pms-save" style="padding:6px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">💾 บันทึก</button>' : ''}
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const body = overlay.querySelector('#pms-body');
+    const dis = editable ? '' : ' disabled';
+    const inputCss = 'width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid #cbd5e1;border-radius:5px;font-size:12.5px;';
+
+    const descFor = (code) => {
+      const c = byCode.get(String(code || '').trim());
+      if (!String(code || '').trim()) return '<span style="color:#94a3b8;">—</span>';
+      return c && c.description ? esc(c.description) : '<span style="color:#b91c1c;">ไม่พบ Item code นี้ในโครงการ / ไฟล์ Status Overview</span>';
+    };
+
+    const render = () => {
+      body.innerHTML = rows.map((r, i) => `
+        <tr data-id="${r.id}" ${editable ? 'draggable="true"' : ''} style="border-top:1px solid #e2e8f0;">
+          <td style="padding:5px 8px;color:#64748b;${editable ? 'cursor:grab;' : ''}" title="${editable ? 'ลากเพื่อย้ายลำดับ' : ''}">${editable ? '⋮⋮ ' : ''}${i + 1}</td>
+          <td style="padding:4px 8px;"><input class="pms-code" list="pms-items" value="${esc(r.itemCode)}" placeholder="Item Code" style="${inputCss}font-family:monospace;"${dis}></td>
+          <td class="pms-desc" style="padding:5px 8px;">${descFor(r.itemCode)}</td>
+          <td style="padding:4px 8px;"><input class="pms-qty" type="number" min="0" step="any" value="${esc(r.qty)}" style="${inputCss}text-align:right;"${dis}></td>
+          <td style="padding:4px 8px;"><input class="pms-date" value="${esc(r.targetDate)}" placeholder="d/m/y" style="${inputCss}"${dis}></td>
+          <td style="padding:4px 8px;text-align:center;white-space:nowrap;">
+            <button type="button" class="pms-up" title="ย้ายขึ้น" style="border:1px solid #cbd5e1;border-radius:4px;background:#fff;cursor:pointer;"${i === 0 || !editable ? ' disabled' : ''}>▲</button>
+            <button type="button" class="pms-down" title="ย้ายลง" style="border:1px solid #cbd5e1;border-radius:4px;background:#fff;cursor:pointer;"${i === rows.length - 1 || !editable ? ' disabled' : ''}>▼</button>
+            <button type="button" class="pms-del" title="ลบแถว" style="border:1px solid #fecaca;border-radius:4px;background:#fff;color:#dc2626;cursor:pointer;"${dis}>🗑</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="6" style="padding:14px;text-align:center;color:#94a3b8;">ยังไม่มีรายการเครื่องจักร</td></tr>';
+      overlay.querySelector('#pms-count').textContent = `${rows.length} รายการ · Item ในโครงการนี้ ${catalog.length} รายการ`;
+    };
+    render();
+
+    const rowOf = (el) => rows.find(r => r.id === el.closest('tr')?.dataset.id);
+    body.addEventListener('input', (e) => {
+      const r = rowOf(e.target);
+      if (!r) return;
+      const tr = e.target.closest('tr');
+      if (e.target.classList.contains('pms-code')) {
+        r.itemCode = e.target.value.trim();
+        tr.querySelector('.pms-desc').innerHTML = descFor(r.itemCode);
+        const c = byCode.get(r.itemCode);
+        const qtyInput = tr.querySelector('.pms-qty');
+        // QTY follows the Status Overview (Quantity Ordered) until the user types their own number
+        if (c && c.qty !== null && c.qty !== undefined && (r.qtyAuto || r.qty === '' || r.qty === null)) {
+          r.qty = c.qty;
+          r.qtyAuto = true;
+          qtyInput.value = c.qty;
+        }
+      } else if (e.target.classList.contains('pms-qty')) {
+        r.qty = e.target.value === '' ? '' : Number(e.target.value);
+        r.qtyAuto = false;
+      } else if (e.target.classList.contains('pms-date')) {
+        r.targetDate = e.target.value;
+        e.target.style.borderColor = '#cbd5e1';
+      }
+    });
+    body.addEventListener('change', (e) => {
+      // normalise d/m/y once the user leaves the date field
+      if (e.target.classList.contains('pms-date')) {
+        const r = rowOf(e.target);
+        if (!r) return;
+        const n = parseDate(e.target.value);
+        if (e.target.value.trim() === '') { r.targetDate = ''; return; }
+        if (n) { r.targetDate = n; e.target.value = n; e.target.style.borderColor = '#cbd5e1'; }
+        else { e.target.style.borderColor = '#dc2626'; }
+      }
+    });
+    body.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const r = rowOf(btn);
+      if (!r) return;
+      const i = rows.indexOf(r);
+      if (btn.classList.contains('pms-del')) rows.splice(i, 1);
+      else if (btn.classList.contains('pms-up') && i > 0) [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]];
+      else if (btn.classList.contains('pms-down') && i < rows.length - 1) [rows[i + 1], rows[i]] = [rows[i], rows[i + 1]];
+      else return;
+      render();
+    });
+    // drag a row to a new position
+    let dragId = null;
+    body.addEventListener('dragstart', (e) => { const tr = e.target.closest && e.target.closest('tr'); dragId = tr ? tr.dataset.id : null; if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; });
+    body.addEventListener('dragover', (e) => { if (dragId) e.preventDefault(); });
+    body.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const tr = e.target.closest && e.target.closest('tr');
+      if (!dragId || !tr || tr.dataset.id === dragId) { dragId = null; return; }
+      const from = rows.findIndex(r => r.id === dragId);
+      const to = rows.findIndex(r => r.id === tr.dataset.id);
+      if (from < 0 || to < 0) { dragId = null; return; }
+      const [moved] = rows.splice(from, 1);
+      rows.splice(to, 0, moved);
+      dragId = null;
+      render();
+    });
+
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('#pms-x').addEventListener('click', close);
+    overlay.querySelector('#pms-cancel').addEventListener('click', close);
+    overlay.querySelector('#pms-add')?.addEventListener('click', () => {
+      rows.push({ id: uid(), itemCode: '', qty: '', targetDate: '', qtyAuto: false });
+      render();
+      body.querySelector('tr:last-child .pms-code')?.focus();
+    });
+    overlay.querySelector('#pms-save')?.addEventListener('click', () => {
+      const toast = (m, t) => state.ganttController?.showToast?.(m, t);
+      const cleaned = [];
+      let bad = null;
+      rows.forEach((r, i) => {
+        const empty = !String(r.itemCode || '').trim() && (r.qty === '' || r.qty === null) && !String(r.targetDate || '').trim();
+        if (empty) return;
+        if (!String(r.itemCode || '').trim()) { bad = bad || `แถวที่ ${i + 1}: ยังไม่ได้ใส่ Item code`; return; }
+        let date = '';
+        if (String(r.targetDate || '').trim()) {
+          date = parseDate(r.targetDate);
+          if (!date) { bad = bad || `แถวที่ ${i + 1}: เป้าส่งเครื่องต้องเป็นวันที่ d/m/y เช่น 15/11/2026`; return; }
+        }
+        cleaned.push({ id: r.id, itemCode: String(r.itemCode).trim(), qty: r.qty === '' || r.qty === null ? null : Number(r.qty), targetDate: date });
+      });
+      if (bad) { toast(`⚠️ ${bad}`, 'error'); return; }
+      if (!state.projectMachineLists) state.projectMachineLists = {};
+      if (cleaned.length > 0) state.projectMachineLists[proj] = cleaned;
+      else delete state.projectMachineLists[proj];
+      state.savePlanToFile();
+      state.notify();
+      toast(`💾 บันทึกรายการเครื่องจักรของ ${proj} แล้ว (${cleaned.length} รายการ)`, 'success');
+      close();
+    });
+  }
+
   // Which PDs a trash action would force-close: the PDs of the list entry (board + backlog) and the child PDs that
   // are still open. Pure preview, nothing is changed.
   previewForceClose(matchJob, matchWo, extraIds = []) {
@@ -972,7 +1161,10 @@ export class ResourcesController {
           </span>
         </div>
         <span style="font-size: 10px; color: var(--text-secondary); margin-left: 4px; align-self: center;">(${count})</span>
-        <button class="lock-btn" style="${lockStyle} align-self: center;" title="${lockTitle}">${lockIconSvg}</button>
+        ${isLocked ? `<button class="lock-btn" style="${lockStyle} align-self: center;" title="${lockTitle}">${lockIconSvg}</button>` : ''}
+        <button class="setup-btn" title="Setup รายการเครื่องจักรของโครงการ ${proj}" style="margin-left: 6px; background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 2px; border-radius: 4px; display: flex; align-items: center; justify-content: center; opacity: 0.85; align-self: center;">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button>
         <button class="delete-btn" title="Force close: ปิด PD ทั้งหมดของ Project นี้ (ขึ้นหน้ายืนยันก่อน)" style="margin-left: 4px; align-self: center; background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 2px; display: flex; align-items: center; justify-content: center; transition: color 0.2s;">
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="icon-force-close" style="color: var(--accent-red); filter: drop-shadow(0 0 2px rgba(255, 51, 51, 0.25));">
               <circle cx="12" cy="12" r="10"></circle>
@@ -1003,10 +1195,19 @@ export class ResourcesController {
 
       // Bind lock button event listener
       const lockBtn = label.querySelector('.lock-btn');
-      lockBtn.addEventListener('click', (e) => {
+      if (lockBtn) {
+        lockBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          this.state.toggleProjectLock(proj);
+        });
+      }
+
+      // Gear button: machine setup page of this project
+      label.querySelector('.setup-btn')?.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
-        this.state.toggleProjectLock(proj);
+        this.openProjectMachineSetup(proj);
       });
 
       // Bind delete button event listener

@@ -1066,6 +1066,7 @@ export class StorageSyncManager {
       }
       if (Array.isArray(data.scheduledJobs)) this.state.scheduledJobs = data.scheduledJobs;
       if (data.nests) this.state.nests = data.nests;
+      if (data.projectMachineLists && typeof data.projectMachineLists === 'object') this.state.projectMachineLists = data.projectMachineLists;
       if (data.assemblyLinks) this.state.assemblyLinks = data.assemblyLinks;
       if (data.lockedProjects) this.state.lockedProjects = data.lockedProjects;
       if (data.priorityColors) this.state.priorityColors = data.priorityColors;
@@ -1790,7 +1791,7 @@ export class StorageSyncManager {
     this._soChecking = true;
     // _v3: bumped when the Dwg->PD map gained the project of every PD (project summary), so every browser reloads
     // the Overview once
-    const KEY = 'chaken_status_overview_stamp_v3';
+    const KEY = 'chaken_status_overview_stamp_v4'; // v4: Dwg map also keeps Description + Quantity Ordered of every Item
     try {
       const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ||
         window.location.hostname.startsWith('192.168.') || window.location.port === '5173';

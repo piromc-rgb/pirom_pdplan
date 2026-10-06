@@ -5,12 +5,14 @@ import { isJobPriorityVisible, isJobProjectVisible, isJobCustomerVisible, isJobP
 // Several PDs can share one Dwg (an old closed PD plus the PD just released for a new parent). The Dwg -> PD map keeps
 // one default PD per Dwg; this also remembers EVERY PD of a Dwg so a parent can pick its own child (nearest PD number
 // after the parent, same SO) instead of the first one found.
-function addDwgCandidate(candMap, dwg, pdId, orderStatus, project, opNum, name, machine, status) {
+function addDwgCandidate(candMap, dwg, pdId, orderStatus, project, opNum, name, machine, status, description = '', qty = null) {
   if (!candMap[dwg]) candMap[dwg] = {};
   let c = candMap[dwg][pdId];
   if (!c) c = candMap[dwg][pdId] = { pdId, orderStatus, project, operations: [] };
   if (!c.orderStatus && orderStatus) c.orderStatus = orderStatus;
   if (!c.project && project) c.project = project;
+  if (!c.description && description) c.description = description;
+  if ((c.qty === undefined || c.qty === null) && qty !== null) c.qty = qty;
   if (!c.operations.some(o => o.stepNum === opNum)) c.operations.push({ stepNum: opNum, name, machine, status });
 }
 
@@ -1439,19 +1441,26 @@ export class WorkflowController {
           }
 
           if (!dwg) continue;
-          addDwgCandidate(dwgCandidates, dwg, pdId, orderStatus, String(rawRow[col.project] || '').trim(), opNum, wcDesc || wcCode, wcCode, opStatus);
+          const itemDesc = String(rawRow[col.partName] || '').trim();
+          const itemQtyNum = Number(String(rawRow[col.qty] ?? '').replace(/,/g, ''));
+          const itemQty = Number.isFinite(itemQtyNum) && String(rawRow[col.qty] ?? '').trim() !== '' ? itemQtyNum : null;
+          addDwgCandidate(dwgCandidates, dwg, pdId, orderStatus, String(rawRow[col.project] || '').trim(), opNum, wcDesc || wcCode, wcCode, opStatus, itemDesc, itemQty);
 
           if (!dwgToPdMap[dwg]) {
             dwgToPdMap[dwg] = {
               pdId,
               orderStatus,
               project: String(rawRow[col.project] || '').trim(),
+              description: itemDesc,
+              qty: itemQty,
               operations: []
             };
           } else if (orderStatus !== 'Closed' && dwgToPdMap[dwg].orderStatus === 'Closed') {
             dwgToPdMap[dwg].pdId = pdId;
             dwgToPdMap[dwg].orderStatus = orderStatus;
             dwgToPdMap[dwg].project = String(rawRow[col.project] || '').trim();
+            dwgToPdMap[dwg].description = itemDesc;
+            dwgToPdMap[dwg].qty = itemQty;
             dwgToPdMap[dwg].operations = [];
           }
 
@@ -1868,6 +1877,8 @@ export class WorkflowController {
       project: findColIdx(['project', 'project code', 'projectcode', 'project name', 'projectname', 'so no', 'so number', 'so'], 4),
       pd: findColIdx(['production order', 'productionorder', 'pd id', 'pd_id', 'pd no', 'pd_no', 'order'], 6),
       dwg: findColIdx(['item_5', 'drawing', 'dwg', 'dwg_no', 'dwg no', 'part number'], 10),
+      partName: findColIdx(['description', 'part name', 'part_name', 'part description', 'partname'], 11),
+      qty: findColIdx(['quantity ordered', 'qty', 'quantity', 'orderqty'], 16),
       step: findColIdx(['operation', 'step', 'oper', 'op'], 12),
       wcCode: findColIdx(['work center code', 'wc code', 'machine code', 'work center', 'wc', 'item_4'], 13),
       wcDesc: findColIdx(['r.ref.oper.desc', 'machine description', 'machine name', 'department'], 14),
@@ -1900,13 +1911,18 @@ export class WorkflowController {
         }
       }
       if (!dwg) continue;
-      addDwgCandidate(dwgCandidates, dwg, pdId, orderStatus, String(rawRow[col.project] || '').trim(), opNum, wcDesc || wcCode, wcCode, opStatus);
+      const itemDesc = String(rawRow[col.partName] || '').trim();
+      const itemQtyNum = Number(String(rawRow[col.qty] ?? '').replace(/,/g, ''));
+      const itemQty = Number.isFinite(itemQtyNum) && String(rawRow[col.qty] ?? '').trim() !== '' ? itemQtyNum : null;
+      addDwgCandidate(dwgCandidates, dwg, pdId, orderStatus, String(rawRow[col.project] || '').trim(), opNum, wcDesc || wcCode, wcCode, opStatus, itemDesc, itemQty);
       if (!dwgToPdMap[dwg]) {
-        dwgToPdMap[dwg] = { pdId, orderStatus, project: String(rawRow[col.project] || '').trim(), operations: [] };
+        dwgToPdMap[dwg] = { pdId, orderStatus, project: String(rawRow[col.project] || '').trim(), description: itemDesc, qty: itemQty, operations: [] };
       } else if (orderStatus !== 'Closed' && dwgToPdMap[dwg].orderStatus === 'Closed') {
         dwgToPdMap[dwg].pdId = pdId;
         dwgToPdMap[dwg].orderStatus = orderStatus;
         dwgToPdMap[dwg].project = String(rawRow[col.project] || '').trim();
+        dwgToPdMap[dwg].description = itemDesc;
+        dwgToPdMap[dwg].qty = itemQty;
         dwgToPdMap[dwg].operations = [];
       }
       if (pdId === dwgToPdMap[dwg].pdId) {

@@ -287,6 +287,11 @@ def sync_plan_materials(target_filename="LN Status Overview.xlsx"):
             op_status = (row.get("P") or "Planned").strip()
             order_status = (row.get("R") or "Active").strip()
             project = (row.get("E") or "").strip()
+            item_desc = (row.get("L") or "").strip()
+            try:
+                item_qty = float(str(row.get("Q") or "").replace(",", "").strip())
+            except (TypeError, ValueError):
+                item_qty = None
 
             if op_status:
                 pd_entry = pd_op_status_map.setdefault(pd_id, {})
@@ -299,7 +304,7 @@ def sync_plan_materials(target_filename="LN Status Overview.xlsx"):
             if not dwg:
                 continue
 
-            cand = dwg_candidates.setdefault(dwg, {}).setdefault(pd_id, {"pdId": pd_id, "orderStatus": order_status, "project": project, "operations": []})
+            cand = dwg_candidates.setdefault(dwg, {}).setdefault(pd_id, {"pdId": pd_id, "orderStatus": order_status, "project": project, "description": item_desc, "qty": item_qty, "operations": []})
             if not any(op["stepNum"] == step_num for op in cand["operations"]):
                 cand["operations"].append({"stepNum": step_num, "name": op_name, "machine": mc, "status": op_status})
 
@@ -308,6 +313,8 @@ def sync_plan_materials(target_filename="LN Status Overview.xlsx"):
                     "pdId": pd_id,
                     "project": project,
                     "orderStatus": order_status,
+                    "description": item_desc,
+                    "qty": item_qty,
                     "operations": []
                 }
             else:
@@ -318,6 +325,8 @@ def sync_plan_materials(target_filename="LN Status Overview.xlsx"):
                             "pdId": pd_id,
                             "project": project,
                             "orderStatus": order_status,
+                            "description": item_desc,
+                            "qty": item_qty,
                             "operations": []
                         }
                     elif pd_id > curr["pdId"] and (curr["orderStatus"].lower() == order_status.lower()):
@@ -325,6 +334,8 @@ def sync_plan_materials(target_filename="LN Status Overview.xlsx"):
                             "pdId": pd_id,
                             "project": project,
                             "orderStatus": order_status,
+                            "description": item_desc,
+                            "qty": item_qty,
                             "operations": []
                         }
 
