@@ -651,6 +651,11 @@ export class ResourcesController {
         .sort((x, y) => (x._d && y._d) ? (x._d - y._d || x._idx - y._idx) : (x._d ? -1 : y._d ? 1 : x._idx - y._idx));
       const COLORS = { done: '#15803d', working: '#eab308', waiting: '#dc2626' };
       const legend = [['done', 'ผลิตเสร็จแล้ว'], ['working', 'กำลังผลิต'], ['waiting', 'รอผลิต']].map(([k, t]) => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;"><span style="width:10px;height:10px;border-radius:2px;background:${COLORS[k]};"></span>${t}</span>`).join('');
+      // Delivery lots: rows with the same target date form one lot, numbered from the earliest date. Each lot gets its own
+      // pale row tint (lot 1 = light red) so the numbers and text stay easy to read.
+      const LOT_TINTS = ['#fee2e2', '#ffedd5', '#fef9c3', '#dcfce7', '#dbeafe', '#ede9fe', '#fce7f3', '#e0f2fe'];
+      const lotOf = new Map();
+      rows.forEach(r => { if (r._d && !lotOf.has(r._d.getTime())) lotOf.set(r._d.getTime(), lotOf.size); });
       const today = new Date(); today.setHours(0, 0, 0, 0);
       const fmtDate = (d) => d ? `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}` : '-';
       const bodyRows = rows.length === 0
@@ -664,12 +669,14 @@ export class ResourcesController {
             : `<div style="height:18px;border-radius:4px;background:#f1f5f9;color:#94a3b8;font-size:10px;display:flex;align-items:center;justify-content:center;">ไม่พบ PD ของเครื่องนี้</div>`;
           const late = r._d && r._d < today && pc(r.done) < 100;
           const pct = (n, col) => t > 0 ? `<span style="color:${col};font-weight:700;">${pc(n).toFixed(1)}%</span>` : '-';
-          return `<tr style="border-top:1px solid #e2e8f0;">
+          const lot = r._d ? lotOf.get(r._d.getTime()) : undefined;
+          const tint = lot !== undefined ? `background:${LOT_TINTS[lot % LOT_TINTS.length]};` : '';
+          return `<tr style="border-top:1px solid #e2e8f0;${tint}"${lot !== undefined ? ` title="Lot ${lot + 1}"` : ''}>
             <td style="padding:5px 8px;text-align:center;color:#64748b;">${i + 1}</td>
             <td style="padding:5px 8px;white-space:nowrap;">${multi ? `<span style="color:#64748b;">${esc(r.project)}</span> ` : ''}<span style="font-family:monospace;font-weight:700;">${esc(r.itemCode)}</span></td>
             <td style="padding:5px 8px;color:#334155;">${esc(r.description)}</td>
             <td style="padding:5px 8px;text-align:right;">${r.qty ?? '-'}</td>
-            <td style="padding:5px 8px;white-space:nowrap;${late ? 'color:#b91c1c;font-weight:700;' : ''}" title="${late ? 'เลยกำหนดส่งมอบแล้ว แต่ยังผลิตไม่เสร็จ' : ''}">${fmtDate(r._d)}</td>
+            <td style="padding:5px 8px;white-space:nowrap;${late ? 'color:#b91c1c;font-weight:700;' : ''}" title="${late ? 'เลยกำหนดส่งมอบแล้ว แต่ยังผลิตไม่เสร็จ' : ''}">${fmtDate(r._d)}${lot !== undefined ? `<div style="font-size:10px;font-weight:700;color:#475569;">Lot ${lot + 1}</div>` : ''}</td>
             <td style="padding:5px 8px;text-align:right;">${t}</td>
             <td style="padding:5px 8px;min-width:200px;width:34%;">${bar}</td>
             <td style="padding:5px 8px;text-align:right;white-space:nowrap;" title="${r.done} PD">${pct(r.done, '#15803d')}</td>
@@ -681,7 +688,7 @@ export class ResourcesController {
           <button type="button" id="btn-ps-back" style="padding:6px 14px;border:1px solid #2563eb;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-weight:700;cursor:pointer;">← กลับหน้าแรก</button>
           <span style="display:flex;gap:14px;">${legend}</span>
         </div>
-        <div style="color:#64748b;font-size:11.5px;">เรียงตามเป้าการส่งมอบ (ส่งก่อนอยู่บน) · ไม่มีเป้าส่งมอบจะอยู่ท้ายสุด · % = สัดส่วน PD ในชุดประกอบของเครื่องนั้น</div>
+        <div style="color:#64748b;font-size:11.5px;">เรียงตามเป้าการส่งมอบ (ส่งก่อนอยู่บน) · เป้าส่งมอบวันเดียวกัน = Lot เดียวกัน แต่ละ Lot ใช้สีพื้นแถวต่างกัน (Lot 1 = แดงอ่อน) · ไม่มีเป้าส่งมอบอยู่ท้ายสุด · % = สัดส่วน PD ในชุดประกอบของเครื่องนั้น</div>
         <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px;">
           <table style="border-collapse:collapse;width:100%;font-size:12px;">
             <thead><tr style="background:#f1f5f9;text-align:left;"><th style="padding:6px 8px;text-align:center;">#</th><th style="padding:6px 8px;">Item Code</th><th style="padding:6px 8px;">Description</th><th style="padding:6px 8px;text-align:right;">QTY</th><th style="padding:6px 8px;">เป้าส่งมอบ</th><th style="padding:6px 8px;text-align:right;">PD</th><th style="padding:6px 8px;">Progress</th><th style="padding:6px 8px;text-align:right;">เสร็จ</th><th style="padding:6px 8px;text-align:right;">กำลังผลิต</th><th style="padding:6px 8px;text-align:right;">รอผลิต</th></tr></thead>
