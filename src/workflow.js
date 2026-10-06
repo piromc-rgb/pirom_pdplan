@@ -1194,6 +1194,156 @@ export class WorkflowController {
     return 'DEA012'; // default fallback
   }
 
+  // Adds specific Production Orders (and, optionally, all their child PDs) from the Status Overview "Data" sheet to
+  // the Backlog without running a full import: nothing else in the Backlog / plan is touched (a full import with a PD
+  // filter would treat every PD outside the filter as finished). Closed / completed PDs and PDs that are already in
+  // the Backlog or on the Board are skipped. Returns a summary { added, skipped: {reason: [ids]}, missing }.
+  async addPdsToBacklog(pdIds, includeChildren = true) {
+    const state = this.state;
+    const wanted = [...new Set((pdIds || []).map(x => String(x || '').trim().toUpperCase()).filter(Boolean))];
+    if (wanted.length === 0) return { added: [], skipped: {}, missing: [], filename: '' };
+    if (typeof XLSX === 'undefined') throw new Error('ไม่พบไลบรารี XLSX (ตรวจสอบอินเทอร์เน็ต)');
+    const overview = state.storageSync && typeof state.storageSync.fetchStatusOverview === 'function'
+      ? await state.storageSync.fetchStatusOverview({ silent: true, noUpload: true })
+      : null;
+    if (!overview || !overview.arrayBuffer) throw new Error('ดึงไฟล์ Status Overview ไม่สำเร็จ');
+    const bytes = new Uint8Array(overview.arrayBuffer);
+    const names = XLSX.read(bytes, { type: 'array', bookSheets: true }).SheetNames;
+    const dataName = names.find(n => (n || '').trim().toLowerCase() === 'data');
+    if (!dataName) throw new Error('ไม่พบชีต Data ในไฟล์ Status Overview');
+    const wb = XLSX.read(bytes, { type: 'array', sheets: dataName });
+    const raw2D = XLSX.utils.sheet_to_json(wb.Sheets[dataName], { header: 1, defval: '' });
+
+    const targets = new Set(wanted);
+    if (includeChildren) (state.getDescendantPdIds(wanted) || []).forEach(id => targets.add(String(id).toUpperCase()));
+
+    const headerRow = (raw2D[0] || []).map(h => String(h || '').trim().toLowerCase());
+    const findColIdx = (possibleNames, fallbackIdx) => {
+      for (const p of possibleNames) for (let i = 0; i < headerRow.length; i++) if (headerRow[i] === p) return i;
+      for (const p of possibleNames) for (let i = 0; i < headerRow.length; i++) if (headerRow[i].startsWith(p)) return i;
+      return fallbackIdx;
+    };
+    const col = {
+      project: findColIdx(['project', 'project code', 'projectcode', 'project name', 'projectname', 'so no', 'so number', 'so'], 4),
+      customer: findColIdx(['customer', 'cust', 'customer name', 'client'], 5),
+      pd: findColIdx(['production order', 'productionorder', 'pd id', 'pd_id', 'pd no', 'pd_no', 'order'], 6),
+      priority: findColIdx(['prioty', 'priority', 'urgency'], 2),
+      dwg: findColIdx(['item_5', 'drawing', 'dwg', 'dwg_no', 'dwg no', 'part number'], 10),
+      partName: findColIdx(['description', 'part name', 'part_name', 'part description', 'partname'], 11),
+      step: findColIdx(['operation', 'step', 'oper', 'op'], 12),
+      wcCode: findColIdx(['work center code', 'wc code', 'machine code', 'work center', 'wc', 'item_4'], 13),
+      wcDesc: findColIdx(['r.ref.oper.desc', 'machine description', 'machine name', 'department'], 14),
+      opStatus: findColIdx(['operation status', 'op status'], 15),
+      qty: findColIdx(['quantity ordered', 'qty', 'quantity', 'orderqty'], 16),
+      cycleTime: findColIdx(['cycle time', 'cycletime'], 21),
+      setupTime: findColIdx(['average setup time', 'setup time', 'setup'], 23)
+    };
+
+    const groups = {};
+    for (let i = 1; i < raw2D.length; i++) {
+      const rawRow = raw2D[i];
+      if (!rawRow || rawRow.length === 0) continue;
+      const rawPd = String(rawRow[col.pd] || '').trim();
+      const pdId = (rawPd.match(/^PD\d+[A-Z]?/i)?.[0] || rawPd).toUpperCase();
+      if (!pdId || !targets.has(pdId)) continue;
+      const opStatus = String(rawRow[col.opStatus] || '').trim();
+      const wcCode = String(rawRow[col.wcCode] || '').trim();
+      const wcDesc = String(rawRow[col.wcDesc] || '').trim();
+      const machineCode = this.matchWorkCenter(wcDesc, wcCode);
+      const stepName = wcDesc || state.workCenters[machineCode]?.name || machineCode;
+      const g = groups[pdId] || (groups[pdId] = {
+        id: pdId,
+        customer: String(rawRow[col.customer] || '').trim() || 'General',
+        project: String(rawRow[col.project] || '').trim() || 'General',
+        dwgNo: String(rawRow[col.dwg] || '').trim(),
+        partName: String(rawRow[col.partName] || '').trim(),
+        qty: parseInt(rawRow[col.qty]) || 1,
+        priority: String(rawRow[col.priority] || '').trim() || 'Normal',
+        status: 'Unscheduled',
+        delayReason: '',
+        dueHour: null,
+        steps: [],
+        allRows: 0
+      });
+      g.allRows++;
+      if (/^complete(d)?$/i.test(opStatus)) continue; // finished operations stay out of the Backlog (as in the import)
+      if (state.isStepIdentityRemoved(pdId, machineCode, stepName)) continue;
+      g.steps.push({
+        stepNum: parseInt(rawRow[col.step]) || (g.steps.length + 1) * 10,
+        name: stepName,
+        machine: machineCode,
+        cycleMinutes: parseFloat(rawRow[col.cycleTime]) || 1.0,
+        setupMinutes: parseFloat(rawRow[col.setupTime]) || 0.0,
+        opStatus
+      });
+    }
+
+    const skipped = {};
+    const skip = (reason, id) => { (skipped[reason] = skipped[reason] || []).push(id); };
+    const onBoard = new Set((state.scheduledJobs || []).map(j => j.woId || j.id));
+    const inBacklog = new Set((state.workOrders || []).map(w => w.id));
+    const missing = [...targets].filter(id => !groups[id]).sort();
+    const toAdd = [];
+    Object.values(groups).sort((a, b) => a.id.localeCompare(b.id)).forEach(wo => {
+      if (state.isPdClosedForPlanning(wo.id)) return skip('Closed / ผลิตเสร็จแล้ว', wo.id);
+      if (inBacklog.has(wo.id)) return skip('อยู่ใน Backlog แล้ว', wo.id);
+      if (onBoard.has(wo.id)) return skip('อยู่บน Board แล้ว', wo.id);
+      if (wo.steps.length === 0) return skip('ไม่มี Operation ที่ยังไม่เสร็จ', wo.id);
+      wo.steps.sort((a, b) => a.stepNum - b.stepNum);
+      wo.steps = wo.steps.map((step, idx) => {
+        const stepNum = step.stepNum || (idx + 1) * 10;
+        const wcName = state.workCenters[step.machine]?.name || step.machine;
+        const cyc = step.cycleMinutes > 0 ? step.cycleMinutes : 1.0;
+        const setup = step.setupMinutes >= 0 ? step.setupMinutes : 0.0;
+        const cap = state.workCenters[step.machine]?.capacity || 1;
+        const totalHours = parseFloat(((setup + wo.qty * cyc) / 60.0 / cap).toFixed(4)) || 0.1;
+        return {
+          id: `${wo.id}-${stepNum}`,
+          stepNum,
+          name: step.name || wcName,
+          machine: step.machine,
+          cycleMinutes: cyc,
+          setupMinutes: setup,
+          estHours: totalHours,
+          status: 'Unscheduled',
+          opStatus: step.opStatus || '',
+          startHour: null
+        };
+      });
+      wo.totalStepsCount = wo.steps.length;
+      delete wo.allRows;
+      toAdd.push(wo);
+    });
+
+    if (toAdd.length > 0) {
+      state.workOrders = [...state.workOrders, ...toAdd];
+      if (typeof state.autoLinkAssemblies === 'function') state.autoLinkAssemblies();
+      state.saveWorkOrdersToFile();
+      state.savePlanToFile();
+      state.notify();
+    }
+    return { added: toAdd.map(w => w.id), skipped, missing, filename: overview.filename || '' };
+  }
+
+  // Backlog Tools menu: ask for PD numbers, add them (with child PDs) to the Backlog and show the result.
+  async promptAddPdsToBacklog() {
+    const toast = (m, t) => this.state.ganttController?.showToast?.(m, t);
+    const mode = this.state.storageSync && typeof this.state.storageSync.getUserMode === 'function' ? this.state.storageSync.getUserMode() : 'plan';
+    if (mode !== 'plan') { toast('⚠️ กรุณาสลับเป็นโหมดวางแผนก่อน จึงจะเพิ่ม PD เข้า Backlog ได้', 'error'); return; }
+    const input = window.prompt('ระบุเลข PD ที่ต้องการเพิ่มเข้า Backlog (คั่นด้วยจุลภาคหรือเว้นวรรค)\nระบบจะเพิ่ม PD ลูกทั้งหมดของ PD เหล่านี้ให้ด้วย', '');
+    if (!input || !input.trim()) return;
+    const ids = input.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
+    try {
+      toast('⏳ กำลังอ่านไฟล์ Status Overview เพื่อเพิ่ม PD เข้า Backlog...', 'info');
+      const r = await this.addPdsToBacklog(ids, true);
+      const skippedText = Object.entries(r.skipped).map(([reason, list]) => `${reason}: ${list.length}`).join(' · ');
+      toast(`✅ เพิ่มเข้า Backlog ${r.added.length} PD${skippedText ? ` (ข้าม ${skippedText})` : ''}${r.missing.length ? ` · ไม่พบในไฟล์ ${r.missing.length}` : ''}`, r.added.length ? 'success' : 'info');
+    } catch (err) {
+      console.error('Add PDs to backlog failed:', err);
+      toast(`⚠️ เพิ่ม PD เข้า Backlog ไม่สำเร็จ: ${err.message || err}`, 'error');
+    }
+  }
+
   showImportExcelReport({ filename, importedCount, skippedCompletedIds, autoClosedIds = [], inferredCompletedIds, stepsCompletedReport }) {
     if (!this.importExcelReportModal || !this.importExcelReportBody) return;
 
