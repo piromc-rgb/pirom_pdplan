@@ -32,6 +32,8 @@ export class WorkflowController {
     // Which backlog cards have their full Routing Steps list expanded (collapsed by default
     // so the backlog list stays compact/scannable); survives re-renders, not page reloads.
     this.expandedBacklogCards = new Set();
+    // Switch beside "ตามตัวกรอง": ON = Backlog list shows only the PDs that pass the filters, OFF = all PDs (default)
+    try { this.backlogFilteredOnly = localStorage.getItem('chaken_backlog_filtered_only') === '1'; } catch (e) { this.backlogFilteredOnly = false; }
     this.initElements();
     this.bindEvents();
     // Plan + Mat data (re)loaded: refresh the Mat. readiness badges on the backlog cards
@@ -608,8 +610,12 @@ export class WorkflowController {
           });
         });
 
-        this.backlogList.appendChild(backlogCard);
+        // Switch ON: the Backlog list shows only the PDs that pass the active filters; OFF: all PDs
+        if (!(this.backlogFilteredOnly && !passesFilters)) this.backlogList.appendChild(backlogCard);
       });
+      if (this.backlogFilteredOnly && cntShown === 0) {
+        this.backlogList.innerHTML = '<div class="empty-list-hint">ไม่มี PD ใน Backlog ที่ผ่านตัวกรองที่เลือกอยู่</div>';
+      }
     }
     this.updateBacklogStatusSummary(this.state.workOrders.length, cntNotReady, cntWaiting, cntReady, cntShown);
   }
@@ -628,12 +634,18 @@ export class WorkflowController {
     const chip = (label, n, color, bg, title) => `<span title="${title}" style="padding: 2px 8px; border-radius: 10px; font-weight: 700; white-space: nowrap; border: 1px solid ${color}; color: ${color}; background: ${bg};">${label} <strong>${n}</strong></span>`;
     const waitingOn = this.state.requireChildPdsClosed !== false;
     const filterNote = shown < total
-      ? `<span title="ตัวเลขนับเฉพาะ PD ที่ผ่านตัวกรอง Priority / Project / Customer / PD Range ที่เปิดอยู่" style="width: 100%; color: #0369a1; font-weight: 700;">🔎 ตามตัวกรอง: ${shown} จาก ${total} PD</span>`
+      ? `<label title="เปิด = แสดงเฉพาะ PD ใน Backlog ที่ผ่านตัวกรอง Priority / Project / Customer / PD Range ที่เปิดอยู่ · ปิด = แสดง PD ใน Backlog ทั้งหมด" style="width: 100%; display: flex; align-items: center; gap: 8px; color: #0369a1; font-weight: 700; cursor: pointer; user-select: none;"><span class="ios-toggle"><input type="checkbox" id="chk-backlog-filtered-only"${this.backlogFilteredOnly ? ' checked' : ''}><span class="ios-toggle-slider"></span></span><span>ตามตัวกรอง: ${shown} จาก ${total} PD</span></label>`
       : '';
     el.innerHTML = filterNote +
       chip('⛔ ไม่พร้อมผลิต', notReady, '#b91c1c', 'rgba(185,28,28,0.10)', 'PD ที่ Mat ของ Op1 ยังไม่พร้อมผลิต') +
       (waitingOn ? chip('⏳ รอ PD ลูก', waiting, '#b45309', 'rgba(245,158,11,0.15)', 'PD ที่ยังมี PD ลูกไม่ Closed (กติกาเปิดอยู่ใน Option ⚙)') : '') +
       chip('✅ พร้อมวางแผน', ready, '#15803d', 'rgba(21,128,61,0.12)', 'PD ที่ไม่ติดทั้งสองเงื่อนไข');
+    const sw = el.querySelector('#chk-backlog-filtered-only');
+    if (sw) sw.addEventListener('change', () => {
+      this.backlogFilteredOnly = sw.checked;
+      try { localStorage.setItem('chaken_backlog_filtered_only', sw.checked ? '1' : '0'); } catch (e) { /* ignore */ }
+      this.render();
+    });
   }
 
   runPDSimulation(woId) {
