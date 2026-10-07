@@ -42,6 +42,9 @@ class CentralState {
     // source Excel file or an old backlog snapshot.
     this.completedPdHistory = {};
     this.completedOpHistory = {}; // PD -> { step: true } operations force-completed by the user
+    // PDs cancelled (production cancelled by a notice): PD -> { reason, noticeNo, noticeDate, cancelledAt, partName, project, customer }.
+    // They are taken out of the plan and never pulled back in from a newer Status Overview.
+    this.cancelledPds = {};
 
     // PD IDs marked as favorite (starred) by the user
     this.favoritePDs = {};
@@ -2315,7 +2318,57 @@ class CentralState {
   // Closed PDs never stay in the Backlog and are never planned onto the Board.
   isPdClosedForPlanning(pdId) {
     if (!pdId) return false;
+    if (this.isPdCancelled(pdId)) return true;
     return String(this.getPdOrderStatus(pdId) || '').trim().toLowerCase() === 'closed';
+  }
+
+  isPdCancelled(pdId) {
+    return Boolean(pdId && this.cancelledPds && this.cancelledPds[pdId]);
+  }
+
+  // "ยกเลิกการผลิต": remove this one PD from the plan (Board + Backlog) and remember the cancellation notice. The
+  // Operation statuses are NOT touched, and the PD is never imported again from a newer Status Overview.
+  cancelPd(pdId, info = {}) {
+    if (!pdId) return false;
+    this.saveStateToHistory();
+    const wo = (this.workOrders || []).find(w => w.id === pdId);
+    const job = (this.scheduledJobs || []).find(j => (j.woId || j.id) === pdId);
+    const src = wo || job || {};
+    if (!this.cancelledPds) this.cancelledPds = {};
+    this.cancelledPds[pdId] = {
+      reason: String(info.reason || '').trim(),
+      noticeNo: String(info.noticeNo || '').trim(),
+      noticeDate: String(info.noticeDate || '').trim(),
+      cancelledAt: Date.now(),
+      partName: src.partName || '',
+      project: src.project || '',
+      customer: src.customer || ''
+    };
+    this.scheduledJobs = (this.scheduledJobs || []).filter(j => (j.woId || j.id) !== pdId);
+    this.workOrders = (this.workOrders || []).filter(w => w.id !== pdId);
+    if (this.assemblyLinks) {
+      this.assemblyLinks = this.assemblyLinks.filter(link => {
+        const fromWo = this.parseStepId(link.from).woId;
+        const toWo = this.parseStepId(link.to).woId;
+        return fromWo !== pdId && toWo !== pdId;
+      });
+    }
+    this._childBlockCache = null;
+    this.savePlanToFile();
+    this.saveWorkOrdersToFile();
+    this.notify();
+    this.dispatchHistoryEvent();
+    return true;
+  }
+
+  // Take a PD off the cancelled list (it can be imported into the Backlog again)
+  restoreCancelledPd(pdId) {
+    if (!pdId || !this.cancelledPds || !this.cancelledPds[pdId]) return false;
+    delete this.cancelledPds[pdId];
+    this._childBlockCache = null;
+    this.savePlanToFile();
+    this.notify();
+    return true;
   }
 
   // Drops Closed PDs from the Backlog. Returns the number removed (and notifies listeners when > 0).
@@ -2630,7 +2683,7 @@ class CentralState {
         if (data && Array.isArray(data) && data.length > 0) {
           // Never bring back a PD that was already marked "ผลิตจริงเสร็จแล้ว" - it may
           // still be sitting in this backlog snapshot even though it's actually done.
-          this.workOrders = data.filter(wo => !this.isPdInCompletedHistory(wo.id));
+          this.workOrders = data.filter(wo => !this.isPdInCompletedHistory(wo.id) && !this.isPdCancelled(wo.id));
           // Nor a single step someone manually crossed off in the PD edit modal.
           this.workOrders.forEach(wo => {
             wo.steps = (wo.steps || []).filter(step => !this.isStepIdentityRemoved(wo.id, step.machine, step.name));
@@ -2702,6 +2755,7 @@ class CentralState {
       projectMachineLists: this.projectMachineLists || {},
       completedPdHistory: this.completedPdHistory || {},
       completedOpHistory: this.completedOpHistory || {},
+      cancelledPds: this.cancelledPds || {},
       favoritePDs: this.favoritePDs || {},
       pdMemos: this.pdMemos || {},
       removedStepHistory: this.removedStepHistory || {},
@@ -3037,6 +3091,7 @@ class CentralState {
       if (data.groupSameItem !== undefined) this.groupSameItem = Boolean(data.groupSameItem);
       if (data.requireChildPdsClosed !== undefined) this.requireChildPdsClosed = Boolean(data.requireChildPdsClosed);
       if (data.projectMachineLists && typeof data.projectMachineLists === 'object') this.projectMachineLists = data.projectMachineLists;
+      if (data.cancelledPds && typeof data.cancelledPds === 'object') this.cancelledPds = data.cancelledPds;
       if (data.completedOpHistory && typeof data.completedOpHistory === 'object') {
         this.completedOpHistory = data.completedOpHistory;
         if (this._pdOpStatusMap) this._applyCompletedOpHistory(this._pdOpStatusMap);
@@ -3061,7 +3116,7 @@ class CentralState {
       this.syncOverviewStatusToJobs();
 
       this.scheduledJobs = this.scheduledJobs.filter(j => !this.isPdForceClosed(j.woId) && !this.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name));
-      this.workOrders = this.workOrders.filter(wo => !this.isPdInCompletedHistory(wo.id));
+      this.workOrders = this.workOrders.filter(wo => !this.isPdInCompletedHistory(wo.id) && !this.isPdCancelled(wo.id));
       this.workOrders.forEach(wo => {
         wo.steps = wo.steps.filter(step => !this.isStepIdentityRemoved(wo.id, step.machine, step.name));
       });
@@ -3227,7 +3282,7 @@ class CentralState {
     const idx = this.getPdProjectIndex();
     const boardIds = new Set((this.scheduledJobs || []).map(j => j.woId || j.id));
     const backlogIds = new Set((this.workOrders || []).map(w => w.id));
-    const blank = () => ({ total: 0, allComplete: 0, board: 0, backlog: 0, backlogMatNotReady: 0, backlogWaitChild: 0, backlogBoth: 0, backlogReady: 0, inCompletedList: 0, other: 0, opTypes: { dec: 0, ded: 0, part: 0, unknown: 0 }, wcHours: {}, pie: { complete: 0, board: 0, backlog: 0, completedList: 0, other: 0 }, ids: { board: [], backlog: [], matNotReady: [], waitChild: [], both: [], ready: [], inCompletedList: [], other: [] } });
+    const blank = () => ({ total: 0, allComplete: 0, board: 0, backlog: 0, backlogMatNotReady: 0, backlogWaitChild: 0, backlogBoth: 0, backlogReady: 0, inCompletedList: 0, other: 0, cancelled: 0, opTypes: { dec: 0, ded: 0, part: 0, unknown: 0 }, wcHours: {}, pie: { complete: 0, board: 0, backlog: 0, completedList: 0, other: 0, cancelled: 0 }, ids: { board: [], backlog: [], matNotReady: [], waitChild: [], both: [], ready: [], inCompletedList: [], other: [], cancelled: [] } });
     const perProject = new Map();
     const overall = blank();
     idx.forEach((proj, pdId) => {
@@ -3264,11 +3319,13 @@ class CentralState {
       }
       // Exclusive split of the total for the pie chart (every PD lands in exactly one slice):
       // all Operations Complete > on the Board > in the Backlog > in the completed list > other
-      const pieKey = allComplete ? 'complete' : onBoard ? 'board' : wo ? 'backlog' : this.isPdInCompletedHistory(pdId) ? 'completedList' : 'other';
+      const cancelled = this.isPdCancelled(pdId);
+      const pieKey = cancelled ? 'cancelled' : allComplete ? 'complete' : onBoard ? 'board' : wo ? 'backlog' : this.isPdInCompletedHistory(pdId) ? 'completedList' : 'other';
       both(b => { b.pie[pieKey]++; });
       // Not all-ops-complete in the Status Overview and neither on the Board nor in the Backlog: it was
       // closed into the "Production Order ที่ผลิตเสร็จแล้ว" list, otherwise it simply is not imported yet
-      if (!allComplete && !onBoard && !wo) {
+      if (cancelled) both(b => { b.cancelled++; b.ids.cancelled.push(pdId); });
+      else if (!allComplete && !onBoard && !wo) {
         if (this.isPdInCompletedHistory(pdId)) both(b => { b.inCompletedList++; b.ids.inCompletedList.push(pdId); });
         else both(b => { b.other++; b.ids.other.push(pdId); });
       }

@@ -1317,6 +1317,7 @@ export class WorkflowController {
     const missing = [...[...targets].filter(id => !groups[id]).sort(), ...rangeMissing];
     const toAdd = [];
     Object.values(groups).sort((a, b) => a.id.localeCompare(b.id)).forEach(wo => {
+      if (state.isPdCancelled(wo.id)) return skip('แจ้งยกเลิกการผลิต', wo.id);
       if (state.isPdClosedForPlanning(wo.id)) return skip('Closed / ผลิตเสร็จแล้ว', wo.id);
       if (inBacklog.has(wo.id)) return skip('อยู่ใน Backlog แล้ว', wo.id);
       if (onBoard.has(wo.id)) return skip('อยู่บน Board แล้ว', wo.id);
@@ -1837,7 +1838,8 @@ export class WorkflowController {
           .filter(wo => this.state.isPdInCompletedHistory(wo.id))
           .map(wo => wo.id);
 
-        const importedWOs = groupsAll.filter(wo => !this.state.isPdInCompletedHistory(wo.id));
+        // A PD with a production-cancellation notice is never imported again
+        const importedWOs = groupsAll.filter(wo => !this.state.isPdInCompletedHistory(wo.id) && !this.state.isPdCancelled(wo.id));
         if (importedWOs.length === 0 && skippedCompletedIds.length === 0 && autoClosedIds.length === 0) {
           alert('ไม่พบ Production Order หรือขั้นตอนการผลิตในเงื่อนไขและช่วงที่กำหนด');
           return;
@@ -1942,7 +1944,7 @@ export class WorkflowController {
 
         // Apply conditions 2 & 3's inferences: drop the now-completed PDs and the
         // now-completed individual steps out of both the backlog and the board.
-        this.state.workOrders = this.state.workOrders.filter(wo => !this.state.isPdInCompletedHistory(wo.id));
+        this.state.workOrders = this.state.workOrders.filter(wo => !this.state.isPdInCompletedHistory(wo.id) && !this.state.isPdCancelled(wo.id));
         this.state.scheduledJobs = this.state.scheduledJobs.filter(j =>
           !this.state.isPdForceClosed(j.woId) && !this.state.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name)
         );

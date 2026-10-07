@@ -1092,6 +1092,7 @@ export class StorageSyncManager {
       try { localStorage.removeItem('pdplan_completed_pds'); } catch (e) {}
       if (data.favoritePDs) this.state.favoritePDs = data.favoritePDs;
       if (data.removedStepHistory) this.state.removedStepHistory = data.removedStepHistory;
+      if (data.cancelledPds && typeof data.cancelledPds === 'object') this.state.cancelledPds = data.cancelledPds;
       if (data.completedOpHistory && typeof data.completedOpHistory === 'object') this.state.completedOpHistory = data.completedOpHistory;
       if (data.planMaterials) this.state.planMaterials = data.planMaterials;
       if (data.dwgToPdMap) this.state.dwgToPdMap = data.dwgToPdMap;
@@ -1108,7 +1109,8 @@ export class StorageSyncManager {
       this.state.scheduledJobs = this.state.scheduledJobs.filter(
         j => !this.state.isPdForceClosed(j.woId) && !this.state.isStepIdentityRemoved(j.woId, j.machine, j.stepName || j.name)
       );
-      this.state.workOrders = this.state.workOrders.filter(wo => !this.state.isPdInCompletedHistory(wo.id));
+      this.state.workOrders = this.state.workOrders.filter(wo => !this.state.isPdInCompletedHistory(wo.id) && !this.state.isPdCancelled(wo.id));
+      this.state.scheduledJobs = this.state.scheduledJobs.filter(j => !this.state.isPdCancelled(j.woId || j.id));
       this.state.workOrders.forEach(wo => {
         wo.steps = wo.steps.filter(step => !this.state.isStepIdentityRemoved(wo.id, step.machine, step.name));
       });

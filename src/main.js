@@ -106,6 +106,7 @@ class App {
     this.initHeaderDateTime();
     this.initWorkCenterSettings();
     this.initCompletedPdList();
+    this.initCancelledPdList();
     this.initGanttLabelColumnResize();
     this.initSidebarLeftResize();
     this.initAddReadyPdsButton();
@@ -749,6 +750,65 @@ class App {
       this.gantt?.drawDependencyLines?.();
       window.dispatchEvent(new Event('resize'));
     });
+  }
+
+  // Backlog Tools > "View PD ที่มีการแจ้งยกเลิก": list of PDs whose production was cancelled by a notice (ยกเลิกการผลิต)
+  initCancelledPdList() {
+    const btnOpen = document.getElementById('btn-view-cancelled-pd');
+    if (!btnOpen) return;
+    const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const fmtTime = (t) => t ? new Date(t).toLocaleString('th-TH', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
+    const open = () => {
+      const old = document.getElementById('cancelled-pd-list-modal');
+      if (old) old.remove();
+      const overlay = document.createElement('div');
+      overlay.id = 'cancelled-pd-list-modal';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+      overlay.innerHTML = `
+        <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:1100px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
+          <div style="padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+            <div><div id="cpl-title" style="font-size:15px;font-weight:700;"></div>
+            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">PD ที่แจ้งยกเลิกการผลิต ถูกนำออกจากระบบวางแผนและจะไม่ถูกดึงกลับเมื่อโหลด Status Overview ใหม่ (สถานะ Operation ไม่เปลี่ยน)</div></div>
+            <button type="button" id="cpl-x" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
+          </div>
+          <div style="padding:4px 18px 8px;"><input id="cpl-search" type="text" placeholder="ค้นหา เลข PD / สาเหตุ / เลขที่ใบแจ้ง..." style="width:100%;box-sizing:border-box;padding:7px 10px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+          <div id="cpl-body" style="padding:0 18px 12px;overflow:auto;"></div>
+          <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;border-top:1px solid #e2e8f0;"><button type="button" id="cpl-close" style="padding:6px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">ปิด</button></div>
+        </div>`;
+      document.body.appendChild(overlay);
+      const close = () => overlay.remove();
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+      overlay.querySelector('#cpl-x').addEventListener('click', close);
+      overlay.querySelector('#cpl-close').addEventListener('click', close);
+      const render = () => {
+        const q = overlay.querySelector('#cpl-search').value.trim().toLowerCase();
+        const all = Object.entries(state.cancelledPds || {}).sort((a, b) => (b[1].cancelledAt || 0) - (a[1].cancelledAt || 0));
+        const rows = q ? all.filter(([id, v]) => `${id} ${v.reason} ${v.noticeNo} ${v.partName} ${v.project}`.toLowerCase().includes(q)) : all;
+        overlay.querySelector('#cpl-title').textContent = `🚫 PD ที่มีการแจ้งยกเลิกการผลิต (${all.length})`;
+        const body = overlay.querySelector('#cpl-body');
+        if (all.length === 0) { body.innerHTML = '<div style="padding:30px;text-align:center;color:#94a3b8;">ยังไม่มี PD ที่แจ้งยกเลิก</div>'; return; }
+        body.innerHTML = `<table style="border-collapse:collapse;width:100%;font-size:12px;">
+          <thead><tr style="background:#f1f5f9;text-align:left;"><th style="padding:6px 8px;">PD</th><th style="padding:6px 8px;">ชื่องาน / โครงการ</th><th style="padding:6px 8px;">สาเหตุการยกเลิก</th><th style="padding:6px 8px;">เลขที่ใบแจ้งดำเนินการ</th><th style="padding:6px 8px;">วันที่แจ้ง</th><th style="padding:6px 8px;">บันทึกเมื่อ</th><th style="padding:6px 8px;"></th></tr></thead>
+          <tbody>${rows.map(([id, v]) => `<tr style="border-top:1px solid #e2e8f0;vertical-align:top;">
+            <td style="padding:6px 8px;font-family:monospace;font-weight:700;white-space:nowrap;">${esc(id)}</td>
+            <td style="padding:6px 8px;">${esc(v.partName || '-')}<div style="color:#64748b;font-size:11px;">${esc(v.project || '')}</div></td>
+            <td style="padding:6px 8px;white-space:pre-wrap;">${esc(v.reason)}</td>
+            <td style="padding:6px 8px;white-space:nowrap;">${esc(v.noticeNo)}</td>
+            <td style="padding:6px 8px;white-space:nowrap;">${esc(v.noticeDate)}</td>
+            <td style="padding:6px 8px;white-space:nowrap;color:#64748b;">${esc(fmtTime(v.cancelledAt))}</td>
+            <td style="padding:6px 8px;"><button type="button" class="cpl-restore" data-pd="${esc(id)}" title="ยกเลิกการแจ้งยกเลิก - PD นี้จะถูกนำเข้า Backlog ได้อีกเมื่อ Import" style="font-size:10.5px;padding:4px 8px;border-radius:4px;border:1px solid #dc2626;background:#fef2f2;color:#b91c1c;cursor:pointer;font-weight:700;white-space:nowrap;">↩️ ยกเลิกการแจ้ง</button></td></tr>`).join('')}</tbody></table>`;
+        body.querySelectorAll('.cpl-restore').forEach(b => b.addEventListener('click', () => {
+          const id = b.dataset.pd;
+          if (confirm(`ยกเลิกการแจ้งยกเลิกการผลิตของ ${id} ใช่หรือไม่?\nPD นี้จะกลับมานำเข้า Backlog ได้อีกเมื่อ Import from Excel`)) {
+            state.restoreCancelledPd(id);
+            render();
+          }
+        }));
+      };
+      overlay.querySelector('#cpl-search').addEventListener('input', render);
+      render();
+    };
+    btnOpen.addEventListener('click', open);
   }
 
   initCompletedPdList() {

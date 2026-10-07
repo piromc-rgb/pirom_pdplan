@@ -603,6 +603,7 @@ export class ResourcesController {
       ['done', 'ผลิตเสร็จแล้ว', '#15803d', (b) => b.pie.complete + b.pie.completedList],
       ['board', 'กำลังผลิต', '#eab308', (b) => b.pie.board],
       ['backlog', 'รอผลิต', '#dc2626', (b) => b.pie.backlog],
+      ['cancelled', 'ยกเลิกการผลิต', '#78716c', (b) => b.pie.cancelled],
       ['other', 'อื่นๆ', '#94a3b8', (b) => b.pie.other]
     ];
     const donut = (b) => {
@@ -631,6 +632,7 @@ export class ResourcesController {
       line('อยู่ใน Backlog ที่ Mat ยังไม่พร้อม และรอ PD ลูกเสร็จ (ทั้งสองอย่าง)', b.backlogBoth, b.backlogBoth ? '#9a3412' : '#475569', true, b.ids.both),
       b.backlogReady ? line('อยู่ใน Backlog ที่พร้อมวางแผน (Mat พร้อม และไม่รอ PD ลูก)', b.backlogReady, '#15803d', true, b.ids.ready) : '',
       b.inCompletedList ? line('อยู่ในรายการ "Production Order ที่ผลิตเสร็จแล้ว" (Op ใน Status Overview ยังไม่ Complete ทั้งหมด)', b.inCompletedList, '#15803d', false, b.ids.inCompletedList) : '',
+      b.cancelled ? line('แจ้งยกเลิกการผลิต (นำออกจากระบบวางแผนแล้ว)', b.cancelled, '#78716c', false, b.ids.cancelled) : '',
       b.other ? line('ยังไม่ Complete แต่ไม่อยู่ใน Board / Backlog / รายการผลิตเสร็จแล้ว', b.other, '#92400e', false, b.ids.other) : ''
     ].join('');
     const breakdown = (b) => `<div style="display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap;"><div style="flex:1;min-width:360px;">${breakdownRows(b)}</div>${donut(b)}</div>`;

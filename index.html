@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-8GibRKOn.js"></script>
+    <script type="module" crossorigin src="./assets/index-Coi2eS4G.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-T1l8V0Oo.css">
   </head>
   <body>
@@ -295,6 +295,9 @@
                 </button>
                 <button id="btn-view-completed-pd" class="btn" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(22, 163, 74, 0.1); border: 1px solid var(--accent-green, #16a34a); color: var(--accent-green, #16a34a); font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 0;">
                   <span>✅ View PD ที่ผลิตเสร็จแล้ว</span>
+                </button>
+                <button id="btn-view-cancelled-pd" class="btn" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(217, 119, 6, 0.1); border: 1px solid #b45309; color: #b45309; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 0;">
+                  <span>🚫 View PD ที่มีการแจ้งยกเลิก</span>
                 </button>
                 <button id="btn-add-ready-pds-plan" class="btn" title="จัดลงแผนด้วย AI ทุก PD ใน Backlog ที่ Mat ของ Op1 พร้อมผลิต" style="width: 100%; font-size: 11px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(21, 128, 61, 0.1); border: 1px solid #15803d; color: #15803d; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 0;">
                   <span>➕ Add PD ที่พร้อมผลิตทั้งหมดลงแผน</span>
@@ -1323,6 +1326,9 @@
             <div style="display: flex; align-items: center; gap: 14px;">
               <button class="btn" id="btn-force-close-this-pd" title="Force close: ปิด PD นี้ (และ PD ลูกที่ยังไม่ปิด) ตั้งทุก Operation เป็น Complete และนำออกจาก Backlog / Gantt" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(185, 28, 28, 0.15); border: 1px solid #b91c1c; color: #b91c1c; font-weight: bold; transition: all 0.2s;">
                 ⛔ Force close
+              </button>
+              <button class="btn" id="btn-cancel-this-pd" title="ยกเลิกการผลิต: นำ PD นี้ออกจากระบบวางแผน (Board / Backlog) โดยไม่เปลี่ยนสถานะ Operation และจะไม่ถูกดึงกลับมาจาก Status Overview — ต้องระบุสาเหตุ เลขที่ใบแจ้งดำเนินการ และวันที่แจ้ง" style="padding: 8px 16px; font-size: 11px; border-radius: 6px; cursor: pointer; background: rgba(217, 119, 6, 0.15); border: 1px solid #b45309; color: #b45309; font-weight: bold; transition: all 0.2s;">
+                🚫 ยกเลิกการผลิต
               </button>
             </div>
             <div style="display: flex; gap: 10px; align-items: center;">

@@ -4283,6 +4283,14 @@ export class GanttController {
       });
     }
 
+    // "ยกเลิกการผลิต" button: ask for the cancellation notice, then take this PD out of the plan for good
+    const btnCancelPd = document.getElementById('btn-cancel-this-pd');
+    if (btnCancelPd) {
+      const cleanBtnCancel = btnCancelPd.cloneNode(true);
+      btnCancelPd.parentNode.replaceChild(cleanBtnCancel, btnCancelPd);
+      cleanBtnCancel.addEventListener('click', () => this.showCancelPdForm(woId));
+    }
+
     // Export CSV button handler
     if (btnExport) {
       const cleanBtnExport = btnExport.cloneNode(true);
@@ -4324,6 +4332,51 @@ export class GanttController {
     modal.classList.remove('hidden');
   }
   
+  // Form for "ยกเลิกการผลิต": cause, notice number and notice date are required. Operation statuses stay as they are.
+  showCancelPdForm(woId) {
+    const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const old = document.getElementById('cancel-pd-form-modal');
+    if (old) old.remove();
+    const d = new Date();
+    const todayVal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const overlay = document.createElement('div');
+    overlay.id = 'cancel-pd-form-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:100003;display:flex;align-items:center;justify-content:center;padding:16px;';
+    const field = 'width:100%;box-sizing:border-box;padding:7px 9px;font-size:12.5px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#0f172a;font-family:inherit;';
+    overlay.innerHTML = `
+      <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:520px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,0.35);font-size:12.5px;">
+        <div style="padding:14px 18px 6px;"><div style="font-size:15px;font-weight:700;">🚫 ยกเลิกการผลิต — ${esc(woId)}</div>
+        <div style="color:#64748b;font-size:11.5px;margin-top:3px;">PD นี้จะถูกนำออกจากระบบวางแผน (Board / Backlog) สถานะ Operation ที่ทำไปแล้วจะไม่เปลี่ยน และจะไม่ถูกดึงกลับมาเมื่อโหลด Status Overview ใหม่</div></div>
+        <div style="padding:8px 18px 4px;display:flex;flex-direction:column;gap:10px;">
+          <label style="display:flex;flex-direction:column;gap:4px;font-weight:600;">สาเหตุการยกเลิก<textarea id="cancel-pd-reason" rows="3" style="${field}resize:vertical;" placeholder="ระบุสาเหตุ..."></textarea></label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-weight:600;">เลขที่ใบแจ้งดำเนินการ<input id="cancel-pd-notice-no" type="text" style="${field}" placeholder="เลขที่ใบแจ้ง..."></label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-weight:600;">วันที่แจ้ง<input id="cancel-pd-notice-date" type="date" value="${todayVal}" style="${field}"></label>
+          <div id="cancel-pd-error" style="color:#b91c1c;font-size:11.5px;min-height:14px;"></div>
+        </div>
+        <div style="padding:8px 18px 14px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e2e8f0;">
+          <button type="button" id="btn-cancel-pd-form-close" style="padding:6px 16px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;">ปิด</button>
+          <button type="button" id="btn-cancel-pd-form-ok" style="padding:6px 18px;border:none;border-radius:6px;background:#b45309;color:#fff;font-weight:700;cursor:pointer;">🚫 ยืนยันยกเลิกการผลิต</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('#btn-cancel-pd-form-close').addEventListener('click', close);
+    overlay.querySelector('#cancel-pd-reason').focus();
+    overlay.querySelector('#btn-cancel-pd-form-ok').addEventListener('click', () => {
+      const reason = overlay.querySelector('#cancel-pd-reason').value.trim();
+      const noticeNo = overlay.querySelector('#cancel-pd-notice-no').value.trim();
+      const dateVal = overlay.querySelector('#cancel-pd-notice-date').value;
+      const err = overlay.querySelector('#cancel-pd-error');
+      if (!reason || !noticeNo || !dateVal) { err.textContent = 'กรุณากรอกให้ครบทั้ง 3 ช่อง: สาเหตุ, เลขที่ใบแจ้งดำเนินการ, วันที่แจ้ง'; return; }
+      const [y, m, dd] = dateVal.split('-');
+      this.state.cancelPd(woId, { reason, noticeNo, noticeDate: `${dd}/${m}/${y}` });
+      close();
+      this.closePDPlanModal();
+      this.showToast(`🚫 ยกเลิกการผลิต ${woId} แล้ว — นำออกจากระบบวางแผน (ดูได้ที่ Backlog Tools > View PD ที่มีการแจ้งยกเลิก)`);
+    });
+  }
+
   exportPDPlanToCSV(woId, jobs) {
     const headers = [
       "Production Order ID",
