@@ -1093,6 +1093,7 @@ export class StorageSyncManager {
       if (data.favoritePDs) this.state.favoritePDs = data.favoritePDs;
       if (data.removedStepHistory) this.state.removedStepHistory = data.removedStepHistory;
       if (data.cancelledPds && typeof data.cancelledPds === 'object') this.state.cancelledPds = data.cancelledPds;
+      if (data.revisionNotices && typeof data.revisionNotices === 'object') this.state.revisionNotices = data.revisionNotices;
       if (data.completedOpHistory && typeof data.completedOpHistory === 'object') this.state.completedOpHistory = data.completedOpHistory;
       if (data.planMaterials) this.state.planMaterials = data.planMaterials;
       if (data.dwgToPdMap) this.state.dwgToPdMap = data.dwgToPdMap;

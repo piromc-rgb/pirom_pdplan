@@ -3541,3 +3541,16 @@ body.dark-theme .pd-header-item {
 
 
 
+
+/* Drawing revision label beside "Dwg No" in the PD window: vivid red and blinking */
+.rev-blink {
+  color: #ff0000;
+  font-weight: 900;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  animation: rev-blink 1s ease-in-out infinite;
+}
+@keyframes rev-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}

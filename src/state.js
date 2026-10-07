@@ -45,6 +45,9 @@ class CentralState {
     // PDs cancelled (production cancelled by a notice): PD -> { reason, noticeNo, noticeDate, cancelledAt, partName, project, customer }.
     // They are taken out of the plan and never pulled back in from a newer Status Overview.
     this.cancelledPds = {};
+    // Drawing revision notices (ปรับปรุง Rev แบบ): PD -> [ { rev, noticeNo, noticeDate, recordedAt, dwgNo, partName, project } ] (oldest first).
+    // The PD stays in the plan; the latest Rev is shown beside "Dwg No" in the PD window.
+    this.revisionNotices = {};
 
     // PD IDs marked as favorite (starred) by the user
     this.favoritePDs = {};
@@ -2361,6 +2364,44 @@ class CentralState {
     return true;
   }
 
+  // "ปรับปรุง Rev แบบ": log a new drawing revision for a PD. The PD is NOT touched in the plan.
+  addRevisionNotice(pdId, info = {}) {
+    if (!pdId) return false;
+    const wo = (this.workOrders || []).find(w => w.id === pdId);
+    const job = (this.scheduledJobs || []).find(j => (j.woId || j.id) === pdId);
+    const src = wo || job || {};
+    if (!this.revisionNotices) this.revisionNotices = {};
+    if (!Array.isArray(this.revisionNotices[pdId])) this.revisionNotices[pdId] = [];
+    this.revisionNotices[pdId].push({
+      rev: String(info.rev || '').trim(),
+      noticeNo: String(info.noticeNo || '').trim(),
+      noticeDate: String(info.noticeDate || '').trim(),
+      recordedAt: Date.now(),
+      dwgNo: src.dwgNo || '',
+      partName: src.partName || '',
+      project: src.project || ''
+    });
+    this.savePlanToFile();
+    this.notify();
+    return true;
+  }
+
+  // Remove one logged revision notice (e.g. entered by mistake)
+  removeRevisionNotice(pdId, index) {
+    const list = this.revisionNotices && this.revisionNotices[pdId];
+    if (!Array.isArray(list) || index < 0 || index >= list.length) return false;
+    list.splice(index, 1);
+    if (list.length === 0) delete this.revisionNotices[pdId];
+    this.savePlanToFile();
+    this.notify();
+    return true;
+  }
+
+  getLatestRevision(pdId) {
+    const list = this.revisionNotices && this.revisionNotices[pdId];
+    return Array.isArray(list) && list.length > 0 ? list[list.length - 1] : null;
+  }
+
   // Take a PD off the cancelled list (it can be imported into the Backlog again)
   restoreCancelledPd(pdId) {
     if (!pdId || !this.cancelledPds || !this.cancelledPds[pdId]) return false;
@@ -2756,6 +2797,7 @@ class CentralState {
       completedPdHistory: this.completedPdHistory || {},
       completedOpHistory: this.completedOpHistory || {},
       cancelledPds: this.cancelledPds || {},
+      revisionNotices: this.revisionNotices || {},
       favoritePDs: this.favoritePDs || {},
       pdMemos: this.pdMemos || {},
       removedStepHistory: this.removedStepHistory || {},
@@ -3092,6 +3134,7 @@ class CentralState {
       if (data.requireChildPdsClosed !== undefined) this.requireChildPdsClosed = Boolean(data.requireChildPdsClosed);
       if (data.projectMachineLists && typeof data.projectMachineLists === 'object') this.projectMachineLists = data.projectMachineLists;
       if (data.cancelledPds && typeof data.cancelledPds === 'object') this.cancelledPds = data.cancelledPds;
+      if (data.revisionNotices && typeof data.revisionNotices === 'object') this.revisionNotices = data.revisionNotices;
       if (data.completedOpHistory && typeof data.completedOpHistory === 'object') {
         this.completedOpHistory = data.completedOpHistory;
         if (this._pdOpStatusMap) this._applyCompletedOpHistory(this._pdOpStatusMap);

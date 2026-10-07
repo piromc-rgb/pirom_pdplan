@@ -3644,6 +3644,7 @@ export class GanttController {
     if (inputProject) inputProject.value = project;
     if (inputCustomer) inputCustomer.value = customer;
     if (inputDwgNo) inputDwgNo.value = dwgNo;
+    this.updatePdRevLabel(woId);
     if (inputPartName) inputPartName.value = partName;
     if (inputQty) inputQty.value = qty;
     if (inputPriority) inputPriority.value = priority;
@@ -4283,6 +4284,14 @@ export class GanttController {
       });
     }
 
+    // "ปรับปรุง Rev แบบ" button: log a new drawing revision (the PD stays in the plan)
+    const btnRevUpdate = document.getElementById('btn-rev-update-this-pd');
+    if (btnRevUpdate) {
+      const cleanBtnRev = btnRevUpdate.cloneNode(true);
+      btnRevUpdate.parentNode.replaceChild(cleanBtnRev, btnRevUpdate);
+      cleanBtnRev.addEventListener('click', () => this.showRevisionForm(woId));
+    }
+
     // "ยกเลิกการผลิต" button: ask for the cancellation notice, then take this PD out of the plan for good
     const btnCancelPd = document.getElementById('btn-cancel-this-pd');
     if (btnCancelPd) {
@@ -4332,6 +4341,70 @@ export class GanttController {
     modal.classList.remove('hidden');
   }
   
+  // "Rev N" beside Dwg No (vivid red, blinking); hovering shows the notice details like the task-bar tooltip on the board
+  updatePdRevLabel(woId) {
+    const el = document.getElementById('pd-modal-rev');
+    if (!el) return;
+    const list = (this.state.revisionNotices || {})[woId];
+    if (!Array.isArray(list) || list.length === 0) { el.style.display = 'none'; el.textContent = ''; el.removeAttribute('title'); return; }
+    const last = list[list.length - 1];
+    const fmt = (t) => t ? new Date(t).toLocaleString('th-TH', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
+    let tip = `Rev ${last.rev} (ปรับปรุงแบบล่าสุด)\nวันที่แจ้ง: ${last.noticeDate || '-'}\nเลขที่ใบแจ้งดำเนินการ: ${last.noticeNo || '-'}\nบันทึกเมื่อ: ${fmt(last.recordedAt)}`;
+    if (list.length > 1) {
+      tip += '\n\nประวัติการปรับ Rev:';
+      [...list].reverse().forEach(r => { tip += `\n• Rev ${r.rev} · แจ้ง ${r.noticeDate || '-'} · ใบแจ้ง ${r.noticeNo || '-'}`; });
+    }
+    el.textContent = `Rev ${last.rev}`;
+    el.setAttribute('title', tip);
+    el.style.display = 'inline';
+  }
+
+  // Form for "ปรับปรุง Rev แบบ": new revision, notice number and notice date are required. The PD stays in the plan.
+  showRevisionForm(woId) {
+    const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const old = document.getElementById('rev-pd-form-modal');
+    if (old) old.remove();
+    const d = new Date();
+    const todayVal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const cur = this.state.getLatestRevision(woId);
+    const overlay = document.createElement('div');
+    overlay.id = 'rev-pd-form-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:100003;display:flex;align-items:center;justify-content:center;padding:16px;';
+    const field = 'width:100%;box-sizing:border-box;padding:7px 9px;font-size:12.5px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#0f172a;font-family:inherit;';
+    overlay.innerHTML = `
+      <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:480px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,0.35);font-size:12.5px;">
+        <div style="padding:14px 18px 6px;"><div style="font-size:15px;font-weight:700;">📐 ปรับปรุง Rev แบบ — ${esc(woId)}</div>
+        <div style="color:#64748b;font-size:11.5px;margin-top:3px;">PD นี้ยังคงอยู่ในแผน ระบบจะบันทึกการแจ้งปรับปรุงแบบและแสดง Rev ใหม่หลัง Dwg No${cur ? ` (Rev ปัจจุบัน: ${esc(cur.rev)})` : ''}</div></div>
+        <div style="padding:8px 18px 4px;display:flex;flex-direction:column;gap:10px;">
+          <label style="display:flex;flex-direction:column;gap:4px;font-weight:600;">Rev แบบใหม่<input id="rev-pd-rev" type="text" style="${field}" placeholder="เช่น 2 หรือ B"></label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-weight:600;">เลขที่ใบแจ้งดำเนินการ<input id="rev-pd-notice-no" type="text" style="${field}" placeholder="เลขที่ใบแจ้ง..."></label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-weight:600;">วันที่แจ้ง<input id="rev-pd-notice-date" type="date" value="${todayVal}" style="${field}"></label>
+          <div id="rev-pd-error" style="color:#b91c1c;font-size:11.5px;min-height:14px;"></div>
+        </div>
+        <div style="padding:8px 18px 14px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e2e8f0;">
+          <button type="button" id="btn-rev-pd-form-close" style="padding:6px 16px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;">ปิด</button>
+          <button type="button" id="btn-rev-pd-form-ok" style="padding:6px 18px;border:none;border-radius:6px;background:#4338ca;color:#fff;font-weight:700;cursor:pointer;">📐 บันทึก Rev แบบ</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('#btn-rev-pd-form-close').addEventListener('click', close);
+    overlay.querySelector('#rev-pd-rev').focus();
+    overlay.querySelector('#btn-rev-pd-form-ok').addEventListener('click', () => {
+      const rev = overlay.querySelector('#rev-pd-rev').value.trim();
+      const noticeNo = overlay.querySelector('#rev-pd-notice-no').value.trim();
+      const dateVal = overlay.querySelector('#rev-pd-notice-date').value;
+      const err = overlay.querySelector('#rev-pd-error');
+      if (!rev || !noticeNo || !dateVal) { err.textContent = 'กรุณากรอกให้ครบทั้ง 3 ช่อง: Rev แบบใหม่, เลขที่ใบแจ้งดำเนินการ, วันที่แจ้ง'; return; }
+      const [y, m, dd] = dateVal.split('-');
+      this.state.addRevisionNotice(woId, { rev, noticeNo, noticeDate: `${dd}/${m}/${y}` });
+      close();
+      this.updatePdRevLabel(woId);
+      this.showToast(`📐 บันทึก Rev ${rev} ของ ${woId} แล้ว — ดูได้ที่ Backlog Tools > View PD ที่มีการแจ้งปรับ Rev แบบ`);
+    });
+  }
+
   // Form for "ยกเลิกการผลิต": cause, notice number and notice date are required. Operation statuses stay as they are.
   showCancelPdForm(woId) {
     const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

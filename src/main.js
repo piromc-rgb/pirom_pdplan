@@ -107,6 +107,7 @@ class App {
     this.initWorkCenterSettings();
     this.initCompletedPdList();
     this.initCancelledPdList();
+    this.initRevisionPdList();
     this.initGanttLabelColumnResize();
     this.initSidebarLeftResize();
     this.initAddReadyPdsButton();
@@ -750,6 +751,68 @@ class App {
       this.gantt?.drawDependencyLines?.();
       window.dispatchEvent(new Event('resize'));
     });
+  }
+
+  // Backlog Tools > "View PD ที่มีการแจ้งปรับ Rev แบบ": every logged drawing-revision notice (newest first)
+  initRevisionPdList() {
+    const btnOpen = document.getElementById('btn-view-revision-pd');
+    if (!btnOpen) return;
+    const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const fmtTime = (t) => t ? new Date(t).toLocaleString('th-TH', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
+    const open = () => {
+      const old = document.getElementById('revision-pd-list-modal');
+      if (old) old.remove();
+      const overlay = document.createElement('div');
+      overlay.id = 'revision-pd-list-modal';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+      overlay.innerHTML = `
+        <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:1100px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
+          <div style="padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+            <div><div id="rpl-title" style="font-size:15px;font-weight:700;"></div>
+            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">PD ที่มีการแจ้งปรับปรุง Rev แบบ (PD ยังอยู่ในแผน) · Rev ล่าสุดแสดงหลัง Dwg No ในหน้า PD</div></div>
+            <button type="button" id="rpl-x" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
+          </div>
+          <div style="padding:4px 18px 8px;"><input id="rpl-search" type="text" placeholder="ค้นหา เลข PD / Dwg No / Rev / เลขที่ใบแจ้ง..." style="width:100%;box-sizing:border-box;padding:7px 10px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;"></div>
+          <div id="rpl-body" style="padding:0 18px 12px;overflow:auto;"></div>
+          <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;border-top:1px solid #e2e8f0;"><button type="button" id="rpl-close" style="padding:6px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">ปิด</button></div>
+        </div>`;
+      document.body.appendChild(overlay);
+      const close = () => overlay.remove();
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+      overlay.querySelector('#rpl-x').addEventListener('click', close);
+      overlay.querySelector('#rpl-close').addEventListener('click', close);
+      const render = () => {
+        const q = overlay.querySelector('#rpl-search').value.trim().toLowerCase();
+        const entries = [];
+        Object.entries(state.revisionNotices || {}).forEach(([pd, list]) => (list || []).forEach((v, i) => entries.push({ pd, i, v, latest: i === list.length - 1 })));
+        entries.sort((a, b) => (b.v.recordedAt || 0) - (a.v.recordedAt || 0));
+        const rows = q ? entries.filter(e => `${e.pd} ${e.v.dwgNo} ${e.v.rev} ${e.v.noticeNo} ${e.v.partName} ${e.v.project}`.toLowerCase().includes(q)) : entries;
+        const nPd = Object.keys(state.revisionNotices || {}).length;
+        overlay.querySelector('#rpl-title').textContent = `📐 PD ที่มีการแจ้งปรับ Rev แบบ (${nPd} PD · ${entries.length} ครั้ง)`;
+        const body = overlay.querySelector('#rpl-body');
+        if (entries.length === 0) { body.innerHTML = '<div style="padding:30px;text-align:center;color:#94a3b8;">ยังไม่มี PD ที่แจ้งปรับ Rev แบบ</div>'; return; }
+        body.innerHTML = `<table style="border-collapse:collapse;width:100%;font-size:12px;">
+          <thead><tr style="background:#f1f5f9;text-align:left;"><th style="padding:6px 8px;">PD</th><th style="padding:6px 8px;">ชื่องาน / โครงการ</th><th style="padding:6px 8px;">Dwg No</th><th style="padding:6px 8px;">Rev แบบใหม่</th><th style="padding:6px 8px;">เลขที่ใบแจ้งดำเนินการ</th><th style="padding:6px 8px;">วันที่แจ้ง</th><th style="padding:6px 8px;">บันทึกเมื่อ</th><th style="padding:6px 8px;"></th></tr></thead>
+          <tbody>${rows.map(e => `<tr style="border-top:1px solid #e2e8f0;vertical-align:top;">
+            <td style="padding:6px 8px;font-family:monospace;font-weight:700;white-space:nowrap;">${esc(e.pd)}</td>
+            <td style="padding:6px 8px;">${esc(e.v.partName || '-')}<div style="color:#64748b;font-size:11px;">${esc(e.v.project || '')}</div></td>
+            <td style="padding:6px 8px;font-family:monospace;white-space:nowrap;">${esc(e.v.dwgNo || '-')}</td>
+            <td style="padding:6px 8px;white-space:nowrap;"><b style="color:#dc2626;">Rev ${esc(e.v.rev)}</b>${e.latest ? ' <span style="font-size:10px;color:#4338ca;">ล่าสุด</span>' : ''}</td>
+            <td style="padding:6px 8px;white-space:nowrap;">${esc(e.v.noticeNo)}</td>
+            <td style="padding:6px 8px;white-space:nowrap;">${esc(e.v.noticeDate)}</td>
+            <td style="padding:6px 8px;white-space:nowrap;color:#64748b;">${esc(fmtTime(e.v.recordedAt))}</td>
+            <td style="padding:6px 8px;"><button type="button" class="rpl-del" data-pd="${esc(e.pd)}" data-i="${e.i}" title="ลบรายการแจ้งนี้ (เช่นบันทึกผิด)" style="font-size:10.5px;padding:4px 8px;border-radius:4px;border:1px solid #dc2626;background:#fef2f2;color:#b91c1c;cursor:pointer;font-weight:700;white-space:nowrap;">🗑️ ลบ</button></td></tr>`).join('')}</tbody></table>`;
+        body.querySelectorAll('.rpl-del').forEach(b => b.addEventListener('click', () => {
+          if (confirm(`ลบรายการแจ้งปรับ Rev ของ ${b.dataset.pd} ใช่หรือไม่?`)) {
+            state.removeRevisionNotice(b.dataset.pd, Number(b.dataset.i));
+            render();
+          }
+        }));
+      };
+      overlay.querySelector('#rpl-search').addEventListener('input', render);
+      render();
+    };
+    btnOpen.addEventListener('click', open);
   }
 
   // Backlog Tools > "View PD ที่มีการแจ้งยกเลิก": list of PDs whose production was cancelled by a notice (ยกเลิกการผลิต)
