@@ -3243,6 +3243,49 @@ class CentralState {
   // Items (item_5) of a project with Description and Quantity Ordered, from the imported Status Overview
   // (Dwg map entries + candidates). The live plan (backlog / board) fills whatever the file does not give.
   // Returns [{ itemCode, description, qty }] sorted by item code.
+  // Operations whose status is "Ready to Start", grouped by Work Center (from the Status Overview Dwg map). Each row is one PD at that
+  // Work Center with its quantity. Closed / cancelled / finished PDs and operations force-completed by the user are left out.
+  getReadyToStartByWorkCenter() {
+    const byWc = new Map();
+    const boardIds = new Set((this.scheduledJobs || []).map(j => j.woId || j.id));
+    const backlogById = new Map((this.workOrders || []).map(w => [w.id, w]));
+    const seen = new Set();
+    const isReady = (st) => String(st || '').trim().toLowerCase() === 'ready to start';
+    const take = (dwg, e) => {
+      if (!e || !e.pdId) return;
+      const pdId = e.pdId;
+      if (this.isPdClosedForPlanning(pdId) || this.isPdAllOpsComplete(pdId)) return;
+      const forced = (this.completedOpHistory || {})[pdId] || {};
+      (e.operations || []).forEach(op => {
+        if (!op || !isReady(op.status) || !op.machine) return;
+        if (forced[op.stepNum]) return;
+        const wc = String(op.machine).trim();
+        const key = `${wc}|${pdId}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        const wo = backlogById.get(pdId);
+        const job = !wo && boardIds.has(pdId) ? (this.scheduledJobs || []).find(j => (j.woId || j.id) === pdId) : null;
+        const qty = Number(e.qty ?? (wo && wo.qty) ?? (job && job.qty));
+        if (!byWc.has(wc)) byWc.set(wc, []);
+        byWc.get(wc).push({
+          pdId, dwgNo: dwg, stepNum: op.stepNum, opName: op.name || '',
+          description: e.description || (wo && wo.partName) || (job && job.partName) || '',
+          project: e.project || (wo && wo.project) || (job && job.project) || '',
+          qty: isNaN(qty) ? null : qty,
+          where: wo ? 'Backlog' : (boardIds.has(pdId) ? 'Board' : '-')
+        });
+      });
+    };
+    Object.keys(this.dwgToPdMap || {}).forEach(dwg => {
+      const entry = this.dwgToPdMap[dwg];
+      if (!entry) return;
+      take(dwg, entry);
+      (entry.candidates || []).forEach(c => take(dwg, c));
+    });
+    byWc.forEach(list => list.sort((a, b) => a.pdId.localeCompare(b.pdId)));
+    return byWc;
+  }
+
   // Progress of each machine in the project's machine list (Setup รายการเครื่องจักร): the PDs of its assembly set
   // are split by the same status colours as the Assembly tree legend (green done / yellow in production / red waiting).
   getProjectMachineProgress(project) {

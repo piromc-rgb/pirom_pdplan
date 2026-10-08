@@ -167,6 +167,8 @@ export class ResourcesController {
       this.state.notify();
     });
 
+    document.getElementById('btn-wc-ready-to-start')?.addEventListener('click', () => this.showReadyToStart());
+
     // Project filter Select All / Deselect All
     document.getElementById('btn-project-summary')?.addEventListener('click', () => this.showProjectSummary());
     document.getElementById('btn-project-select-all')?.addEventListener('click', () => {
@@ -559,6 +561,83 @@ export class ResourcesController {
 
       this.priorityFiltersContainer.appendChild(label);
     });
+  }
+
+  // "▶ Ready to Start": PDs (and quantities) whose Operation at a Work Center is Ready to Start, grouped by Work Center
+  showReadyToStart() {
+    const state = this.state;
+    const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const fmtQty = (v) => v === null || v === undefined ? '-' : Number(Number(v).toFixed(2)).toLocaleString('en-US');
+    const data = state.getReadyToStartByWorkCenter();
+    const groups = [...data.entries()].map(([wc, rows]) => ({ wc, rows, qty: rows.reduce((a, r) => a + (Number(r.qty) || 0), 0) }))
+      .sort((a, b) => b.rows.length - a.rows.length || a.wc.localeCompare(b.wc));
+    const totalPd = new Set(groups.flatMap(g => g.rows.map(r => r.pdId))).size;
+    const old = document.getElementById('ready-to-start-popup');
+    if (old) old.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'ready-to-start-popup';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.innerHTML = `
+      <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:1100px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
+        <div style="padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div>
+            <div style="font-size:15px;font-weight:700;">▶ Operation ที่ Ready to Start แยกตาม Work Center</div>
+            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">${groups.length} Work Center · ${totalPd} PD · จากไฟล์ Status Overview (ไม่รวม PD ที่ Closed / แจ้งยกเลิก / Complete ครบแล้ว) · QTY = จำนวนชิ้นของ PD</div>
+          </div>
+          <button type="button" id="rts-x" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
+        </div>
+        <div style="padding:4px 18px 8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <input id="rts-search" type="text" placeholder="ค้นหา Work Center / เลข PD / ชื่องาน / โครงการ..." style="flex:1;min-width:220px;padding:7px 10px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;">
+          <button type="button" id="rts-expand" style="padding:6px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-size:11.5px;">ขยายทั้งหมด</button>
+          <button type="button" id="rts-collapse" style="padding:6px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-size:11.5px;">ยุบทั้งหมด</button>
+        </div>
+        <div id="rts-body" style="padding:0 18px 12px;overflow:auto;display:flex;flex-direction:column;gap:8px;"></div>
+        <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;border-top:1px solid #e2e8f0;"><button type="button" id="rts-close" style="padding:6px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">ปิด</button></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('#rts-x').addEventListener('click', close);
+    overlay.querySelector('#rts-close').addEventListener('click', close);
+    const body = overlay.querySelector('#rts-body');
+    const whereStyle = { Board: 'background:#dcfce7;color:#166534;', Backlog: 'background:#ede9fe;color:#5b21b6;', '-': 'background:#f1f5f9;color:#64748b;' };
+    const render = () => {
+      const q = overlay.querySelector('#rts-search').value.trim().toLowerCase();
+      const html = groups.map(g => {
+        const wcLabel = state.getMachineDisplayName(g.wc);
+        const wcMatch = q && wcLabel.toLowerCase().includes(q);
+        const rows = q && !wcMatch ? g.rows.filter(r => `${r.pdId} ${r.description} ${r.project} ${r.dwgNo}`.toLowerCase().includes(q)) : g.rows;
+        if (rows.length === 0) return '';
+        const qty = rows.reduce((a, r) => a + (Number(r.qty) || 0), 0);
+        const rowsHtml = rows.map(r => {
+          const inPlan = r.where !== '-';
+          return `<tr style="border-top:1px solid #f1f5f9;">
+            <td style="padding:4px 8px;font-family:monospace;font-weight:700;white-space:nowrap;${inPlan ? 'color:#2563eb;cursor:pointer;' : ''}" ${inPlan ? `class="rts-pd" data-pd="${esc(r.pdId)}" title="คลิกเพื่อเปิดรายละเอียด PD"` : ''}>${esc(r.pdId)}</td>
+            <td style="padding:4px 8px;">${esc(r.description || '-')}<div style="color:#94a3b8;font-size:10.5px;font-family:monospace;">${esc(r.dwgNo)}</div></td>
+            <td style="padding:4px 8px;white-space:nowrap;">${esc(r.project || '-')}</td>
+            <td style="padding:4px 8px;text-align:center;white-space:nowrap;">${esc(r.stepNum ?? '-')}${r.opName ? ` <span style="color:#64748b;">${esc(r.opName)}</span>` : ''}</td>
+            <td style="padding:4px 8px;text-align:right;font-weight:700;">${fmtQty(r.qty)}</td>
+            <td style="padding:4px 8px;text-align:center;"><span style="font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:10px;${whereStyle[r.where]}">${r.where === '-' ? 'นอกแผน' : r.where}</span></td>
+          </tr>`;
+        }).join('');
+        return `<details class="rts-group" ${q ? 'open' : ''} style="border:1px solid #e2e8f0;border-radius:8px;">
+          <summary style="cursor:pointer;padding:8px 12px;display:flex;gap:14px;align-items:center;list-style-position:inside;"><b>${esc(wcLabel)}</b><span style="color:#15803d;font-weight:700;">${rows.length} PD</span><span style="color:#475569;">QTY รวม ${fmtQty(qty)}</span></summary>
+          <div style="padding:0 12px 8px;overflow:auto;"><table style="border-collapse:collapse;width:100%;font-size:12px;">
+            <thead><tr style="background:#f1f5f9;text-align:left;"><th style="padding:5px 8px;">PD</th><th style="padding:5px 8px;">ชื่องาน / Dwg</th><th style="padding:5px 8px;">โครงการ</th><th style="padding:5px 8px;text-align:center;">Op ที่ Ready</th><th style="padding:5px 8px;text-align:right;">QTY</th><th style="padding:5px 8px;text-align:center;">สถานะในแผน</th></tr></thead>
+            <tbody>${rowsHtml}</tbody></table></div>
+        </details>`;
+      }).join('');
+      body.innerHTML = html || '<div style="padding:30px;text-align:center;color:#94a3b8;">ไม่พบ Operation ที่ Ready to Start</div>';
+      body.querySelectorAll('.rts-pd').forEach(el => el.addEventListener('click', () => {
+        const pdModal = document.getElementById('pd-plan-modal');
+        if (pdModal) pdModal.style.zIndex = '100001';
+        window.dispatchEvent(new CustomEvent('open-pd-modal', { detail: { woId: el.dataset.pd } }));
+      }));
+    };
+    overlay.querySelector('#rts-search').addEventListener('input', render);
+    overlay.querySelector('#rts-expand').addEventListener('click', () => body.querySelectorAll('details.rts-group').forEach(d => { d.open = true; }));
+    overlay.querySelector('#rts-collapse').addEventListener('click', () => body.querySelectorAll('details.rts-group').forEach(d => { d.open = false; }));
+    render();
   }
 
   // "สรุปภาพรวมโครงการที่เลือก": popup for the projects currently ticked in the Project filter.
