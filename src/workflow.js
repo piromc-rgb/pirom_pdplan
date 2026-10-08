@@ -34,6 +34,8 @@ export class WorkflowController {
     this.expandedBacklogCards = new Set();
     // Switch beside "ตามตัวกรอง": ON = Backlog list shows only the PDs that pass the filters, OFF = all PDs (default)
     try { this.backlogFilteredOnly = localStorage.getItem('chaken_backlog_filtered_only') === '1'; } catch (e) { this.backlogFilteredOnly = false; }
+    // Status chips under Backlog Tools act as filters: 'notReady' | 'waiting' | 'ready' (several can be on = union; none = all)
+    this.backlogStatusFilter = new Set();
     this.initElements();
     this.bindEvents();
     // Plan + Mat data (re)loaded: refresh the Mat. readiness badges on the backlog cards
@@ -321,6 +323,7 @@ export class WorkflowController {
     let cntWaiting = 0;
     let cntReady = 0;
     let cntShown = 0; // PDs passing the active Priority / Project / Customer / PD Range filters
+    let cntListed = 0; // cards actually put in the list (after the filter switch and the status chips)
     if (this.state.workOrders.length === 0) {
       this.backlogList.innerHTML = '<div class="empty-list-hint">Backlog empty. All steps scheduled.</div>';
     } else {
@@ -610,11 +613,20 @@ export class WorkflowController {
           });
         });
 
-        // Switch ON: the Backlog list shows only the PDs that pass the active filters; OFF: all PDs
-        if (!(this.backlogFilteredOnly && !passesFilters)) this.backlogList.appendChild(backlogCard);
+        // Switch ON: the Backlog list shows only the PDs that pass the active filters; OFF: all PDs.
+        // The status chips (⛔ ไม่พร้อมผลิต / ⏳ รอ PD ลูก / ✅ พร้อมวางแผน) narrow the list further when selected.
+        const sf = this.backlogStatusFilter;
+        const matchesStatus = sf.size === 0 ||
+          (sf.has('notReady') && isNotReady) ||
+          (sf.has('waiting') && isWaitingChildren) ||
+          (sf.has('ready') && !isNotReady && !isWaitingChildren);
+        if (!(this.backlogFilteredOnly && !passesFilters) && matchesStatus) {
+          this.backlogList.appendChild(backlogCard);
+          cntListed++;
+        }
       });
-      if (this.backlogFilteredOnly && cntShown === 0) {
-        this.backlogList.innerHTML = '<div class="empty-list-hint">ไม่มี PD ใน Backlog ที่ผ่านตัวกรองที่เลือกอยู่</div>';
+      if (cntListed === 0 && (this.backlogFilteredOnly || this.backlogStatusFilter.size > 0)) {
+        this.backlogList.innerHTML = '<div class="empty-list-hint">ไม่มี PD ใน Backlog ตามเงื่อนไขที่เลือก</div>';
       }
     }
     this.updateBacklogStatusSummary(this.state.workOrders.length, cntNotReady, cntWaiting, cntReady, cntShown);
@@ -631,15 +643,23 @@ export class WorkflowController {
       el.innerHTML = '<span style="color: var(--text-secondary);">ยังไม่มีข้อมูล Mat. (กด 🔄 ที่หัวหน้าจอ)</span>';
       return;
     }
-    const chip = (label, n, color, bg, title) => `<span title="${title}" style="padding: 2px 8px; border-radius: 10px; font-weight: 700; white-space: nowrap; border: 1px solid ${color}; color: ${color}; background: ${bg};">${label} <strong>${n}</strong></span>`;
+    const chip = (key, label, n, color, bg, title) => {
+      const on = this.backlogStatusFilter.has(key);
+      return `<span class="backlog-status-chip" data-status="${key}" role="button" title="${title} · คลิกเพื่อ${on ? 'ยกเลิกการกรอง' : 'แสดงเฉพาะ PD กลุ่มนี้'}" style="cursor: pointer; user-select: none; padding: 2px 8px; border-radius: 10px; font-weight: 700; white-space: nowrap; border: ${on ? '2px' : '1px'} solid ${color}; color: ${on ? '#fff' : color}; background: ${on ? color : bg}; ${on ? 'box-shadow: 0 0 0 2px rgba(0,0,0,0.12);' : ''}">${label} <strong>${n}</strong></span>`;
+    };
     const waitingOn = this.state.requireChildPdsClosed !== false;
     const filterNote = shown < total
       ? `<label title="เปิด = แสดงเฉพาะ PD ใน Backlog ที่ผ่านตัวกรอง Priority / Project / Customer / PD Range ที่เปิดอยู่ · ปิด = แสดง PD ใน Backlog ทั้งหมด" style="width: 100%; display: flex; align-items: center; gap: 8px; color: #0369a1; font-weight: 700; cursor: pointer; user-select: none;"><span class="ios-toggle"><input type="checkbox" id="chk-backlog-filtered-only"${this.backlogFilteredOnly ? ' checked' : ''}><span class="ios-toggle-slider"></span></span><span>ตามตัวกรอง: ${shown} จาก ${total} PD</span></label>`
       : '';
     el.innerHTML = filterNote +
-      chip('⛔ ไม่พร้อมผลิต', notReady, '#b91c1c', 'rgba(185,28,28,0.10)', 'PD ที่ Mat ของ Op1 ยังไม่พร้อมผลิต') +
-      (waitingOn ? chip('⏳ รอ PD ลูก', waiting, '#b45309', 'rgba(245,158,11,0.15)', 'PD ที่ยังมี PD ลูกไม่ Closed (กติกาเปิดอยู่ใน Option ⚙)') : '') +
-      chip('✅ พร้อมวางแผน', ready, '#15803d', 'rgba(21,128,61,0.12)', 'PD ที่ไม่ติดทั้งสองเงื่อนไข');
+      chip('notReady', '⛔ ไม่พร้อมผลิต', notReady, '#b91c1c', 'rgba(185,28,28,0.10)', 'PD ที่ Mat ของ Op1 ยังไม่พร้อมผลิต') +
+      (waitingOn ? chip('waiting', '⏳ รอ PD ลูก', waiting, '#b45309', 'rgba(245,158,11,0.15)', 'PD ที่ยังมี PD ลูกไม่ Closed (กติกาเปิดอยู่ใน Option ⚙)') : '') +
+      chip('ready', '✅ พร้อมวางแผน', ready, '#15803d', 'rgba(21,128,61,0.12)', 'PD ที่ไม่ติดทั้งสองเงื่อนไข');
+    el.querySelectorAll('.backlog-status-chip').forEach(c => c.addEventListener('click', () => {
+      const k = c.dataset.status;
+      if (this.backlogStatusFilter.has(k)) this.backlogStatusFilter.delete(k); else this.backlogStatusFilter.add(k);
+      this.render();
+    }));
     const sw = el.querySelector('#chk-backlog-filtered-only');
     if (sw) sw.addEventListener('change', () => {
       this.backlogFilteredOnly = sw.checked;
