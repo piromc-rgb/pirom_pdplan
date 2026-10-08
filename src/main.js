@@ -1867,7 +1867,7 @@ class App {
       
       const currentOffset = state.timelineOffset || 0.0;
       const newOffset = currentOffset + direction * step;
-      state.setTimelineOffset(newOffset);
+      (state.ganttController ? state.ganttController.panTimelineTo(newOffset) : state.setTimelineOffset(newOffset));
     };
 
     if (btnTimelinePrev) {
@@ -1899,7 +1899,7 @@ class App {
         const targetOffset = targetWorkingHour - config.totalHours / 3;
         const snap = config.snapHours;
         const snappedOffset = Math.round(targetOffset / snap) * snap;
-        state.setTimelineOffset(snappedOffset);
+        (state.ganttController ? state.ganttController.panTimelineTo(snappedOffset) : state.setTimelineOffset(snappedOffset));
         timelineGotoDateInput.style.display = 'none';
       });
     }

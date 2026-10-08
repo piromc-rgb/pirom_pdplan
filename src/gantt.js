@@ -298,7 +298,7 @@ export class GanttController {
         const dY = currentMouseY - startMouseY;
         this.boardWrapper.scrollTop = startScrollTop - dY;
 
-        this.state.setTimelineOffset(newOffset);
+        this.panTimelineTo(newOffset);
         this.updateStickyIndicators();
         animationFrameId = null;
       };
@@ -400,7 +400,7 @@ export class GanttController {
           
           const currentOffset = this.state.timelineOffset || 0.0;
           const newOffset = currentOffset + direction * step;
-          this.state.setTimelineOffset(newOffset);
+          this.panTimelineTo(newOffset);
         }
       } else if (isUp || isDownKey) {
         // Vertical panning
@@ -691,6 +691,18 @@ export class GanttController {
           ticks: ['08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00 (OT)'],
           snapHours: 0.5 
         };
+    }
+  }
+
+  // Pan / jump along the timeline: only the board is redrawn. The other panels (Backlog, Resources, Kiosk...) do not
+  // depend on the timeline offset, so skipping their render makes dragging the board much lighter.
+  panTimelineTo(offset) {
+    this.state.setTimelineOffset(offset, true);
+    try {
+      this.render();
+    } catch (err) {
+      console.error('[gantt] pan render failed, falling back to a full refresh:', err);
+      this.state.notify();
     }
   }
 
@@ -2733,7 +2745,7 @@ export class GanttController {
               const targetOffset = hourVal - config.totalHours / 3;
               const snap = config.snapHours || 1;
               const snappedOffset = Math.round(targetOffset / snap) * snap;
-              this.state.setTimelineOffset(snappedOffset);
+              this.panTimelineTo(snappedOffset);
             });
 
             svg.appendChild(badgeGroup);
@@ -2785,7 +2797,7 @@ export class GanttController {
               const targetOffset = hourVal - config.totalHours / 3;
               const snap = config.snapHours || 1;
               const snappedOffset = Math.round(targetOffset / snap) * snap;
-              this.state.setTimelineOffset(snappedOffset);
+              this.panTimelineTo(snappedOffset);
             });
 
             svg.appendChild(badgeGroup);
@@ -2831,7 +2843,7 @@ export class GanttController {
               const targetOffset = hourVal - config.totalHours / 3;
               const snap = config.snapHours || 1;
               const snappedOffset = Math.round(targetOffset / snap) * snap;
-              this.state.setTimelineOffset(snappedOffset);
+              this.panTimelineTo(snappedOffset);
             });
 
             svg.appendChild(badgeGroup);
@@ -3356,7 +3368,7 @@ export class GanttController {
 
     // Use silent scale update to avoid triggering recompute & duplicate render
     this.state.setActiveScale(targetScale, shouldRecompute, true);
-    this.state.setTimelineOffset(targetOffset, false);
+    this.state.setTimelineOffset(targetOffset, false); // scale changed too: refresh every panel
   }
 
   showWorkCenterPlanModal(machineName) {
