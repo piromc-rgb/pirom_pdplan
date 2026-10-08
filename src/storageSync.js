@@ -1084,7 +1084,7 @@ export class StorageSyncManager {
           }));
         } catch (e) {}
       }
-      if (data.workCenterOrder) this.state.workCenterOrder = data.workCenterOrder;
+      if (data.workCenterOrder) this.state.applyRemoteWorkCenterOrder(data.workCenterOrder, data.workCenterOrderAt);
       if (data.timelineOffset !== undefined) this.state.timelineOffset = data.timelineOffset;
       if (data.activeScale) this.state.activeScale = data.activeScale;
       // RESET: legacy stored completed-PD list is dropped (completion is derived from Operation statuses now)

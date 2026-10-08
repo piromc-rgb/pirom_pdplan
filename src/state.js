@@ -225,6 +225,18 @@ class CentralState {
       }
     } catch (e) {}
 
+    // The Work Center order the user arranged last (drag on the board / Setup) wins over older copies
+    this.wcOrderUpdatedAt = 0;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const savedOrder = JSON.parse(localStorage.getItem('chaken_wc_order') || 'null');
+        if (savedOrder && Array.isArray(savedOrder.order) && savedOrder.order.length > 0) {
+          this.workCenterOrder = this.normalizeWorkCenterOrder(savedOrder.order);
+          this.wcOrderUpdatedAt = Number(savedOrder.t) || 0;
+        }
+      }
+    } catch (e) {}
+
     // Employees with their skills
     this.employees = [
       { name: 'John Doe', activeMachine: 'DEA023', skills: { 'DEA023': 'Expert', 'DEA012': 'Intermediate' }, status: 'Active' },
@@ -439,6 +451,7 @@ class CentralState {
     this.saveStateToHistory();
     this.workCenters = this.sanitizeWorkCenters(newWorkCenters);
     this.workCenterOrder = newOrder;
+    this.persistWorkCenterOrder();
 
     try {
       if (typeof localStorage !== 'undefined') {
@@ -563,6 +576,34 @@ class CentralState {
     this.notify();
   }
 
+  // Keep only existing Work Centers; any Work Center missing from the order goes to the end
+  normalizeWorkCenterOrder(order) {
+    const keys = Object.keys(this.workCenters || {});
+    const out = (order || []).filter((k, i, a) => keys.includes(k) && a.indexOf(k) === i);
+    keys.forEach(k => { if (!out.includes(k)) out.push(k); });
+    return out;
+  }
+
+  // Remember the order (this browser) and stamp it so the newest arrangement wins when the plan is loaded again
+  persistWorkCenterOrder(stamp = true) {
+    if (stamp) this.wcOrderUpdatedAt = Date.now();
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('chaken_wc_order', JSON.stringify({ order: this.workCenterOrder, t: this.wcOrderUpdatedAt }));
+      }
+    } catch (e) {}
+  }
+
+  // Order that came with a plan loaded from the cloud / file: used only when it is newer than the one remembered here
+  applyRemoteWorkCenterOrder(order, at) {
+    if (!Array.isArray(order) || order.length === 0) return;
+    const t = Number(at) || 0;
+    if (this.wcOrderUpdatedAt && t < this.wcOrderUpdatedAt) return; // the order remembered here is newer
+    this.workCenterOrder = this.normalizeWorkCenterOrder(order);
+    if (t) this.wcOrderUpdatedAt = t;
+    this.persistWorkCenterOrder(false);
+  }
+
   reorderWorkCenters(draggedName, targetName) {
     const fromIdx = this.workCenterOrder.indexOf(draggedName);
     const toIdx = this.workCenterOrder.indexOf(targetName);
@@ -570,6 +611,7 @@ class CentralState {
       this.saveStateToHistory();
       this.workCenterOrder.splice(fromIdx, 1);
       this.workCenterOrder.splice(toIdx, 0, draggedName);
+      this.persistWorkCenterOrder();
       this.notify();
     }
   }
@@ -2792,6 +2834,7 @@ class CentralState {
       customerColors: this.customerColors || {},
       workCenters: this.workCenters,
       workCenterOrder: this.workCenterOrder,
+      workCenterOrderAt: this.wcOrderUpdatedAt || 0,
       timelineOffset: this.timelineOffset,
       activeScale: this.activeScale,
       groupSameItem: this.groupSameItem !== false,
@@ -3146,7 +3189,7 @@ class CentralState {
       if (data.projectColors) this.projectColors = data.projectColors;
       if (data.customerColors) this.customerColors = data.customerColors;
       if (data.workCenters) this.workCenters = this.sanitizeWorkCenters(data.workCenters);
-      if (data.workCenterOrder) this.workCenterOrder = data.workCenterOrder;
+      if (data.workCenterOrder) this.applyRemoteWorkCenterOrder(data.workCenterOrder, data.workCenterOrderAt);
       if (data.timelineOffset !== undefined) this.timelineOffset = data.timelineOffset;
       if (data.activeScale) this.activeScale = data.activeScale;
       // RESET: the old stored completed-PD list is no longer used (completion is derived from Operation statuses),
