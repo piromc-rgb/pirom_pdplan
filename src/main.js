@@ -3341,19 +3341,34 @@ class App {
   }
 
   renderAll() {
-    this.workflow.render();
-    
+    // Each part is drawn on its own: an error in the Backlog panel (or any other part) must never leave the board
+    // blank. If the Gantt board itself fails (e.g. data still being replaced) it is drawn once more shortly after.
+    const safe = (label, fn) => {
+      try { fn(); return true; } catch (err) { console.error(`[renderAll] ${label} failed:`, err); return false; }
+    };
+    safe('backlog', () => this.workflow.render());
+
     if (state.ganttMode === 'assembly') {
-      if (this.assemblyTree) this.assemblyTree.show();
-      this.setLeftSidebarAssemblyMode(true);
+      safe('assembly', () => {
+        if (this.assemblyTree) this.assemblyTree.show();
+        this.setLeftSidebarAssemblyMode(true);
+      });
     } else {
-      if (this.assemblyTree) this.assemblyTree.hide();
-      this.setLeftSidebarAssemblyMode(false);
-      this.gantt.render();
+      safe('assembly-hide', () => {
+        if (this.assemblyTree) this.assemblyTree.hide();
+        this.setLeftSidebarAssemblyMode(false);
+      });
+      if (!safe('gantt', () => this.gantt.render())) {
+        try { this.gantt.showToast?.('⚠️ วาดบอร์ดไม่สำเร็จ กำลังลองวาดใหม่ (ดูรายละเอียดใน Console)'); } catch (e) { /* ignore */ }
+        clearTimeout(this._ganttRetryTimer);
+        this._ganttRetryTimer = setTimeout(() => {
+          safe('gantt (retry)', () => { if (state.ganttMode !== 'assembly') this.gantt.render(); });
+        }, 400);
+      }
     }
 
-    this.resources.render();
-    this.kiosk.render();
+    safe('resources', () => this.resources.render());
+    safe('kiosk', () => this.kiosk.render());
     
     const checkShowAllWc = document.getElementById('check-show-all-wc');
     if (checkShowAllWc) {

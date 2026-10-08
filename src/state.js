@@ -478,7 +478,10 @@ class CentralState {
   notify() {
     this._oeeCache = null;
     this._childBlockCache = null;
-    this.subscribers.forEach(callback => callback(this));
+    // One failing subscriber (e.g. a render error) must not stop the others, nor skip the debounced save below
+    this.subscribers.forEach(callback => {
+      try { callback(this); } catch (err) { console.error('[state.notify] subscriber failed:', err); }
+    });
     
     // Debounced save to Temp folder (pd.md and Plan.json in OS Temp) when in EDIT mode
     if (this._isLoadingData) return;
