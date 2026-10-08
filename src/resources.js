@@ -569,7 +569,10 @@ export class ResourcesController {
     const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const fmtQty = (v) => v === null || v === undefined ? '-' : Number(Number(v).toFixed(2)).toLocaleString('en-US');
     const data = state.getReadyToStartByWorkCenter();
-    const groups = [...data.entries()].map(([wc, rows]) => ({ wc, rows, qty: rows.reduce((a, r) => a + (Number(r.qty) || 0), 0) }))
+    // Only the Work Centers ticked in the Resources list (Work Center Load & OEE checkboxes)
+    const allWcCount = data.size;
+    const groups = [...data.entries()].filter(([wc]) => state.activeWorkCenters[wc] !== false)
+      .map(([wc, rows]) => ({ wc, rows, qty: rows.reduce((a, r) => a + (Number(r.qty) || 0), 0) }))
       .sort((a, b) => b.rows.length - a.rows.length || a.wc.localeCompare(b.wc));
     const totalPd = new Set(groups.flatMap(g => g.rows.map(r => r.pdId))).size;
     const old = document.getElementById('ready-to-start-popup');
@@ -581,8 +584,8 @@ export class ResourcesController {
       <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:1100px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
         <div style="padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <div>
-            <div style="font-size:15px;font-weight:700;">▶ Operation ที่ Ready to Start แยกตาม Work Center</div>
-            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">${groups.length} Work Center · ${totalPd} PD · จากไฟล์ Status Overview (ไม่รวม PD ที่ Closed / แจ้งยกเลิก / Complete ครบแล้ว) · QTY = จำนวนชิ้นของ PD</div>
+            <div style="font-size:15px;font-weight:700;">▶ Production Order ที่ Ready to Start ตาม Work Center ที่เลือก</div>
+            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">เฉพาะ Work Center ที่เลือก ${groups.length} จาก ${allWcCount} · ${totalPd} PD · จากไฟล์ Status Overview (ไม่รวม PD ที่ Closed / แจ้งยกเลิก / Complete ครบแล้ว) · QTY = จำนวนชิ้นของ PD</div>
           </div>
           <button type="button" id="rts-x" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
         </div>
@@ -590,6 +593,7 @@ export class ResourcesController {
           <input id="rts-search" type="text" placeholder="ค้นหา Work Center / เลข PD / ชื่องาน / โครงการ..." style="flex:1;min-width:220px;padding:7px 10px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;">
           <button type="button" id="rts-expand" style="padding:6px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-size:11.5px;">ขยายทั้งหมด</button>
           <button type="button" id="rts-collapse" style="padding:6px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-size:11.5px;">ยุบทั้งหมด</button>
+          <button type="button" id="rts-export" style="padding:6px 12px;border:1px solid #16a34a;border-radius:6px;background:#f0fdf4;color:#15803d;font-weight:700;cursor:pointer;font-size:11.5px;" title="ส่งออกรายการที่แสดงอยู่เป็นไฟล์ CSV">📥 Export to CSV</button>
         </div>
         <div id="rts-body" style="padding:0 18px 12px;overflow:auto;display:flex;flex-direction:column;gap:8px;"></div>
         <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;border-top:1px solid #e2e8f0;"><button type="button" id="rts-close" style="padding:6px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">ปิด</button></div>
@@ -627,13 +631,38 @@ export class ResourcesController {
             <tbody>${rowsHtml}</tbody></table></div>
         </details>`;
       }).join('');
-      body.innerHTML = html || '<div style="padding:30px;text-align:center;color:#94a3b8;">ไม่พบ Operation ที่ Ready to Start</div>';
+      body.innerHTML = html || `<div style="padding:30px;text-align:center;color:#94a3b8;">${groups.length === 0 ? 'ไม่มี Work Center ที่เลือกที่มี Operation Ready to Start (ติ๊กเลือก Work Center ในรายการ Work Center Load & OEE)' : 'ไม่พบ Operation ที่ Ready to Start'}</div>`;
       body.querySelectorAll('.rts-pd').forEach(el => el.addEventListener('click', () => {
         const pdModal = document.getElementById('pd-plan-modal');
         if (pdModal) pdModal.style.zIndex = '100001';
         window.dispatchEvent(new CustomEvent('open-pd-modal', { detail: { woId: el.dataset.pd } }));
       }));
     };
+    // Export the rows currently shown (selected Work Centers, after the search filter) to CSV
+    overlay.querySelector('#rts-export').addEventListener('click', () => {
+      const q = overlay.querySelector('#rts-search').value.trim().toLowerCase();
+      const qcell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const lines = [['Work Center', 'ชื่อ Work Center', 'Production Order', 'Dwg No', 'ชื่องาน', 'โครงการ', 'Op ที่ Ready', 'ชื่อ Operation', 'QTY', 'สถานะในแผน'].map(qcell).join(',')];
+      let n = 0;
+      groups.forEach(g => {
+        const wcMatch = q && state.getMachineDisplayName(g.wc).toLowerCase().includes(q);
+        g.rows.filter(r => !q || wcMatch || `${r.pdId} ${r.description} ${r.project} ${r.dwgNo}`.toLowerCase().includes(q)).forEach(r => {
+          n++;
+          lines.push([g.wc, state.workCenters[g.wc]?.name || '', r.pdId, r.dwgNo, r.description, r.project, r.stepNum ?? '', r.opName, r.qty ?? '', r.where === '-' ? 'นอกแผน' : r.where].map(qcell).join(','));
+        });
+      });
+      if (n === 0) { state.ganttController?.showToast?.('ไม่มีรายการให้ Export', 'error'); return; }
+      const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Ready_to_Start_by_WorkCenter_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      state.ganttController?.showToast?.(`📥 Export ${n} รายการเป็น CSV แล้ว`, 'success');
+    });
     overlay.querySelector('#rts-search').addEventListener('input', render);
     overlay.querySelector('#rts-expand').addEventListener('click', () => body.querySelectorAll('details.rts-group').forEach(d => { d.open = true; }));
     overlay.querySelector('#rts-collapse').addEventListener('click', () => body.querySelectorAll('details.rts-group').forEach(d => { d.open = false; }));
