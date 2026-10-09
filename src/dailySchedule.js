@@ -264,7 +264,14 @@ export class DailyScheduleController {
     }
     
     this.emptyMsg.classList.add('hidden');
-    
+
+    // PD -> name of the Operation whose imported status is "Ready to Start" (same data as the
+    // Resources "Ready to Start" list), looked up once for every card in this view.
+    const readyToStartByPd = new Map();
+    (this.state.getReadyToStartByWorkCenter?.() || new Map()).forEach(rows => {
+      rows.forEach(r => { if (!readyToStartByPd.has(r.pdId)) readyToStartByPd.set(r.pdId, r.opName); });
+    });
+
     targetJobs.forEach(job => {
       const dateStart = this.state.workingHourToDate(job.startHour);
       const dateEnd = this.state.workingHourToDate(job.startHour + job.estHours);
@@ -320,6 +327,14 @@ export class DailyScheduleController {
         ? `<span>📦 สถานะเบิกวัสดุ: <strong class="${issueSummary.tone === 'notready' ? 'mat-status-blink' : ''}" style="color: ${issueTones[issueSummary.tone]};">${issueSummary.label}${issueSummary.count < issueSummary.total ? ` (${issueSummary.count}/${issueSummary.total} รายการ)` : ''}</strong></span>`
         : '';
 
+      const readyOpName = readyToStartByPd.get(job.woId) || '';
+      const readyOpHtml = readyOpName
+        ? `<span>▶ Op ปัจจุบัน: <strong class="rev-blink">${readyOpName}</strong></span>`
+        : '';
+
+      const latestRev = this.state.getLatestRevision ? this.state.getLatestRevision(job.woId) : null;
+      const revHtml = latestRev ? ` <span class="rev-blink" title="Rev ${latestRev.rev} (ปรับปรุงแบบล่าสุด) · แจ้ง ${latestRev.noticeDate || '-'} · ใบแจ้ง ${latestRev.noticeNo || '-'}">Rev ${latestRev.rev}</span>` : '';
+
       // If we are in weekly/monthly view, prepend the date to the card time block
       let datePrefix = '';
       if (viewMode !== 'daily') {
@@ -356,7 +371,7 @@ export class DailyScheduleController {
         <!-- Job details: 3 fixed lines -->
         <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding-left: 4px;">
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
-            <span style="font-size: 13px; color: var(--text-primary);"><strong style="color: var(--accent-teal);">PD ID: ${job.woId}</strong> &nbsp;·&nbsp; ชื่องาน: <strong>${job.partName}</strong> &nbsp;·&nbsp; รหัสแบบ: <strong style="color: var(--accent-cyan); font-family: monospace;">${job.dwgNo || 'N/A'}</strong> &nbsp;·&nbsp; จำนวนผลิต: <strong>${job.qty}</strong> pcs</span>
+            <span style="font-size: 13px; color: var(--text-primary);"><strong style="color: var(--accent-teal);">PD ID: ${job.woId}</strong> &nbsp;·&nbsp; ชื่องาน: <strong>${job.partName}</strong> &nbsp;·&nbsp; รหัสแบบ: <strong style="color: var(--accent-cyan); font-family: monospace;">${job.dwgNo || 'N/A'}</strong>${revHtml} &nbsp;·&nbsp; จำนวนผลิต: <strong>${job.qty}</strong> pcs</span>
             <span class="priority-badge ${job.priority ? job.priority.toLowerCase() : 'normal'}" style="font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 700; flex-shrink: 0;">${job.priority || 'Normal'}</span>
           </div>
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">
@@ -366,6 +381,7 @@ export class DailyScheduleController {
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">
             <span>📥 Operation ก่อนหน้า: <strong style="color: var(--text-primary);">${prevWCStr}</strong></span>
             <span>📤 Operation ถัดไป: <strong style="color: var(--text-primary);">${nextWCStr}</strong></span>
+            ${readyOpHtml}
             ${issueHtml}
           </div>
         </div>
@@ -472,9 +488,16 @@ export class DailyScheduleController {
     };
 
     const header = ['ลำดับ', 'วันที่', 'เวลาเริ่ม', 'เวลาสิ้นสุด', 'Duration (ชม.)', 'OT', 'Priority', 'เลขที่ PD', 'ชื่องาน',
-      'รหัสแบบ (Dwg)', 'จำนวนผลิต', 'Customer', 'เลขที่ SO', 'Op No.', 'Operation ก่อนหน้า', 'Operation ถัดไป', 'สถานะเบิกวัสดุ',
+      'รหัสแบบ (Dwg)', 'จำนวนผลิต', 'Customer', 'เลขที่ SO', 'Operation ที่ Ready to Start', 'Op No.', 'Operation ก่อนหน้า', 'Operation ถัดไป', 'สถานะเบิกวัสดุ',
       'Mat. Op1 (รหัส)', 'Mat. Op1 (รายละเอียด)', 'Mat. Op1 (จำนวน)', 'Mat. Op1 (สถานะ)'];
-    const widths = [6, 11, 9, 11, 13, 5, 9, 14, 38, 18, 11, 26, 16, 7, 34, 34, 26, 16, 36, 14, 18];
+    const widths = [6, 11, 9, 11, 13, 5, 9, 14, 38, 18, 11, 26, 24, 16, 7, 34, 34, 26, 16, 36, 14, 18];
+
+    // PD -> name of the Operation whose imported status is "Ready to Start" (first match; a PD normally
+    // has at most one Operation ready at a time), reusing the same data as the Resources "Ready to Start" list.
+    const readyToStartByPd = new Map();
+    (this.state.getReadyToStartByWorkCenter?.() || new Map()).forEach(rows => {
+      rows.forEach(r => { if (!readyToStartByPd.has(r.pdId)) readyToStartByPd.set(r.pdId, r.opName); });
+    });
 
     const wb = XLSX.utils.book_new();
     let sheets = 0;
@@ -491,9 +514,12 @@ export class DailyScheduleController {
         const issue = this.state.getStepMaterialIssueSummary(job.woId, job.stepNum);
         const issueText = issue ? issue.label + (issue.count < issue.total ? ` (${issue.count}/${issue.total} รายการ)` : '') : '';
         const mats = !prevStep ? (this.state.getStepMaterialsList(job.woId, job.stepNum) || []) : [];
+        const rev = this.state.getLatestRevision ? this.state.getLatestRevision(job.woId) : null;
+        const dwgCell = (job.dwgNo || '') + (rev ? ` (Rev ${rev.rev})` : '');
         rows.push([
           idx + 1, fmtDate(dStart), fmtTime(dStart), fmtTime(dEnd), Number(Number(job.estHours || 0).toFixed(2)), hasOT ? 'OT' : '',
-          job.priority || '', job.woId, job.partName || '', job.dwgNo || '', job.qty ?? '', job.customer || '', job.project || '',
+          job.priority || '', job.woId, job.partName || '', dwgCell, job.qty ?? '', job.customer || '', job.project || '',
+          readyToStartByPd.get(job.woId) || '',
           job.stepNum ?? '', prevWCStr, nextWCStr, issueText,
           mats.map(m => m.mat).join(' | '),
           mats.map(m => m.desc || '').join(' | '),
