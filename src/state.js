@@ -3510,6 +3510,24 @@ class CentralState {
     return '';
   }
 
+  // Display-ready { label, color } for a PD's Production Order status: user-cancelled ("ยกเลิกการผลิต")
+  // takes priority, then the raw imported Order Status (Created/Released/Printed/Active/Closed) mapped to a
+  // Thai label + colour. Returns null when there is nothing to show (unknown PD, no status yet).
+  getPdOrderStatusDisplay(pdId) {
+    if (!pdId) return null;
+    if (this.isPdCancelled(pdId)) return { label: 'ยกเลิกการผลิต', color: '#dc2626' };
+    const raw = String(this.getPdOrderStatus(pdId) || '').trim();
+    if (!raw) return null;
+    const STYLES = {
+      created: { label: 'Created (สร้างใบสั่ง)', color: '#64748b' },
+      released: { label: 'Released (ปล่อยงาน)', color: '#0284c7' },
+      printed: { label: 'Printed (พิมพ์ใบสั่งแล้ว)', color: '#b45309' },
+      active: { label: 'Active (กำลังผลิต)', color: '#0891b2' },
+      closed: { label: 'Closed (ปิดงาน)', color: '#15803d' }
+    };
+    return STYLES[raw.toLowerCase()] || { label: raw, color: '#64748b' };
+  }
+
   // Project / SO of a PD as known by the live plan (backlog or board); '' when unknown.
   _pdProject(pdId) {
     const wo = (this.workOrders || []).find(w => w.id === pdId);

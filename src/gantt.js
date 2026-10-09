@@ -3770,6 +3770,21 @@ export class GanttController {
       stepCountEl.textContent = `(รวมทั้งหมด ${totalStepsCount} ขั้นตอน)`;
     }
 
+    const orderStatusBadgeEl = document.getElementById('pd-plan-order-status-badge');
+    if (orderStatusBadgeEl) {
+      const orderStatus = typeof this.state.getPdOrderStatusDisplay === 'function' ? this.state.getPdOrderStatusDisplay(woId) : null;
+      if (orderStatus) {
+        orderStatusBadgeEl.textContent = orderStatus.label;
+        orderStatusBadgeEl.style.color = orderStatus.color;
+        orderStatusBadgeEl.style.borderColor = orderStatus.color;
+        orderStatusBadgeEl.style.background = `${orderStatus.color}22`;
+        orderStatusBadgeEl.style.border = `1px solid ${orderStatus.color}`;
+        orderStatusBadgeEl.style.display = 'inline-block';
+      } else {
+        orderStatusBadgeEl.style.display = 'none';
+      }
+    }
+
     // 4. Render Step Rows
     tbody.innerHTML = '';
 

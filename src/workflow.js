@@ -405,6 +405,14 @@ export class WorkflowController {
           }
         } catch (e) { matBadgeHtml = ''; }
 
+        let orderStatusBadgeHtml = '';
+        try {
+          const orderStatus = typeof this.state.getPdOrderStatusDisplay === 'function' ? this.state.getPdOrderStatusDisplay(wo.id) : null;
+          if (orderStatus) {
+            orderStatusBadgeHtml = `<span style="font-size:8.5px;font-weight:800;padding:1px 6px;border-radius:4px;white-space:nowrap;border:1px solid ${orderStatus.color};color:${orderStatus.color};background:${orderStatus.color}1a;">${orderStatus.label}</span>`;
+          }
+        } catch (e) { orderStatusBadgeHtml = ''; }
+
         let childWaitBadgeHtml = '';
         try {
           if (this.state.isPdBlockedByChildren(wo.id)) {
@@ -456,6 +464,7 @@ export class WorkflowController {
               <span>Add to Plan</span>
             </button>
           </div>
+          ${orderStatusBadgeHtml ? `<div style="display: flex; justify-content: flex-end; margin-bottom: 4px;">${orderStatusBadgeHtml}</div>` : ''}
           <div class="card-details btn-toggle-steps" data-id="${wo.id}" style="margin-bottom: ${isStepsExpanded ? '6px' : '8px'}; cursor: pointer; color: var(--accent-teal); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; user-select: none;">
             <span>${isStepsExpanded ? '▲' : '▼'} Routing Steps (${wo.steps.length})</span>
           </div>
