@@ -3772,16 +3772,29 @@ export class GanttController {
 
     const orderStatusBadgeEl = document.getElementById('pd-plan-order-status-badge');
     if (orderStatusBadgeEl) {
-      const orderStatus = typeof this.state.getPdOrderStatusDisplay === 'function' ? this.state.getPdOrderStatusDisplay(woId) : null;
-      if (orderStatus) {
-        orderStatusBadgeEl.textContent = orderStatus.label;
-        orderStatusBadgeEl.style.color = orderStatus.color;
-        orderStatusBadgeEl.style.borderColor = orderStatus.color;
-        orderStatusBadgeEl.style.background = `${orderStatus.color}22`;
-        orderStatusBadgeEl.style.border = `1px solid ${orderStatus.color}`;
-        orderStatusBadgeEl.style.display = 'inline-block';
-      } else {
+      const applyOrderStatus = () => {
+        const orderStatus = typeof this.state.getPdOrderStatusDisplay === 'function' ? this.state.getPdOrderStatusDisplay(woId) : null;
+        if (orderStatus) {
+          orderStatusBadgeEl.textContent = orderStatus.label;
+          orderStatusBadgeEl.style.color = orderStatus.color;
+          orderStatusBadgeEl.style.borderColor = orderStatus.color;
+          orderStatusBadgeEl.style.background = `${orderStatus.color}22`;
+          orderStatusBadgeEl.style.border = `1px solid ${orderStatus.color}`;
+          orderStatusBadgeEl.style.display = 'inline-block';
+          return true;
+        }
         orderStatusBadgeEl.style.display = 'none';
+        return false;
+      };
+      const shown = applyOrderStatus();
+      // Plan + Mat (Order Status source) may not be loaded yet if the modal was opened right after
+      // app start: fetch it and re-apply once ready, but only if this same PD's modal is still open.
+      const matsEmpty = !this.state.planMaterials || Object.keys(this.state.planMaterials).length === 0;
+      if (!shown && matsEmpty && this.state.storageSync?.fetchPlanMaterials) {
+        this.state.storageSync.fetchPlanMaterials().then(() => {
+          const inputPdId = document.getElementById('edit-pd-id');
+          if (inputPdId && inputPdId.value === woId && !modal.classList.contains('hidden')) applyOrderStatus();
+        }).catch(() => {});
       }
     }
 
