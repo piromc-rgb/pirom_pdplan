@@ -310,7 +310,7 @@ Are you sure you want to delete all Production Orders in the Backlog?`)&&(this.s
             </div>
           `});let l=e.id.match(/^(.*)-(\d+)$/),p=!!l,m=n.has(e.id),g=``;m?g=`<span class="pd-relation-indicator parent" title="Parent (แม่)">M</span>`:p&&(g=`<span class="pd-relation-indicator child" title="Child (ลูก) ของ ${l[1]}">C</span>`);let _=this.state.getScaledDueHour(e);_!==null&&this.formatDateOnly(_,this.state.activeScale);let v=this.expandedBacklogCards.has(e.id),y=``,b=!1,x=!1;try{let t=Math.min(...(e.steps||[]).map(e=>Number(e.stepNum)||10)),n=e.steps&&e.steps.length?this.state.getStepMaterialIssueSummary(e.id,t):null;if(n){let e={notready:`border:1.5px solid #b91c1c;color:#b91c1c;background:rgba(185,28,28,0.12);`,ready:`border:1.5px solid #15803d;color:#15803d;background:rgba(21,128,61,0.12);`,ok:`border:1px solid #16a34a;color:#15803d;background:rgba(22,163,74,0.15);`,warn:`border:1px solid #d97706;color:#b45309;background:rgba(245,158,11,0.15);`,info:`border:1px solid #0284c7;color:#0369a1;background:rgba(2,132,199,0.15);`,old:`border:1px solid #7c3aed;color:#6d28d9;background:rgba(124,58,237,0.12);`},t=n.count<n.total?` (${n.count}/${n.total})`:``;n.tone===`notready`&&(b=!0),y=`<span class="${n.tone===`notready`?`mat-status-blink`:``}" title="สถานะ Mat. ของ Op01" style="font-size:8.5px;font-weight:800;padding:1px 6px;border-radius:4px;white-space:nowrap;${e[n.tone]||e.info}">${n.label}${t}</span>`}}catch{y=``}let S=``;try{let t=typeof this.state.getPdOrderStatusDisplay==`function`?this.state.getPdOrderStatusDisplay(e.id):null;t&&(S=`<span style="font-size:8.5px;font-weight:800;padding:1px 6px;border-radius:4px;white-space:nowrap;border:1px solid ${t.color};color:${t.color};background:${t.color}1a;">${t.label}</span>`)}catch{S=``}let C=``;try{if(this.state.isPdBlockedByChildren(e.id)){x=!0;let t=this.state.getOpenChildPdsForPlanning(e.id).map(e=>e.pdId);C=`<span title="รอ PD ลูกให้ Closed ก่อน: ${t.join(`, `)}" style="font-size:8.5px;font-weight:800;padding:1px 6px;border-radius:4px;white-space:nowrap;border:1px solid #b45309;color:#b45309;background:rgba(245,158,11,0.15);">⏳ รอ PD ลูก (${t.length})</span>`}}catch{C=``}let w={id:e.id,woId:e.id,priority:e.priority,project:e.project,customer:e.customer},T=u(w,this.state)&&d(w,this.state)&&f(w,this.state)&&h(w,this.state);T&&(s++,b&&i++,x&&a++,!b&&!x&&o++),t.innerHTML=`
           <div class="card-top" style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap;"><span class="card-id" style="cursor: pointer;" title="คลิกเพื่อแก้ไขข้อมูล Production Order นี้">${e.id}</span>${y}${C}</span>
+            <span style="display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap;"><span class="card-id" style="cursor: pointer;" title="คลิกเพื่อแก้ไขข้อมูล Production Order นี้">${e.id}</span>${y}</span>
             <div style="display: flex; align-items: center; gap: 6px;">
               ${g}
               <button class="btn-edit-pd" data-id="${e.id}" title="แก้ไขข้อมูล Production Order นี้" style="background: none; border: none; color: var(--accent-teal); cursor: pointer; padding: 2px; display: flex; align-items: center; justify-content: center; font-size: 11px; transition: opacity 0.2s;">
@@ -328,6 +328,7 @@ Are you sure you want to delete all Production Orders in the Backlog?`)&&(this.s
               <span class="priority-badge ${String(e.priority??`Normal`).toLowerCase()}">${e.priority??`Normal`}</span>
             </div>
           </div>
+          ${C||S?`<div style="display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 4px;"><span>${C}</span><span>${S}</span></div>`:``}
           <div class="card-part">${e.partName}</div>
           <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px;">
             <span style="font-size: 8.5px; color: var(--accent-teal); font-weight: 500;">${e.dwgNo?`DWG: ${e.dwgNo}`:``}</span>
@@ -339,7 +340,6 @@ Are you sure you want to delete all Production Orders in the Backlog?`)&&(this.s
               <span>Add to Plan</span>
             </button>
           </div>
-          ${S?`<div style="display: flex; justify-content: flex-end; margin-bottom: 4px;">${S}</div>`:``}
           <div class="card-details btn-toggle-steps" data-id="${e.id}" style="margin-bottom: ${v?`6px`:`8px`}; cursor: pointer; color: var(--accent-teal); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; user-select: none;">
             <span>${v?`▲`:`▼`} Routing Steps (${e.steps.length})</span>
           </div>

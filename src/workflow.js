@@ -435,7 +435,7 @@ export class WorkflowController {
 
         backlogCard.innerHTML = `
           <div class="card-top" style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap;"><span class="card-id" style="cursor: pointer;" title="คลิกเพื่อแก้ไขข้อมูล Production Order นี้">${wo.id}</span>${matBadgeHtml}${childWaitBadgeHtml}</span>
+            <span style="display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap;"><span class="card-id" style="cursor: pointer;" title="คลิกเพื่อแก้ไขข้อมูล Production Order นี้">${wo.id}</span>${matBadgeHtml}</span>
             <div style="display: flex; align-items: center; gap: 6px;">
               ${indicatorHtml}
               <button class="btn-edit-pd" data-id="${wo.id}" title="แก้ไขข้อมูล Production Order นี้" style="background: none; border: none; color: var(--accent-teal); cursor: pointer; padding: 2px; display: flex; align-items: center; justify-content: center; font-size: 11px; transition: opacity 0.2s;">
@@ -453,6 +453,7 @@ export class WorkflowController {
               <span class="priority-badge ${String(wo.priority ?? 'Normal').toLowerCase()}">${wo.priority ?? 'Normal'}</span>
             </div>
           </div>
+          ${(childWaitBadgeHtml || orderStatusBadgeHtml) ? `<div style="display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 4px;"><span>${childWaitBadgeHtml}</span><span>${orderStatusBadgeHtml}</span></div>` : ''}
           <div class="card-part">${wo.partName}</div>
           <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px;">
             <span style="font-size: 8.5px; color: var(--accent-teal); font-weight: 500;">${wo.dwgNo ? `DWG: ${wo.dwgNo}` : ''}</span>
@@ -464,7 +465,6 @@ export class WorkflowController {
               <span>Add to Plan</span>
             </button>
           </div>
-          ${orderStatusBadgeHtml ? `<div style="display: flex; justify-content: flex-end; margin-bottom: 4px;">${orderStatusBadgeHtml}</div>` : ''}
           <div class="card-details btn-toggle-steps" data-id="${wo.id}" style="margin-bottom: ${isStepsExpanded ? '6px' : '8px'}; cursor: pointer; color: var(--accent-teal); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; user-select: none;">
             <span>${isStepsExpanded ? '▲' : '▼'} Routing Steps (${wo.steps.length})</span>
           </div>
