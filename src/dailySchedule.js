@@ -327,10 +327,15 @@ export class DailyScheduleController {
         ? `<span>📦 สถานะเบิกวัสดุ: <strong class="${issueSummary.tone === 'notready' ? 'mat-status-blink' : ''}" style="color: ${issueTones[issueSummary.tone]};">${issueSummary.label}${issueSummary.count < issueSummary.total ? ` (${issueSummary.count}/${issueSummary.total} รายการ)` : ''}</strong></span>`
         : '';
 
-      const readyOpName = readyToStartByPd.get(job.woId) || '';
-      const readyOpHtml = readyOpName
-        ? `<span>▶ Op ปัจจุบัน: <strong class="rev-blink">${readyOpName}</strong></span>`
-        : '';
+      // Operation chain around this card's own step: previous (green) > current (red, blinking) > next
+      const curStep = sortedSteps.find(s => s.stepNum === job.stepNum) || job;
+      const curName = curStep.name || curStep.stepName || curStep.partName || job.stepName || job.name || 'Operation';
+      const curWCStr = `${curName} (${curStep.machine || job.machine})`;
+      const opChainHtml = `<span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <strong style="color: #15803d;">${prevWCStr}</strong>
+              <span>&gt;</span><strong class="rev-blink">${curWCStr}</strong>
+              <span>&gt;</span><strong style="color: var(--text-primary);">${nextWCStr}</strong>
+            </span>`;
 
       const latestRev = this.state.getLatestRevision ? this.state.getLatestRevision(job.woId) : null;
       const revHtml = latestRev ? ` <span class="rev-blink" title="Rev ${latestRev.rev} (ปรับปรุงแบบล่าสุด) · แจ้ง ${latestRev.noticeDate || '-'} · ใบแจ้ง ${latestRev.noticeNo || '-'}">Rev ${latestRev.rev}</span>` : '';
@@ -379,9 +384,7 @@ export class DailyScheduleController {
             <span>เลขที่ SO: <strong style="color: var(--accent-teal); font-weight: bold;">${job.project || 'N/A'}</strong></span>
           </div>
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">
-            <span>📥 Operation ก่อนหน้า: <strong style="color: var(--text-primary);">${prevWCStr}</strong></span>
-            <span>📤 Operation ถัดไป: <strong style="color: var(--text-primary);">${nextWCStr}</strong></span>
-            ${readyOpHtml}
+            ${opChainHtml}
             ${issueHtml}
           </div>
         </div>
