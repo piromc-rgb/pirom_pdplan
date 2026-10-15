@@ -1354,6 +1354,12 @@ export class ResourcesController {
           </span>
         </div>
         <span style="font-size: 10px; color: var(--text-secondary); margin-left: 4px; align-self: center;">(${count})</span>
+        <button class="edit-priority-btn" title="แก้ไข Priority ของ PD ทั้งหมดในโครงการ ${proj}" style="margin-left: 4px; align-self: center; background: none; border: none; color: var(--accent-teal); cursor: pointer; padding: 2px; display: flex; align-items: center; justify-content: center; transition: opacity 0.2s;">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-teal);">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+        </button>
         ${isLocked ? `<button class="lock-btn" style="${lockStyle} align-self: center;" title="${lockTitle}">${lockIconSvg}</button>` : ''}
         <button class="setup-btn" title="Setup รายการเครื่องจักรของโครงการ ${proj}" style="margin-left: 6px; background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 2px; border-radius: 4px; display: flex; align-items: center; justify-content: center; opacity: 0.85; align-self: center;">
           <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
@@ -1397,6 +1403,38 @@ export class ResourcesController {
       }
 
       // Gear button: machine setup page of this project
+      // ✏️ Edit Priority of every PD in this project (Board + Backlog), like the edit button of the Priority tab
+      label.querySelector('.edit-priority-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const st = this.state;
+        const norm = (p) => String(p || 'General').trim() || 'General';
+        const jobs = (st.scheduledJobs || []).filter(j => norm(j.project) === proj);
+        const wos = (st.workOrders || []).filter(w => norm(w.project) === proj);
+        const pdIds = new Set([...jobs.map(j => j.woId || j.id), ...wos.map(w => w.id)]);
+        if (pdIds.size === 0) { st.ganttController?.showToast?.(`⚠️ โครงการ ${proj} ไม่มี PD ใน Board / Backlog ให้แก้ไข Priority`, 'error'); return; }
+        const counts = {};
+        [...jobs.map(j => j.priority), ...wos.map(w => w.priority)].forEach(p => { const k = String(p ?? 'Normal'); counts[k] = (counts[k] || 0) + 1; });
+        const current = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+        const shown = current.length > 8 ? `${current.slice(0, 8).join(', ')} … (รวม ${current.length} ค่า)` : current.join(', ');
+        const input = prompt(`แก้ไข Priority ของ PD ทั้งหมดในโครงการ "${proj}" (${pdIds.size} PD)\nPriority ปัจจุบัน: ${shown}\n\nระบุ Priority ใหม่:`, current[0] || '');
+        if (input === null) return;
+        const newP = input.trim();
+        if (!newP) return;
+        if (current.length === 1 && current[0] === newP) return;
+        // Several different Priority values in one project (per-PD priorities) would all be overwritten: ask first
+        if (current.length > 1 && !confirm(`โครงการ "${proj}" มี Priority ต่างกัน ${current.length} ค่า\nการตั้งเป็น "${newP}" จะเขียนทับ Priority ของ ${pdIds.size} PD ทั้งหมดเป็นค่าเดียว (ย้อนกลับได้ด้วย Undo)\n\nยืนยันหรือไม่?`)) return;
+        st.saveStateToHistory();
+        jobs.forEach(j => { j.priority = newP; });
+        wos.forEach(w => { w.priority = newP; });
+        if (st.activePriorities[newP] === undefined) st.activePriorities[newP] = true;
+        st.savePlanToFile();
+        st.saveWorkOrdersToFile();
+        st.notify();
+        st.dispatchHistoryEvent?.();
+        st.ganttController?.showToast?.(`✅ ตั้ง Priority ของโครงการ ${proj} เป็น "${newP}" (${pdIds.size} PD) แล้ว — กด Undo เพื่อย้อนกลับได้`, 'success');
+      });
+
       label.querySelector('.setup-btn')?.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
