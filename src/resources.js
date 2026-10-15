@@ -551,9 +551,11 @@ export class ResourcesController {
 
       // Bind delete button event listener
       const deleteBtn = label.querySelector('.delete-btn');
+      this.applyForceCloseVisibility(deleteBtn);
       deleteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
+        if (!this.isEditMode()) { this.state.ganttController?.showToast?.('⚠️ ปุ่ม Force close ใช้งานได้เฉพาะโหมด EDIT (สลับโหมดที่ปุ่มโหมดผู้ใช้งานด้านบน)', 'error'); return; }
 
         // The popup lists the PDs that will be force-closed and asks for the confirmation
         this.confirmClosePds(j => j.priority === p, w => w.priority === p, `Priority: ${p}`);
@@ -561,6 +563,20 @@ export class ResourcesController {
 
       this.priorityFiltersContainer.appendChild(label);
     });
+  }
+
+  // Force close buttons of the Project / Priority lists: hidden unless the Option "แสดงปุ่ม Force close" is on, and they only work in EDIT mode
+  isEditMode() {
+    const sy = this.state.storageSync;
+    return Boolean(sy && typeof sy.getUserMode === 'function' && sy.getUserMode() === 'plan');
+  }
+
+  applyForceCloseVisibility(btn) {
+    if (!btn) return;
+    btn.style.display = this.state.showForceCloseButtons === true ? 'flex' : 'none';
+    const edit = this.isEditMode();
+    btn.style.opacity = edit ? '' : '0.35';
+    btn.title = btn.title.replace(/ · ใช้งานได้เฉพาะโหมด EDIT$/, '') + (edit ? '' : ' · ใช้งานได้เฉพาะโหมด EDIT');
   }
 
   // "▶ Ready to Start": PDs (and quantities) whose Operation at a Work Center is Ready to Start, grouped by Work Center
@@ -1443,9 +1459,11 @@ export class ResourcesController {
 
       // Bind delete button event listener
       const deleteBtn = label.querySelector('.delete-btn');
+      this.applyForceCloseVisibility(deleteBtn);
       deleteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
+        if (!this.isEditMode()) { this.state.ganttController?.showToast?.('⚠️ ปุ่ม Force close ใช้งานได้เฉพาะโหมด EDIT (สลับโหมดที่ปุ่มโหมดผู้ใช้งานด้านบน)', 'error'); return; }
         
         // The popup lists the PDs that will be force-closed and asks for the confirmation
         this.confirmClosePds(j => (j.project || 'General') === proj, w => (w.project || 'General') === proj, `SO / Project: ${proj}`);

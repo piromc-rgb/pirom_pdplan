@@ -2197,6 +2197,17 @@ class App {
 
     // Groups identical items (same DWG No. / Part Name) together across different PDs
     // to run consecutively / concurrently on machines to reduce setup changeovers.
+    // Show / hide the Force close buttons of the Project and Priority filter lists (hidden by default; remembered here)
+    const toggleShowForceClose = document.getElementById('toggle-show-force-close');
+    if (toggleShowForceClose) {
+      toggleShowForceClose.checked = state.showForceCloseButtons === true;
+      toggleShowForceClose.addEventListener('change', () => {
+        state.showForceCloseButtons = toggleShowForceClose.checked;
+        try { localStorage.setItem('chaken_show_force_close', toggleShowForceClose.checked ? '1' : '0'); } catch (e) { /* ignore */ }
+        state.notify();
+      });
+    }
+
     const toggleGroupSameItem = document.getElementById('toggle-group-same-item');
     if (toggleGroupSameItem) {
       toggleGroupSameItem.checked = state.groupSameItem !== false;
@@ -2342,6 +2353,7 @@ class App {
       if (toggleMergeBars) toggleMergeBars.checked = state.mergeBarsEnabled !== false;
       if (toggleMachineOffload) toggleMachineOffload.checked = state.allowMachineOffload !== false;
       if (toggleGroupSameItem) toggleGroupSameItem.checked = state.groupSameItem !== false;
+      if (toggleShowForceClose) toggleShowForceClose.checked = state.showForceCloseButtons === true;
       if (toggleMatReadyOnly) toggleMatReadyOnly.checked = state.onlyScheduleMatReadyOp1 !== false;
       if (toggleChildPdClosed) toggleChildPdClosed.checked = state.requireChildPdsClosed !== false;
     };

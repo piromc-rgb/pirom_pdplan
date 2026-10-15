@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-CIZUwXQm.js"></script>
+    <script type="module" crossorigin src="./assets/index-D-jMv12E.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-DET-_xPU.css">
   </head>
   <body>
@@ -147,6 +147,13 @@
                 <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);" title="PD ที่ต้องใช้ PD อื่นมาประกอบที่ Op1 (step 10) หรือมี PD ลูกย่อย จะวางแผนลง Board ได้เมื่อ PD ลูกทั้งหมด Closed แล้วเท่านั้น ถ้ายังไม่ Closed จะอยู่ใน Backlog (ค่าเริ่มต้น: เปิด)">
                   <span>รอ PD ลูก Closed ก่อนวางแผนลง Board</span>
                   <span class="ios-toggle"><input type="checkbox" id="toggle-child-pd-closed" checked><span class="ios-toggle-slider"></span></span>
+                </label>
+                <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary); border-top: 1px solid var(--border-glass); margin-top: 4px; padding-top: 8px;" title="เปิด/ปิดการ Sync ข้อมูล Cloud อัตโนมัติ: โหลดข้อมูลเมื่อเปิดแอป และบันทึกข้อมูลเมื่อปิดแอป">
+                  <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <span>แสดงปุ่ม Force close</span>
+                    <span style="font-size: 9.5px; color: var(--text-secondary);">ตัวกรอง Project / Priority · ใช้งานได้เฉพาะโหมด EDIT</span>
+                  </div>
+                  <span class="ios-toggle"><input type="checkbox" id="toggle-show-force-close"><span class="ios-toggle-slider"></span></span>
                 </label>
                 <label class="display-option-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--text-primary); border-top: 1px solid var(--border-glass); margin-top: 4px; padding-top: 8px;" title="เปิด/ปิดการ Sync ข้อมูล Cloud อัตโนมัติ: โหลดข้อมูลเมื่อเปิดแอป และบันทึกข้อมูลเมื่อปิดแอป">
                   <div style="display: flex; flex-direction: column; gap: 2px;">

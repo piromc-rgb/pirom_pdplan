@@ -227,6 +227,10 @@ class CentralState {
 
     // The Work Center order the user arranged last (drag on the board / Setup) wins over older copies
     this.wcOrderUpdatedAt = 0;
+
+    // Option "แสดงปุ่ม Force close": the Force close buttons of the Project / Priority filter lists are hidden by default
+    this.showForceCloseButtons = false;
+    try { this.showForceCloseButtons = typeof localStorage !== 'undefined' && localStorage.getItem('chaken_show_force_close') === '1'; } catch (e) {}
     try {
       if (typeof localStorage !== 'undefined') {
         const savedOrder = JSON.parse(localStorage.getItem('chaken_wc_order') || 'null');
