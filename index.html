@@ -681,8 +681,8 @@
                 </div>
               </div>
               <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-                <button id="btn-wc-select-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold;">เลือกทั้งหมด</button>
-                <button id="btn-wc-deselect-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-weight: bold;">ล้างทั้งหมด</button>
+                <button id="btn-wc-select-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold; white-space: nowrap; text-align: center; display: flex; align-items: center; justify-content: center;">Select All</button>
+                <button id="btn-wc-deselect-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-weight: bold; white-space: nowrap; text-align: center; display: flex; align-items: center; justify-content: center;">Deselect All</button>
                 <button id="btn-wc-deselect-zero" class="btn" title="ล้าง (ซ่อน) เฉพาะ Work Center ที่ OEE เป็น 0%" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255, 165, 0, 0.1); border: 1px solid var(--accent-orange); color: var(--accent-orange); border-radius: 4px; cursor: pointer; font-weight: bold;">ล้าง WC ที่ 0%</button>
               </div>
               <div class="oee-list" id="oee-list">
@@ -755,8 +755,8 @@
               </div>
 
               <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-                <button id="btn-pdrange-select-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold;">เลือกทั้งหมด</button>
-                <button id="btn-pdrange-deselect-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-weight: bold;">ไม่แสดงทั้งหมด</button>
+                <button id="btn-pdrange-select-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold; white-space: nowrap; text-align: center; display: flex; align-items: center; justify-content: center;">Select All</button>
+                <button id="btn-pdrange-deselect-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-weight: bold; white-space: nowrap; text-align: center; display: flex; align-items: center; justify-content: center;">Deselect All</button>
                 <button id="btn-pdrange-clear-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255, 100, 100, 0.1); border: 1px solid var(--accent-red); color: var(--accent-red); border-radius: 4px; cursor: pointer; font-weight: bold;">ล้างรายการ</button>
               </div>
 
@@ -774,9 +774,9 @@
               <h4>Gantt Customer Filter (กรองตามลูกค้า)</h4>
               <p class="tool-desc" style="font-size: 10px; color: var(--text-secondary); margin-bottom: 8px;">เลือกลูกค้าที่จะให้แสดงผลบนบอร์ด Gantt:</p>
               <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-                <button id="btn-customer-select-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold;">เลือกทั้งหมด</button>
+                <button id="btn-customer-select-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold; white-space: nowrap; text-align: center; display: flex; align-items: center; justify-content: center;">Select All</button>
                 <button id="btn-customer-select-filtered" class="btn" title="เลือกเฉพาะลูกค้าที่ตรงกับคำค้นหาด้านล่าง (ลูกค้าอื่นจะถูกซ่อน)" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255, 165, 0, 0.1); border: 1px solid var(--accent-orange); color: var(--accent-orange); border-radius: 4px; cursor: pointer; font-weight: bold;">เลือกที่กรอง</button>
-                <button id="btn-customer-deselect-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-weight: bold;">ล้างทั้งหมด</button>
+                <button id="btn-customer-deselect-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-weight: bold; white-space: nowrap; text-align: center; display: flex; align-items: center; justify-content: center;">Deselect All</button>
               </div>
               <input type="text" id="customer-search-input" placeholder="ค้นหาลูกค้า..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); outline: none; margin-bottom: 8px;">
 
