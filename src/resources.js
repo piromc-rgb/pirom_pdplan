@@ -297,17 +297,19 @@ export class ResourcesController {
       return a.localeCompare(b);
     });
     
-    // 2. Count jobs for each priority
-    const counts = {};
-    sortedPriorities.forEach(p => counts[p] = 0);
+    // 2. Count distinct PDs for each priority (a PD on the board has one job per routing step, so counting jobs over-counts)
+    const pdSets = {};
+    sortedPriorities.forEach(p => pdSets[p] = new Set());
     this.state.scheduledJobs.forEach(job => {
       const p = getJobPriority(job, this.state);
-      counts[p]++;
+      pdSets[p].add(job.woId || job.id);
     });
     this.state.workOrders.forEach(wo => {
       const p = (wo.priority !== undefined && wo.priority !== null && String(wo.priority).trim() !== '') ? String(wo.priority).trim() : 'Normal';
-      counts[p]++;
+      pdSets[p].add(wo.id);
     });
+    const counts = {};
+    sortedPriorities.forEach(p => counts[p] = pdSets[p].size);
     
     // 3. Update state.activePriorities keys. If a key is new, default to true.
     sortedPriorities.forEach(p => {
