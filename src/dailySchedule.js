@@ -348,6 +348,16 @@ export class DailyScheduleController {
         datePrefix = `<span style="font-size: 9.5px; color: var(--accent-cyan); font-weight: bold; margin-bottom: 3px; display: block; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 2px; width: 100%; text-align: left;">${daysShort[dateStart.getDay()]} ${dateStart.getDate()} ${monthsShort[dateStart.getMonth()]}</span>`;
       }
 
+      // Work centers with "check material" on: list the raw materials this step uses (after the SO line)
+      let matHtml = '';
+      if (this.state.workCenters?.[job.machine]?.checkMaterial) {
+        const mats = this.state.getStepMaterialsList(job.woId, job.stepNum) || [];
+        const esc = (t) => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        matHtml = `<div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 14px; flex-wrap: wrap; align-items: center;">
+          <span>Mat:</span>${mats.length === 0 ? '<strong style="color: var(--text-secondary);">ไม่มีรายการ Mat</strong>' : mats.map(m => `<span style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); border-radius: 4px; padding: 1px 6px;"><strong style="color: var(--accent-cyan); font-family: monospace;">${esc(m.mat)}</strong>${m.desc ? ' ' + esc(m.desc) : ''}${m.qty ? ' · Qty <strong>' + esc(m.qty) + '</strong>' : ''}</span>`).join('')}
+        </div>`;
+      }
+
       const card = document.createElement('div');
       card.className = 'daily-job-card';
       card.title = 'ดับเบิลคลิกเพื่อแก้ไข Production Order นี้';
@@ -383,6 +393,7 @@ export class DailyScheduleController {
             <span>Customer: <strong style="color: var(--text-primary);">${job.customer || 'N/A'}</strong></span>
             <span>เลขที่ SO: <strong style="color: var(--accent-teal); font-weight: bold;">${job.project || 'N/A'}</strong></span>
           </div>
+          ${matHtml}
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">
             ${opChainHtml}
             ${issueHtml}
@@ -456,7 +467,7 @@ export class DailyScheduleController {
 
   // Excel: one workbook, one sheet per Work Center (only those with jobs in the selected period),
   // columns follow the daily-schedule card (time, PD, part, Dwg, Qty, customer, SO, prev/next op, Mat status)
-  // plus the Op01 raw-material list the PDF prints.
+  // plus the Op01 raw-material list the PDF prints (every step for work centers with "check material" on).
   exportAllWorkCentersExcel() {
     if (typeof XLSX === 'undefined') {
       this.state.ganttController?.showToast?.('⚠️ ไม่พบตัวสร้างไฟล์ Excel (XLSX) กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่', 'error');
@@ -516,7 +527,7 @@ export class DailyScheduleController {
         const { prevWCStr, nextWCStr, prevStep } = this.getJobNeighbors(job);
         const issue = this.state.getStepMaterialIssueSummary(job.woId, job.stepNum);
         const issueText = issue ? issue.label + (issue.count < issue.total ? ` (${issue.count}/${issue.total} รายการ)` : '') : '';
-        const mats = !prevStep ? (this.state.getStepMaterialsList(job.woId, job.stepNum) || []) : [];
+        const mats = (!prevStep || this.state.workCenters?.[machine]?.checkMaterial) ? (this.state.getStepMaterialsList(job.woId, job.stepNum) || []) : [];
         const rev = this.state.getLatestRevision ? this.state.getLatestRevision(job.woId) : null;
         const dwgCell = (job.dwgNo || '') + (rev ? ` (Rev ${rev.rev})` : '');
         rows.push([
@@ -672,7 +683,8 @@ export class DailyScheduleController {
         // Op01 (first operation of the PD): list the raw materials it needs, since this is where
         // stock actually gets issued/consumed - not shown for later steps. Cells line up with the
         // main columns: Mat code starts at the ลำดับ/เวลา border, Qty under "เลขที่ SO".
-        if (!prevStep) {
+        // Work centers with "check material" on list the step's materials on every job, not just Op01.
+        if (!prevStep || this.state.workCenters?.[job.machine]?.checkMaterial) {
           const matList = this.state.getStepMaterialsList(job.woId, job.stepNum);
           if (matList.length > 0) {
             const checkboxStr = matList.map(() => '☐').join(' &nbsp;|&nbsp; ');

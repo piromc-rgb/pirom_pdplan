@@ -127,7 +127,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '4.91';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '4.92';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -234,6 +234,7 @@ class App {
         const altInput = row.querySelector('.wc-alt-input');
         const transferInput = row.querySelector('.wc-transfer-input');
         const leadTimeInput = row.querySelector('.wc-leadtime-input');
+        const checkMatInput = row.querySelector('.wc-checkmat-input');
         const colorSelect = row.querySelector('.wc-color-select');
 
         if (idInput && nameInput) {
@@ -258,7 +259,8 @@ class App {
             name: name || id,
             altMachines,
             transferMinutes,
-            leadTimeDays
+            leadTimeDays,
+            checkMaterial: checkMatInput ? checkMatInput.checked : false
           };
           newOrder.push(id);
         }
@@ -387,6 +389,9 @@ class App {
             <input type="number" class="wc-leadtime-input" value="0" min="0" step="0.5" placeholder="0" title="Lead Time เผื่อเวลาก่อนส่งต่อ (วัน)" style="width: 50px; background: var(--bg-darkest); color: var(--accent-cyan); border: 1px solid var(--border-glass); padding: 5px; border-radius: 4px; font-size: 11px; text-align: center;">
           </td>
           <td style="padding: 8px; text-align: center;">
+            <input type="checkbox" class="wc-checkmat-input"  title="ตรวจสอบ Material: จัดกลุ่ม PD ที่ใช้ Material เดียวกันให้วางแผนต่อกัน (รองจากการจัดกลุ่ม Item เดียวกัน)" style="width: 16px; height: 16px; cursor: pointer;">
+          </td>
+          <td style="padding: 8px; text-align: center;">
             <select class="wc-color-select" style="background: var(--bg-darkest); color: #000000; font-weight: 600; border: 1px solid var(--border-glass); padding: 5px; border-radius: 4px; font-size: 11px;">
               ${optionsHtml}
             </select>
@@ -452,6 +457,9 @@ class App {
         </td>
         <td style="padding: 8px; text-align: center;">
           <input type="number" class="wc-leadtime-input" value="${wc.leadTimeDays !== undefined ? wc.leadTimeDays : 0}" min="0" step="0.5" placeholder="0" title="Lead Time เผื่อเวลาก่อนส่งต่อ (วัน)" style="width: 50px; background: var(--bg-darkest); color: var(--accent-cyan); border: 1px solid var(--border-glass); padding: 5px; border-radius: 4px; font-size: 11px; text-align: center;">
+        </td>
+        <td style="padding: 8px; text-align: center;">
+          <input type="checkbox" class="wc-checkmat-input" ${wc.checkMaterial ? 'checked' : ''} title="ตรวจสอบ Material: จัดกลุ่ม PD ที่ใช้ Material เดียวกันให้วางแผนต่อกัน (รองจากการจัดกลุ่ม Item เดียวกัน)" style="width: 16px; height: 16px; cursor: pointer;">
         </td>
         <td style="padding: 8px; text-align: center;">
           <select class="wc-color-select" style="background: var(--bg-darkest); color: #000000; font-weight: 600; border: 1px solid var(--border-glass); padding: 5px; border-radius: 4px; font-size: 11px;">
