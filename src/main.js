@@ -127,7 +127,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '4.93';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '4.94';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -2216,6 +2216,15 @@ class App {
       });
     }
 
+    const toggleGroupMat = document.getElementById('toggle-group-mat');
+    if (toggleGroupMat) {
+      toggleGroupMat.checked = state.groupMat === true;
+      toggleGroupMat.addEventListener('change', () => {
+        state.groupMat = toggleGroupMat.checked;
+        state.savePlanToFile();
+      });
+    }
+
     const toggleGroupSameItem = document.getElementById('toggle-group-same-item');
     if (toggleGroupSameItem) {
       toggleGroupSameItem.checked = state.groupSameItem !== false;
@@ -2361,6 +2370,7 @@ class App {
       if (toggleMergeBars) toggleMergeBars.checked = state.mergeBarsEnabled !== false;
       if (toggleMachineOffload) toggleMachineOffload.checked = state.allowMachineOffload !== false;
       if (toggleGroupSameItem) toggleGroupSameItem.checked = state.groupSameItem !== false;
+      if (toggleGroupMat) toggleGroupMat.checked = state.groupMat === true;
       if (toggleShowForceClose) toggleShowForceClose.checked = state.showForceCloseButtons === true;
       if (toggleMatReadyOnly) toggleMatReadyOnly.checked = state.onlyScheduleMatReadyOp1 !== false;
       if (toggleChildPdClosed) toggleChildPdClosed.checked = state.requireChildPdsClosed !== false;
