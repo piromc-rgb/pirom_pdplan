@@ -674,7 +674,7 @@ export class Scheduler {
       const lastItemOnLane = machineLastItem[bestMachine] ? machineLastItem[bestMachine][bestLaneIdx] : '';
       // Work centers with 'check material' on: after same-item grouping, prefer a job that shares
       // a raw material with the previous job on this lane (different PDs, same material -> run together).
-      const lastMatsOnLane = (workCenters[bestMachine]?.checkMaterial && machineLastMats[bestMachine]) ? machineLastMats[bestMachine][bestLaneIdx] : null;
+      const lastMatsOnLane = (options.groupMat === true && workCenters[bestMachine]?.checkMaterial && machineLastMats[bestMachine]) ? machineLastMats[bestMachine][bestLaneIdx] : null;
       const sharesLastMat = (j) => !!lastMatsOnLane && lastMatsOnLane.length > 0 && matKeysOf(j).some(k => lastMatsOnLane.includes(k));
       validCandidates.sort((a, b) => {
         const pA = getPriorityWeight(a.job.priority);

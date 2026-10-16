@@ -82,6 +82,7 @@ class CentralState {
     // Strategy option: group same item (DWG No. / Part Name) together across different PDs
     // to run consecutively / simultaneously on machines, reducing setup changeovers.
     this.groupSameItem = true;
+    this.groupMat = false;
     this.requireChildPdsClosed = true; // Gear option: plan a PD only after all its child PDs are Closed
     // Per project (SO): the machine list keyed in on the project setup page [{ id, itemCode, qty, targetDate 'dd/mm/yyyy' }]
     this.projectMachineLists = {};
@@ -540,6 +541,7 @@ class CentralState {
       } else if (this.schedulingModel === 'finite') {
         this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, scale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem, {
           planMaterials: this.planMaterials,
+          groupMat: this.groupMat === true,
           dwgToPdMap: this.dwgToPdMap,
           assemblyLinks: this.assemblyLinks
         });
@@ -572,6 +574,7 @@ class CentralState {
     } else if (this.schedulingModel === 'finite') {
       this.scheduledJobs = Scheduler.applyForwardsFinite(this.scheduledJobs, this.activeScale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem, {
         planMaterials: this.planMaterials,
+        groupMat: this.groupMat === true,
         dwgToPdMap: this.dwgToPdMap,
         assemblyLinks: this.assemblyLinks
       });
@@ -2842,6 +2845,7 @@ class CentralState {
       timelineOffset: this.timelineOffset,
       activeScale: this.activeScale,
       groupSameItem: this.groupSameItem !== false,
+      groupMat: this.groupMat === true,
       requireChildPdsClosed: this.requireChildPdsClosed !== false,
       projectMachineLists: this.projectMachineLists || {},
       completedPdHistory: this.completedPdHistory || {},
@@ -3181,6 +3185,7 @@ class CentralState {
       this.assemblyLinks = data.assemblyLinks || [];
       this.lockedProjects = data.lockedProjects || {};
       if (data.groupSameItem !== undefined) this.groupSameItem = Boolean(data.groupSameItem);
+      if (data.groupMat !== undefined) this.groupMat = Boolean(data.groupMat);
       if (data.requireChildPdsClosed !== undefined) this.requireChildPdsClosed = Boolean(data.requireChildPdsClosed);
       if (data.projectMachineLists && typeof data.projectMachineLists === 'object') this.projectMachineLists = data.projectMachineLists;
       if (data.cancelledPds && typeof data.cancelledPds === 'object') this.cancelledPds = data.cancelledPds;

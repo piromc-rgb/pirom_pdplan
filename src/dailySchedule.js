@@ -353,9 +353,7 @@ export class DailyScheduleController {
       if (this.state.workCenters?.[job.machine]?.checkMaterial) {
         const mats = this.state.getStepMaterialsList(job.woId, job.stepNum) || [];
         const esc = (t) => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-        matHtml = `<div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 14px; flex-wrap: wrap; align-items: center;">
-          <span>Mat:</span>${mats.length === 0 ? '<strong style="color: var(--text-secondary);">ไม่มีรายการ Mat</strong>' : mats.map(m => `<span style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); border-radius: 4px; padding: 1px 6px;"><strong style="color: var(--accent-cyan); font-family: monospace;">${esc(m.mat)}</strong>${m.desc ? ' ' + esc(m.desc) : ''}${m.qty ? ' · Qty <strong>' + esc(m.qty) + '</strong>' : ''}</span>`).join('')}
-        </div>`;
+        matHtml = `<span style="display: inline-flex; gap: 14px; flex-wrap: wrap; align-items: center;"><span>Mat:</span>${mats.length === 0 ? '<strong style="color: var(--text-secondary);">ไม่มีรายการ Mat</strong>' : mats.map(m => `<span style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); border-radius: 4px; padding: 1px 6px;"><strong style="color: var(--accent-cyan); font-family: monospace;">${esc(m.mat)}</strong>${m.desc ? ' ' + esc(m.desc) : ''}${m.qty ? ' · Qty <strong>' + esc(m.qty) + '</strong>' : ''}</span>`).join('')}</span>`;
       }
 
       const card = document.createElement('div');
@@ -393,11 +391,18 @@ export class DailyScheduleController {
             <span>Customer: <strong style="color: var(--text-primary);">${job.customer || 'N/A'}</strong></span>
             <span>เลขที่ SO: <strong style="color: var(--accent-teal); font-weight: bold;">${job.project || 'N/A'}</strong></span>
           </div>
+          ${matHtml ? `
+          <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap; align-items: center;">
+            ${issueHtml}
+            ${matHtml}
+          </div>
+          <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">
+            ${opChainHtml}
+          </div>` : `
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">
             ${opChainHtml}
             ${issueHtml}
-          </div>
-          ${matHtml}
+          </div>`}
         </div>
       `;
 
