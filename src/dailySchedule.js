@@ -393,11 +393,11 @@ export class DailyScheduleController {
             <span>Customer: <strong style="color: var(--text-primary);">${job.customer || 'N/A'}</strong></span>
             <span>เลขที่ SO: <strong style="color: var(--accent-teal); font-weight: bold;">${job.project || 'N/A'}</strong></span>
           </div>
-          ${matHtml}
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">
             ${opChainHtml}
             ${issueHtml}
           </div>
+          ${matHtml}
         </div>
       `;
 
