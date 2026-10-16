@@ -30,6 +30,20 @@ export function getItemKey(jobOrWo) {
   return part ? part.toUpperCase() : '';
 }
 
+// Raw-material codes (10-char) a job consumes at its own routing step, from the Plan + Mat sheet.
+// Used by work centers with "check material" on to run PDs sharing a material back to back.
+export function getJobMatKeys(job, planMaterials) {
+  const rows = planMaterials && job && job.woId ? planMaterials[job.woId] : null;
+  if (!Array.isArray(rows)) return [];
+  const step = Number(job.stepNum);
+  const keys = new Set();
+  rows.forEach(r => {
+    const mat = String(r.mat || '').trim();
+    if (mat.length === 10 && Number(r.stepNum) === step) keys.add(mat.toUpperCase());
+  });
+  return [...keys];
+}
+
 export class Scheduler {
   // Apply Backwards Infinite Scheduling model
   // Arranges all jobs backwards from a simulated due hour (dependent on scale)
@@ -301,6 +315,13 @@ export class Scheduler {
     const machineCapacity = {};
     const machineLanes = {};
     const machineLastItem = {};
+    const machineLastMats = {};
+    const matPlanSource = options.planMaterials || {};
+    const matKeyCache = new Map();
+    const matKeysOf = (j) => {
+      if (!matKeyCache.has(j)) matKeyCache.set(j, getJobMatKeys(j, matPlanSource));
+      return matKeyCache.get(j);
+    };
     const getMinLaneIdx = (m) => {
       const lanes = machineLanes[m];
       let idx = 0;
@@ -341,6 +362,7 @@ export class Scheduler {
       machineCapacity[m] = cap;
       const lanes = new Array(cap).fill(startOffset);
       const lastItems = new Array(cap).fill('');
+      const lastMats = new Array(cap).fill(null);
       const machineJobs = existingScheduledJobs
         .filter(j => j.machine === m)
         .sort((a, b) => a.startHour - b.startHour);
@@ -349,9 +371,11 @@ export class Scheduler {
         for (let i = 1; i < lanes.length; i++) if (lanes[i] < lanes[best]) best = i;
         lanes[best] = Math.max(lanes[best], j.startHour + j.estHours);
         lastItems[best] = getItemKey(j);
+        lastMats[best] = matKeysOf(j);
       });
       machineLanes[m] = lanes;
       machineLastItem[m] = lastItems;
+      machineLastMats[m] = lastMats;
     });
 
     // Initialize woEndTimes & woLastMachine based on existing scheduled jobs
@@ -648,6 +672,10 @@ export class Scheduler {
       // 2. Smallest gap (keep machines running continuously)
       // 3. Lower stepNum first
       const lastItemOnLane = machineLastItem[bestMachine] ? machineLastItem[bestMachine][bestLaneIdx] : '';
+      // Work centers with 'check material' on: after same-item grouping, prefer a job that shares
+      // a raw material with the previous job on this lane (different PDs, same material -> run together).
+      const lastMatsOnLane = (workCenters[bestMachine]?.checkMaterial && machineLastMats[bestMachine]) ? machineLastMats[bestMachine][bestLaneIdx] : null;
+      const sharesLastMat = (j) => !!lastMatsOnLane && lastMatsOnLane.length > 0 && matKeysOf(j).some(k => lastMatsOnLane.includes(k));
       validCandidates.sort((a, b) => {
         const pA = getPriorityWeight(a.job.priority);
         const pB = getPriorityWeight(b.job.priority);
@@ -660,6 +688,14 @@ export class Scheduler {
             if (Math.abs(pA - pB) <= 1000) {
               return bMatch - aMatch;
             }
+          }
+        }
+
+        if (lastMatsOnLane) {
+          const aMat = sharesLastMat(a.job) ? 1 : 0;
+          const bMat = sharesLastMat(b.job) ? 1 : 0;
+          if (aMat !== bMat && Math.abs(pA - pB) <= 1000) {
+            return bMat - aMat;
           }
         }
 
@@ -706,6 +742,9 @@ export class Scheduler {
       machineLanes[bestMachine][bestLaneIdx] = end;
       if (machineLastItem[bestMachine]) {
         machineLastItem[bestMachine][bestLaneIdx] = getItemKey(job);
+      }
+      if (machineLastMats[bestMachine]) {
+        machineLastMats[bestMachine][bestLaneIdx] = matKeysOf(job);
       }
       if (job.woId) {
         woEndTime[job.woId] = end;
