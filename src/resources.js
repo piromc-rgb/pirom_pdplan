@@ -975,10 +975,10 @@ export class ResourcesController {
           <table style="border-collapse:collapse;width:100%;font-size:12.5px;">
             <thead><tr style="background:#f1f5f9;text-align:center;">
               <th style="padding:6px 8px;width:34px;">#</th>
-              <th style="padding:6px 8px;width:190px;">Item Code</th>
-              <th style="padding:6px 8px;">Description</th>
-              <th style="padding:6px 8px;width:90px;">QTY</th>
-              <th style="padding:6px 8px;width:130px;">เป้าส่งเครื่อง (d/m/y)</th>
+              <th class="pms-sort" data-sort="itemCode" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;width:190px;cursor:pointer;user-select:none;">Item Code<span class="pms-arrow"></span></th>
+              <th class="pms-sort" data-sort="desc" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;cursor:pointer;user-select:none;">Description<span class="pms-arrow"></span></th>
+              <th class="pms-sort" data-sort="qty" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;width:90px;cursor:pointer;user-select:none;">QTY<span class="pms-arrow"></span></th>
+              <th class="pms-sort" data-sort="targetDate" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;width:130px;cursor:pointer;user-select:none;">เป้าส่งเครื่อง (d/m/y)<span class="pms-arrow"></span></th>
               <th style="padding:6px 8px;width:120px;text-align:center;">ย้าย / ลบ</th>
             </tr></thead>
             <tbody id="pms-body"></tbody>
@@ -1019,6 +1019,41 @@ export class ResourcesController {
       overlay.querySelector('#pms-count').textContent = `${rows.length} รายการ · Item ในโครงการนี้ ${catalog.length} รายการ`;
     };
     render();
+
+    // Click a column header to sort the rows (click again to reverse). Rows are re-ordered in place,
+    // so the saved list order follows the sort; empty values always go last.
+    let sortKey = null;
+    let sortDir = 1;
+    const sortValue = (r, key) => {
+      if (key === 'qty') return r.qty === '' || r.qty === null || r.qty === undefined ? null : Number(r.qty);
+      if (key === 'desc') return String(byCode.get(String(r.itemCode || '').trim())?.description || '') || null;
+      if (key === 'targetDate') {
+        const d = parseDate(r.targetDate);
+        if (!d) return null;
+        const [dd, mm, yy] = d.split('/');
+        return Number(yy) * 10000 + Number(mm) * 100 + Number(dd);
+      }
+      return String(r.itemCode || '').trim() || null;
+    };
+    overlay.querySelectorAll('.pms-sort').forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        sortDir = sortKey === key ? -sortDir : 1;
+        sortKey = key;
+        rows.sort((a, b) => {
+          const va = sortValue(a, key);
+          const vb = sortValue(b, key);
+          if (va === null && vb === null) return 0;
+          if (va === null) return 1;
+          if (vb === null) return -1;
+          const c = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: 'base' });
+          return c * sortDir;
+        });
+        overlay.querySelectorAll('.pms-sort .pms-arrow').forEach(a => { a.textContent = ''; });
+        th.querySelector('.pms-arrow').textContent = sortDir === 1 ? ' ▲' : ' ▼';
+        render();
+      });
+    });
 
     const rowOf = (el) => rows.find(r => r.id === el.closest('tr')?.dataset.id);
     body.addEventListener('input', (e) => {
