@@ -2828,6 +2828,12 @@ class CentralState {
     this.notify();
   }
 
+  unlockAllProjects() {
+    this.lockedProjects = {};
+    this.savePlanToFile();
+    this.notify();
+  }
+
   buildPlanPayload() {
     return {
       // PD Backlog travels with the plan so hosted pages (no local pd.md / /api/pd) can show it too
