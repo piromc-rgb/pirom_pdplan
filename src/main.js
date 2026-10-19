@@ -127,7 +127,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '4.95';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '4.96';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -2392,10 +2392,10 @@ class App {
     const unlockedScheduled = state.scheduledJobs.filter(j => j.status !== 'Completed' && !state.isJobLocked(j));
 
     if (unlockedBacklog.length === 0 && unlockedScheduled.length === 0) {
-      if (state.ganttController) {
-        state.ganttController.showToast('🔒 ทุกโครงการถูกล็อคแผนงานไว้ ไม่สามารถปรับแผนด้วย AI ได้จนกว่าจะปลดล็อค');
-      } else {
-        alert('🔒 ทุกโครงการถูกล็อคแผนงานไว้ ไม่สามารถปรับแผนด้วย AI ได้จนกว่าจะปลดล็อค');
+      if (confirm('🔒 ทุกโครงการถูกล็อคแผนงานไว้ ไม่สามารถปรับแผนด้วย AI ได้จนกว่าจะปลดล็อค\n\nต้องการปลดล็อคทุกโครงการตอนนี้เลยหรือไม่?')) {
+        state.unlockAllProjects();
+        if (state.ganttController) state.ganttController.showToast('🔓 ปลดล็อคทุกโครงการแล้ว');
+        this.showBacklogSelectionModal(button);
       }
       return;
     }
