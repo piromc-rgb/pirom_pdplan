@@ -489,6 +489,29 @@ export class AssemblyTreeController {
       });
     }
 
+    // BOM "hide raw material rows" toggle (next to the scope selector)
+    if (this.bomScopeSelect && this.bomScopeSelect.parentNode && !document.getElementById('btn-bom-hide-raw')) {
+      try { this.bomHideRaw = localStorage.getItem('bom_hide_raw') === 'true'; } catch (e) { this.bomHideRaw = false; }
+      const btnHideRaw = document.createElement('button');
+      btnHideRaw.type = 'button';
+      btnHideRaw.id = 'btn-bom-hide-raw';
+      btnHideRaw.style.cssText = 'padding: 6px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; cursor: pointer; white-space: nowrap; margin-right: 8px; border: 1px solid #cbd5e1;';
+      const paintHideRaw = () => {
+        btnHideRaw.textContent = this.bomHideRaw ? '👁 แสดงรายการวัตถุดิบ' : '🙈 ซ่อนรายการวัตถุดิบ';
+        btnHideRaw.style.background = this.bomHideRaw ? 'rgba(2, 132, 199, 0.16)' : '#ffffff';
+        btnHideRaw.style.color = this.bomHideRaw ? '#0369a1' : '#334155';
+        btnHideRaw.style.borderColor = this.bomHideRaw ? '#0284c7' : '#cbd5e1';
+      };
+      paintHideRaw();
+      btnHideRaw.addEventListener('click', () => {
+        this.bomHideRaw = !this.bomHideRaw;
+        try { localStorage.setItem('bom_hide_raw', this.bomHideRaw ? 'true' : 'false'); } catch (e) { /* ignore */ }
+        paintHideRaw();
+        this.renderBomTable();
+      });
+      this.bomScopeSelect.parentNode.insertBefore(btnHideRaw, this.bomScopeSelect);
+    }
+
     // BOM Search Input
     if (this.bomSearchInput) {
       this.bomSearchInput.addEventListener('input', (e) => {
@@ -1759,6 +1782,9 @@ export class AssemblyTreeController {
       filtered = filtered.filter(i => i.status === 'to_issue');
     }
 
+    // Hide raw material rows (keep only items produced by a child PD)
+    if (this.bomHideRaw) filtered = filtered.filter(i => i.isChildPd);
+
     // 4. Filter by search query
     if (this.bomSearchTerm) {
       const term = this.bomSearchTerm.toLowerCase();
@@ -2228,8 +2254,8 @@ export class AssemblyTreeController {
           blinkClass = 'tree-blink-yellow';
           bgGradient = '#fde047'; borderColor = '#854d0e'; statusTextColor = '#713f12';
         } else if (node.visual === 'done') {
-          bgGradient = 'linear-gradient(to bottom, #ffffff 0%, #dcfce7 40%, #86efac 100%)';
-          borderColor = '#166534'; statusTextColor = '#14532d';
+          bgGradient = 'linear-gradient(to bottom, #ffffff 0%, #ede9fe 40%, #c4b5fd 100%)';
+          borderColor = '#5b21b6'; statusTextColor = '#4c1d95';
         }
       }
 
