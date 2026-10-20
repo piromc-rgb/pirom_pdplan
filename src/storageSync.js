@@ -1821,8 +1821,13 @@ export class StorageSyncManager {
       if (!info || !info.exists || !info.updatedAt) return;
       const stamp = `${info.name}|${info.updatedAt}`;
       const seen = localStorage.getItem(KEY);
-      if (seen === stamp) return;
+      // Data loaded from the IndexedDB cache may come from an older file than the newest one on Drive
+      const cachedName = this._cachedOverviewName || '';
+      const cacheIsOlder = cachedName && cachedName !== info.name;
+      if (seen === stamp && !cacheIsOlder) { this.noteResolvedOverview(info.name); return; }
       await this.fetchPlanMaterials(true);
+      this._cachedOverviewName = '';
+      this.noteResolvedOverview(info.name);
       localStorage.setItem(KEY, stamp);
       if (seen) this.showToast(`🔄 พบไฟล์ ${info.name} ใหม่ อัปเดตข้อมูล Mat. เรียบร้อย`, 'success');
     } catch (e) {
@@ -1977,7 +1982,7 @@ export class StorageSyncManager {
           if (cachedMaterials.pdOpStatusMap) this.state.pdOpStatusMap = cachedMaterials.pdOpStatusMap;
           if (cachedMaterials.materialInventory) this.state.materialInventory = cachedMaterials.materialInventory;
           this.updateAssemblyTreeAfterMaterials();
-          if (cachedMaterials.filename && cachedMaterials.filename.toUpperCase() !== 'AUTO') this.noteResolvedOverview(cachedMaterials.filename);
+          if (cachedMaterials.filename && cachedMaterials.filename.toUpperCase() !== 'AUTO') { this._cachedOverviewName = cachedMaterials.filename; this.noteResolvedOverview(cachedMaterials.filename); }
           console.log(`[PlanMaterials] Loaded ${Object.keys(cachedMaterials.planMaterials).length} PDs from Local Cache`);
           return this.state.planMaterials;
         }
