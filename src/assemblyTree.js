@@ -1313,6 +1313,13 @@ export class AssemblyTreeController {
         status = 'working';
       }
 
+      // Visual state of the card: done = green, active (in production) = blinking green,
+      // released (not started) = blinking yellow, otherwise waiting = red
+      let visual = 'waiting';
+      if (isDone) visual = 'done';
+      else if (isRunning || completedSteps > 0 || orderStatusStr === 'active' || orderStatusStr === 'running') visual = 'active';
+      else if (orderStatusStr === 'released') visual = 'released';
+
       let stepNames = jobs.map(j => j.stepName || j.name || j.machine).filter(Boolean);
       if (stepNames.length === 0 && dwgInfo && Array.isArray(dwgInfo.operations)) {
         stepNames = dwgInfo.operations.map(o => o.name || o.machine).filter(Boolean);
@@ -1331,6 +1338,7 @@ export class AssemblyTreeController {
         parentId: parentKey,
         isRawMat: false,
         status,
+        visual,
         isDone,
         totalSteps,
         completedSteps,
@@ -1430,6 +1438,7 @@ export class AssemblyTreeController {
       const childPdNodes = node.children.filter(c => !c.isRawMat);
       if (childPdNodes.length > 0 && !node.isDone && childPdNodes.some(c => !c.isDone)) {
         node.status = 'working';
+        node.visual = 'active';
       }
       return node;
     };
@@ -2073,8 +2082,8 @@ export class AssemblyTreeController {
     {
       const pdNodes = allNodes.filter(n => !n.isRawMat);
       const total = pdNodes.length;
-      const counts = { released: 0, working: 0, waiting: 0 };
-      pdNodes.forEach(n => { if (counts[n.status] !== undefined) counts[n.status]++; });
+      const counts = { done: 0, active: 0, released: 0, waiting: 0 };
+      pdNodes.forEach(n => { if (counts[n.visual] !== undefined) counts[n.visual]++; });
       document.querySelectorAll('.assembly-legend-pct').forEach(el => {
         const c = counts[el.dataset.status] || 0;
         el.textContent = total > 0 ? `${(c / total * 100).toFixed(1)}%` : '-';
@@ -2210,6 +2219,20 @@ export class AssemblyTreeController {
         statusTextColor = '#7f1d1d';
       }
 
+      let blinkClass = '';
+      if (!node.isRawMat && node.visual) {
+        if (node.visual === 'active') {
+          blinkClass = 'tree-blink-green';
+          bgGradient = '#86efac'; borderColor = '#166534'; statusTextColor = '#14532d';
+        } else if (node.visual === 'released') {
+          blinkClass = 'tree-blink-yellow';
+          bgGradient = '#fde047'; borderColor = '#854d0e'; statusTextColor = '#713f12';
+        } else if (node.visual === 'done') {
+          bgGradient = 'linear-gradient(to bottom, #ffffff 0%, #dcfce7 40%, #86efac 100%)';
+          borderColor = '#166534'; statusTextColor = '#14532d';
+        }
+      }
+
       const isCollapsed = this.collapsedNodes.has(node.nodeKey);
       const togglePosStyle = isHor
         ? 'position: absolute; right: -11px; top: 50%; transform: translateY(-50%);'
@@ -2229,7 +2252,7 @@ export class AssemblyTreeController {
       ` : '';
 
       nodesHtml += `
-        <div class="assembly-node-card" data-node-key="${node.nodeKey}" data-wo-id="${node.id}" data-is-raw="${isRaw}" data-parent-wo-id="${node.parentWoId || ''}" style="position: absolute; left: ${node.x}px; top: ${node.y}px; width: ${NODE_WIDTH}px; height: ${NODE_HEIGHT}px; background: ${bgGradient}; border: 2px solid ${borderColor}; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); cursor: pointer; padding: 6px 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; user-select: none; transition: transform 0.2s, box-shadow 0.2s;" title="${isRaw ? `คลิกเพื่อดูรายการวัสดุและชิ้นส่วนประกอบ: ${node.partName}` : `คลิกเพื่อดูรายละเอียดขั้นตอนและแผนการผลิต: ${node.id}`}">
+        <div class="assembly-node-card ${blinkClass}" data-node-key="${node.nodeKey}" data-wo-id="${node.id}" data-is-raw="${isRaw}" data-parent-wo-id="${node.parentWoId || ''}" style="position: absolute; left: ${node.x}px; top: ${node.y}px; width: ${NODE_WIDTH}px; height: ${NODE_HEIGHT}px; background: ${bgGradient}; border: 2px solid ${borderColor}; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); cursor: pointer; padding: 6px 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; user-select: none; transition: transform 0.2s, box-shadow 0.2s;" title="${isRaw ? `คลิกเพื่อดูรายการวัสดุและชิ้นส่วนประกอบ: ${node.partName}` : `คลิกเพื่อดูรายละเอียดขั้นตอนและแผนการผลิต: ${node.id}`}">
           <div style="font-weight: 900; font-size: 13px; color: #000000; letter-spacing: 0.2px; text-transform: uppercase;">${cardTitle}</div>
           ${cardDwg}
           <div style="font-size: 9.5px; font-weight: 700; color: #334155; margin-top: 2px; max-width: 170px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${node.partName}">

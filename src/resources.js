@@ -1006,7 +1006,7 @@ export class ResourcesController {
       body.innerHTML = rows.map((r, i) => `
         <tr data-id="${r.id}" ${editable ? 'draggable="true"' : ''} style="border-top:1px solid #e2e8f0;">
           <td style="padding:5px 8px;color:#64748b;${editable ? 'cursor:grab;' : ''}" title="${editable ? 'ลากเพื่อย้ายลำดับ' : ''}">${editable ? '⋮⋮ ' : ''}${i + 1}</td>
-          <td style="padding:4px 8px;"><input class="pms-code" list="pms-items" value="${esc(r.itemCode)}" placeholder="Item Code" style="${inputCss}font-family:monospace;"${dis}></td>
+          <td style="padding:4px 8px;position:relative;"><input class="pms-code" list="pms-items" value="${esc(r.itemCode)}" placeholder="Item Code" title="Double click = ดู Assembly view ของ Item code นี้" style="${inputCss}font-family:monospace;"${dis}>${editable ? '' : '<span class="pms-code-hit" style="position:absolute;inset:4px 8px;cursor:pointer;" title="Double click = ดู Assembly view ของ Item code นี้"></span>'}</td>
           <td class="pms-desc" style="padding:5px 8px;">${descFor(r.itemCode)}</td>
           <td style="padding:4px 8px;"><input class="pms-qty" type="number" min="0" step="any" value="${esc(r.qty)}" style="${inputCss}text-align:right;"${dis}></td>
           <td style="padding:4px 8px;"><input class="pms-date" value="${esc(r.targetDate)}" placeholder="d/m/y" style="${inputCss}"${dis}></td>
@@ -1056,6 +1056,22 @@ export class ResourcesController {
     });
 
     const rowOf = (el) => rows.find(r => r.id === el.closest('tr')?.dataset.id);
+    // Double click an Item code -> open the Assembly view of that item's PD
+    body.addEventListener('dblclick', (e) => {
+      const el = e.target.closest('.pms-code, .pms-code-hit');
+      if (!el) return;
+      const tr = el.closest('tr');
+      const code = String(tr?.querySelector('.pms-code')?.value || '').trim();
+      const toast = (m, t) => state.ganttController?.showToast?.(m, t);
+      if (!code) return;
+      const pdId = state.dwgToPdMap?.[code]?.pdId;
+      if (!pdId) { toast(`ไม่พบ PD ของ Item code ${code} ในไฟล์ Status Overview`, 'error'); return; }
+      close();
+      state.setGanttMode('assembly');
+      const tree = window.assemblyTree;
+      if (tree) tree.selectAssembly(pdId);
+    });
+
     body.addEventListener('input', (e) => {
       const r = rowOf(e.target);
       if (!r) return;
