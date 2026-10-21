@@ -3306,12 +3306,14 @@ class CentralState {
   // Returns [{ itemCode, description, qty }] sorted by item code.
   // Operations whose status is "Ready to Start", grouped by Work Center (from the Status Overview Dwg map). Each row is one PD at that
   // Work Center with its quantity. Closed / cancelled / finished PDs and operations force-completed by the user are left out.
-  getReadyToStartByWorkCenter() {
+  // `status` selects another Operation status with the same rules (the PD view label also uses 'active')
+  getReadyToStartByWorkCenter(status = 'ready to start') {
     const byWc = new Map();
     const boardIds = new Set((this.scheduledJobs || []).map(j => j.woId || j.id));
     const backlogById = new Map((this.workOrders || []).map(w => [w.id, w]));
     const seen = new Set();
-    const isReady = (st) => String(st || '').trim().toLowerCase() === 'ready to start';
+    const wanted = String(status || '').trim().toLowerCase();
+    const isReady = (st) => String(st || '').trim().toLowerCase() === wanted;
     const take = (dwg, e) => {
       if (!e || !e.pdId) return;
       const pdId = e.pdId;

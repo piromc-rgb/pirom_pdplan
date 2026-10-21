@@ -730,22 +730,26 @@ export class GanttController {
     });
     const jobById = new Map(this.state.scheduledJobs.map(j => [j.id, j]));
     const backlogWoById = new Map(this.state.workOrders.map(w => [w.id, w]));
-    // PD -> Work Center codes whose Operation is "Ready to Start" (PD view label). Cached for a few seconds because
-    // the scan walks the whole Status Overview map and the Gantt re-renders on every pan.
-    let readyWcByPd = new Map();
+    // PD -> Work Centers whose Operation is "Active" / "Ready to Start" (PD view label). Cached for a few seconds
+    // because the scan walks the whole Status Overview map and the Gantt re-renders on every pan.
+    let opWcByPd = { active: new Map(), ready: new Map() };
     if (this.state.ganttMode === 'pd' && typeof this.state.getReadyToStartByWorkCenter === 'function') {
-      if (this._readyWcCache && Date.now() - this._readyWcCache.t < 3000) {
-        readyWcByPd = this._readyWcCache.map;
+      if (this._opWcCache && Date.now() - this._opWcCache.t < 3000) {
+        opWcByPd = this._opWcCache.map;
       } else {
         try {
-          this.state.getReadyToStartByWorkCenter().forEach((rows, wc) => {
-            rows.forEach(r => {
-              if (!readyWcByPd.has(r.pdId)) readyWcByPd.set(r.pdId, []);
-              if (!readyWcByPd.get(r.pdId).includes(wc)) readyWcByPd.get(r.pdId).push(wc);
+          const collect = (status, target) => {
+            this.state.getReadyToStartByWorkCenter(status).forEach((rows, wc) => {
+              rows.forEach(r => {
+                if (!target.has(r.pdId)) target.set(r.pdId, []);
+                if (!target.get(r.pdId).includes(wc)) target.get(r.pdId).push(wc);
+              });
             });
-          });
+          };
+          collect('active', opWcByPd.active);
+          collect('ready to start', opWcByPd.ready);
         } catch (e) { /* label only - never break the render */ }
-        this._readyWcCache = { t: Date.now(), map: readyWcByPd };
+        this._opWcCache = { t: Date.now(), map: opWcByPd };
       }
     }
     const allWoIdsSet = new Set([
@@ -1204,12 +1208,15 @@ export class GanttController {
               const badgeColor = (isPdMode && currentPdWeight === minPriorityWeight) ? '#ffffff' : ((isPdMode && currentPdWeight === secondPriorityWeight) ? '#831843' : '#c084fc');
               assemblyLabelHtml = `<span class="gantt-row-steps-badge" style="font-size: 10px; font-weight: bold; color: ${badgeColor}; margin-left: auto;" title="Steps Completed / Total (เสร็จแล้ว / ทั้งหมด)">${completedSteps}/${totalSteps}</span>`;
             }
-            const readyWcs = isPdMode && !isAllComplete ? (readyWcByPd.get(woId) || []) : [];
-            if (readyWcs.length > 0) {
-              const wcNames = readyWcs.map(c => this.state.workCenters?.[c]?.name || c);
-              // dark green blinking; on the red (top priority) row it sits on a light pill so it stays readable
-              const rdyBg = currentPdWeight === minPriorityWeight ? 'background: rgba(255,255,255,0.88); padding: 0 4px; border-radius: 3px;' : '';
-              assemblyLabelHtml = `<span style="display: inline-flex; align-items: center; gap: 5px; margin-left: auto;"><span class="gantt-ready-wc" style="font-size: 9px; font-weight: 800; color: #166534; ${rdyBg} white-space: nowrap; animation: pulse-flash 1s infinite alternate;" title="Work Center ที่ Ready to Start: ${wcNames.join(', ')}">${wcNames.join(', ')}</span>${assemblyLabelHtml}</span>`;
+            const nameOf = (c) => this.state.workCenters?.[c]?.name || c;
+            const activeWcs = isPdMode && !isAllComplete ? (opWcByPd.active.get(woId) || []) : [];
+            const readyWcs = isPdMode && !isAllComplete ? (opWcByPd.ready.get(woId) || []).filter(c => !activeWcs.includes(c)) : [];
+            if (activeWcs.length > 0 || readyWcs.length > 0) {
+              // dark green: Active = blinking, Ready to Start = steady; on the red (top priority) row a light pill keeps it readable
+              const pill = currentPdWeight === minPriorityWeight ? 'background: rgba(255,255,255,0.88); padding: 0 4px; border-radius: 3px;' : '';
+              const one = (list, blink, label) => list.length === 0 ? '' :
+                `<span class="${blink ? 'gantt-active-wc' : 'gantt-ready-wc'}" style="font-size: 9px; font-weight: 800; color: #166534; ${pill} white-space: nowrap; ${blink ? 'animation: pulse-flash 1s infinite alternate;' : ''}" title="Work Center ที่ ${label}: ${list.map(nameOf).join(', ')}">${list.map(nameOf).join(', ')}</span>`;
+              assemblyLabelHtml = `<span style="display: inline-flex; align-items: center; gap: 5px; margin-left: auto;">${one(activeWcs, true, 'Active')}${one(readyWcs, false, 'Ready to Start')}${assemblyLabelHtml}</span>`;
             }
           }
         }
