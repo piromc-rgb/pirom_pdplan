@@ -3326,15 +3326,17 @@ export class GanttController {
         row.style.cssText = 'display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); border-left: 3px solid var(--accent-teal); border-radius: 6px; cursor: pointer;';
         row.innerHTML = `
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-            <strong style="font-size: 12px; color: var(--accent-teal);">${r.woId}</strong>
+            <strong class="pd-search-id" title="คลิกเพื่อดูรายละเอียด PD" style="font-size: 12px; color: var(--accent-teal); cursor: pointer; text-decoration: underline;">${r.woId}</strong>
             <span style="font-size: 9.5px; color: var(--text-secondary); font-family: monospace;">${r.dwgNo || 'N/A'}</span>
           </div>
           <span style="font-size: 11px; color: var(--text-primary);">${r.partName || 'N/A'}</span>
           <span style="font-size: 10px; font-weight: 700; color: var(--text-secondary);">${whereLabel[r.where] || ''}${r.customer ? ` · Customer: ${r.customer}` : ''}</span>
         `;
-        row.addEventListener('click', () => {
+        row.addEventListener('click', (ev) => {
           modal.classList.add('hidden');
-          if (r.where === 'board' && r.jobs.length > 0) this.fitTasks(r.jobs);
+          // Click the PD number = PD detail window; click elsewhere on the row = jump to it on the Board
+          if (ev.target.closest('.pd-search-id')) this.showPDPlanModal(r.woId);
+          else if (r.where === 'board' && r.jobs.length > 0) this.fitTasks(r.jobs);
           else this.showPDPlanModal(r.woId);
         });
         resultsEl.appendChild(row);
