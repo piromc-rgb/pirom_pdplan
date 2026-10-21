@@ -987,6 +987,11 @@ export class ResourcesController {
           <span id="pms-count" style="margin-left:10px;color:#64748b;font-size:11.5px;"></span>
         </div>
         <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e2e8f0;">
+          ${editable ? `<div style="margin-right:auto;display:flex;gap:8px;">
+            <button type="button" id="pms-import" title="นำเข้าไฟล์ .md (ตาราง Machine Code / Delivery date) มาต่อท้ายรายการ" style="padding:6px 14px;border:1px solid #2563eb;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-weight:700;cursor:pointer;">📥 Import MD</button>
+            <button type="button" id="pms-clear" title="ล้างรายการ setup เก่าทั้งหมด (ต้องกดบันทึกเพื่อยืนยัน)" style="padding:6px 14px;border:1px solid #fecaca;border-radius:6px;background:#fff;color:#dc2626;font-weight:700;cursor:pointer;">🧹 Clear</button>
+            <input type="file" id="pms-import-file" accept=".md,.markdown,.txt,text/markdown,text/plain" style="display:none;">
+          </div>` : ''}
           <button type="button" id="pms-cancel" style="padding:6px 16px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;">${editable ? 'ยกเลิก' : 'ปิด'}</button>
           ${editable ? '<button type="button" id="pms-save" style="padding:6px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">💾 บันทึก</button>' : ''}
         </div>
@@ -1143,6 +1148,49 @@ export class ResourcesController {
       rows.push({ id: uid(), itemCode: '', qty: '', targetDate: '', qtyAuto: false });
       render();
       body.querySelector('tr:last-child .pms-code')?.focus();
+    });
+    // Clear: drop every row of the old setup (nothing is stored until "บันทึก" is pressed)
+    overlay.querySelector('#pms-clear')?.addEventListener('click', () => {
+      if (rows.length > 0 && !confirm(`ล้างรายการเครื่องจักรทั้งหมด (${rows.length} แถว) ของ ${proj} ?\n(ข้อมูลจะถูกลบจริงเมื่อกดบันทึก)`)) return;
+      rows = [{ id: uid(), itemCode: '', qty: '', targetDate: '', qtyAuto: false }];
+      sortKey = null;
+      overlay.querySelectorAll('.pms-sort .pms-arrow').forEach(a => { a.textContent = ''; });
+      render();
+    });
+    // Import MD: table of "Machine Code (No Hyphen) | Delivery date (d/m, "-" = none)" appended to the list
+    const importFile = overlay.querySelector('#pms-import-file');
+    overlay.querySelector('#pms-import')?.addEventListener('click', () => { importFile.value = ''; importFile.click(); });
+    importFile?.addEventListener('change', async () => {
+      const file = importFile.files && importFile.files[0];
+      if (!file) return;
+      const toast = (m, t) => state.ganttController?.showToast?.(m, t);
+      const text = await file.text();
+      const year = new Date().getFullYear();
+      const parsed = [];
+      text.split(/\r?\n/).forEach(line => {
+        const t = line.trim();
+        if (!t) return;
+        const cells = (t.includes('|') ? t.split('|') : t.split(/[\t,]+|\s{2,}/)).map(c => c.trim()).filter((c, i, a) => !(c === '' && (i === 0 || i === a.length - 1)));
+        if (cells.length === 0) return;
+        if (/^:?-+:?$/.test(cells[0]) || /machine|item\s*code/i.test(cells[0])) return;
+        const code = cells[0].replace(/[\s*`-]/g, '');
+        if (!/^[A-Za-z0-9]+$/.test(code)) return;
+        const raw = (cells[1] || '').replace(/[*`]/g, '').trim();
+        let date = '';
+        const m = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2}|\d{4}))?$/);
+        if (m) date = parseDate(`${m[1]}/${m[2]}/${m[3] || year}`) || '';
+        parsed.push({ code, date });
+      });
+      if (parsed.length === 0) { toast('⚠️ ไม่พบรายการในไฟล์ (ต้องเป็นตาราง Machine Code | Delivery date)', 'error'); return; }
+      rows = rows.filter(r => String(r.itemCode || '').trim() || (r.qty !== '' && r.qty !== null) || String(r.targetDate || '').trim());
+      parsed.forEach(p => {
+        const c = byCode.get(p.code);
+        const hasQty = !!(c && c.qty !== null && c.qty !== undefined);
+        rows.push({ id: uid(), itemCode: p.code, qty: hasQty ? c.qty : '', targetDate: p.date, qtyAuto: hasQty });
+      });
+      render();
+      const unknown = parsed.filter(p => !byCode.has(p.code)).length;
+      toast(`📥 Import ${parsed.length} รายการจาก ${file.name}${unknown ? ` (ไม่พบใน Status Overview ${unknown} รายการ)` : ''} — กดบันทึกเพื่อยืนยัน`, 'success');
     });
     overlay.querySelector('#pms-save')?.addEventListener('click', () => {
       const toast = (m, t) => state.ganttController?.showToast?.(m, t);
