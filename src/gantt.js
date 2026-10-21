@@ -447,6 +447,8 @@ export class GanttController {
       }
     });
 
+    document.getElementById('btn-pd-search')?.addEventListener('click', () => this.showPdSearchModal());
+
     // Double click the "PRODUCTION ORDER" column header to search for a PD
     document.getElementById('row-label-header')?.addEventListener('dblclick', (e) => {
       if (e.target.closest('#gantt-label-col-resizer')) return;
@@ -3275,21 +3277,41 @@ export class GanttController {
         return;
       }
 
-      const byWoId = new Map();
-      this.state.scheduledJobs.forEach(job => {
-        if (!job.woId) return;
-        const woId = job.woId;
-        const partName = job.partName || '';
-        const dwgNo = job.dwgNo || '';
-        const matches = woId.toLowerCase().includes(q) || partName.toLowerCase().includes(q) || dwgNo.toLowerCase().includes(q);
-        if (!matches) return;
-        if (!byWoId.has(woId)) {
-          byWoId.set(woId, { woId, partName, dwgNo, customer: job.customer || '', jobs: [] });
-        }
-        byWoId.get(woId).jobs.push(job);
+      // Search the Board, the Backlog and the closed / completed PD list
+      const state = this.state;
+      const dwgOf = new Map();
+      Object.entries(state.dwgToPdMap || {}).forEach(([dwg, info]) => {
+        if (info && info.pdId && !dwgOf.has(info.pdId)) dwgOf.set(info.pdId, { dwgNo: dwg, partName: info.description || '' });
       });
-
-      const results = Array.from(byWoId.values()).sort((a, b) => a.woId.localeCompare(b.woId));
+      const found = new Map();
+      const add = (woId, patch) => {
+        if (!woId) return;
+        const cur = found.get(woId) || { woId, partName: '', dwgNo: '', customer: '', jobs: [], where: '' };
+        Object.assign(cur, Object.fromEntries(Object.entries(patch).filter(([, v]) => v)));
+        found.set(woId, cur);
+      };
+      (state.scheduledJobs || []).forEach(job => {
+        if (!job.woId) return;
+        add(job.woId, { partName: job.partName, dwgNo: job.dwgNo, customer: job.customer, where: 'board' });
+        found.get(job.woId).jobs.push(job);
+      });
+      (state.workOrders || []).forEach(wo => {
+        if (found.has(wo.id) && found.get(wo.id).where === 'board') return;
+        add(wo.id, { partName: wo.partName, dwgNo: wo.dwgNo, customer: wo.customer, where: 'backlog' });
+      });
+      const closedIds = new Set([...(typeof state.getCompletedPdIds === 'function' ? state.getCompletedPdIds() : []), ...Object.keys(state.completedOpHistory || {})]);
+      closedIds.forEach(id => {
+        if (found.has(id)) return;
+        const d = dwgOf.get(id) || {};
+        add(id, { partName: d.partName, dwgNo: d.dwgNo, where: 'closed' });
+      });
+      const results = Array.from(found.values()).filter(r => {
+        const d = dwgOf.get(r.woId) || {};
+        const partName = r.partName || d.partName || '';
+        const dwgNo = r.dwgNo || d.dwgNo || '';
+        r.partName = partName; r.dwgNo = dwgNo;
+        return r.woId.toLowerCase().includes(q) || partName.toLowerCase().includes(q) || dwgNo.toLowerCase().includes(q);
+      }).sort((a, b) => a.woId.localeCompare(b.woId));
 
       if (results.length === 0) {
         emptyMsg.textContent = `ไม่พบ Production Order ที่ตรงกับ "${query}"`;
@@ -3298,7 +3320,8 @@ export class GanttController {
       }
 
       emptyMsg.classList.add('hidden');
-      results.forEach(r => {
+      const whereLabel = { board: '📊 บน Board', backlog: '📋 Backlog', closed: '✅ รายการ PD ที่ปิดแล้ว' };
+      results.slice(0, 150).forEach(r => {
         const row = document.createElement('div');
         row.style.cssText = 'display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); border-left: 3px solid var(--accent-teal); border-radius: 6px; cursor: pointer;';
         row.innerHTML = `
@@ -3307,14 +3330,21 @@ export class GanttController {
             <span style="font-size: 9.5px; color: var(--text-secondary); font-family: monospace;">${r.dwgNo || 'N/A'}</span>
           </div>
           <span style="font-size: 11px; color: var(--text-primary);">${r.partName || 'N/A'}</span>
-          ${r.customer ? `<span style="font-size: 10px; color: var(--text-secondary);">Customer: ${r.customer}</span>` : ''}
+          <span style="font-size: 10px; font-weight: 700; color: var(--text-secondary);">${whereLabel[r.where] || ''}${r.customer ? ` · Customer: ${r.customer}` : ''}</span>
         `;
         row.addEventListener('click', () => {
-          this.fitTasks(r.jobs);
           modal.classList.add('hidden');
+          if (r.where === 'board' && r.jobs.length > 0) this.fitTasks(r.jobs);
+          else this.showPDPlanModal(r.woId);
         });
         resultsEl.appendChild(row);
       });
+      if (results.length > 150) {
+        const more = document.createElement('div');
+        more.style.cssText = 'text-align:center;font-size:10px;color:var(--text-secondary);padding:6px;';
+        more.textContent = `แสดง 150 จาก ${results.length} รายการ - พิมพ์เพิ่มเพื่อกรองให้แคบลง`;
+        resultsEl.appendChild(more);
+      }
     };
 
     if (!this._pdSearchModalBound) {

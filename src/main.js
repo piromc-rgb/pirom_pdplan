@@ -127,7 +127,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.00';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.01';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -3426,6 +3426,11 @@ class App {
     });
 
     // Sync Production Order List button visibility (only in PD view)
+    const btnPdSearch = document.getElementById('btn-pd-search');
+    if (btnPdSearch) {
+      btnPdSearch.style.display = state.ganttMode === 'pd' ? 'inline-flex' : 'none';
+      btnPdSearch.classList.toggle('hidden', state.ganttMode !== 'pd');
+    }
     const btnPdOrderList = document.getElementById('btn-pd-order-list');
     if (btnPdOrderList) {
       if (state.ganttMode === 'pd') {
