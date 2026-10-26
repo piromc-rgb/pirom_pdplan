@@ -969,7 +969,23 @@ export class ResourcesController {
           td.style.cssText = 'padding:5px 8px;white-space:nowrap;';
           const code = tr.querySelector('.ps-item-code')?.dataset.code;
           const f = code ? found.get(code) : null;
-          if (f) { const a = document.createElement('a'); a.href = f.url; a.target = '_blank'; a.textContent = `📄 ${f.name || 'เปิดแบบ'}`; a.style.cssText = 'color:#1d4ed8;font-size:11px;'; td.appendChild(a); }
+          if (f) {
+            // Drawing preview = Drive thumbnail of the PDF (loads with the viewer's own Google login) + link to the full file
+            const fid = (String(f.url).match(/\/d\/([^/?#]+)/) || [])[1];
+            const a = document.createElement('a'); a.href = f.url; a.target = '_blank'; a.style.cssText = 'color:#1d4ed8;font-size:10px;display:block;white-space:normal;max-width:230px;';
+            if (fid) {
+              const img = document.createElement('img');
+              img.src = `https://drive.google.com/thumbnail?id=${fid}&sz=w700`;
+              img.alt = f.name || 'แบบงาน';
+              img.referrerPolicy = 'no-referrer';
+              img.style.cssText = 'width:220px;max-height:170px;object-fit:contain;border:1px solid #cbd5e1;background:#fff;display:block;margin-bottom:2px;';
+              img.setAttribute('onerror', "this.style.display='none'");
+              a.appendChild(img);
+            }
+            a.appendChild(document.createTextNode(`📄 ${f.name || 'เปิดแบบ'}`));
+            td.style.whiteSpace = 'normal';
+            td.appendChild(a);
+          }
           else if (code) { td.textContent = 'ไม่พบไฟล์แบบ'; td.style.color = '#94a3b8'; }
           if (tr.children.length > 2 && tr.children[1]) tr.insertBefore(td, tr.children[2]); else tr.appendChild(td);
         });
