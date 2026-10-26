@@ -801,7 +801,7 @@ export class ResourcesController {
           const tint = lot !== undefined ? `background:${LOT_TINTS[lot % LOT_TINTS.length]};` : '';
           return `<tr style="border-top:1px solid #e2e8f0;${tint}">
             <td style="padding:5px 8px;text-align:center;color:#64748b;">${i + 1}</td>
-            <td style="padding:5px 8px;white-space:nowrap;">${multi ? `<span style="color:#64748b;">${esc(r.project)}</span> ` : ''}<span style="font-family:monospace;font-weight:700;">${esc(r.itemCode)}</span></td>
+            <td style="padding:5px 8px;white-space:nowrap;">${multi ? `<span style="color:#64748b;">${esc(r.project)}</span> ` : ''}<span class="ps-item-code" data-code="${esc(r.itemCode)}" title="Double click = เปิดไฟล์แบบ PDF" style="font-family:monospace;font-weight:700;cursor:pointer;">${esc(r.itemCode)}</span></td>
             <td style="padding:5px 8px;color:#334155;">${esc(r.description)}</td>
             <td style="padding:5px 8px;text-align:right;">${r.qty ?? '-'}</td>
             <td style="padding:5px 8px;white-space:nowrap;${late ? 'color:#b91c1c;font-weight:700;' : ''}" title="${late ? 'เลยกำหนดส่งมอบแล้ว แต่ยังผลิตไม่เสร็จ' : ''}">${fmtDate(r._d)}</td>
@@ -876,6 +876,10 @@ export class ResourcesController {
             <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#334155;cursor:pointer;user-select:none;" title="เปิด = แสดงบรรทัด ดูรายการ PD (ยุบไว้ กดเพื่อขยาย) · ปิด = ซ่อนบรรทัด ดูรายการ PD"><span>แสดงรายการ PD</span><span class="ios-toggle"><input type="checkbox" id="chk-project-summary-lists"${showLists ? ' checked' : ''}><span class="ios-toggle-slider"></span></span></label>
               <button type="button" id="btn-ps-machine-view" style="padding:4px 10px;border:1px solid #2563eb;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;" title="ดู Progress การผลิตแยกเครื่อง เรียงตามเป้าการส่งมอบ">📋 Progress แยกเครื่อง</button>
             </div>
+            <div id="ps-machine-actions" style="display:none;flex-direction:column;align-items:flex-end;gap:6px;">
+              <button type="button" id="btn-ps-machine-pdf" style="padding:5px 12px;border:1px solid #15803d;border-radius:6px;background:#f0fdf4;color:#166534;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;" title="สรุป Progress การผลิตแยกเครื่องเป็น PDF (พิมพ์ / Save as PDF)">🖨 สรุป Progress เป็น PDF</button>
+              <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#334155;cursor:pointer;user-select:none;" title="เพิ่มคอลัมน์ลิงก์ไฟล์แบบงาน (Drawing PDF) ของ item นั้นๆ ต่อจาก Item Code"><input type="checkbox" id="chk-ps-pdf-dwg">แสดงแบบงาน (Drawing) หลัง Item Code</label>
+            </div>
             <button type="button" id="btn-close-project-summary" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
           </div>
         </div>
@@ -918,10 +922,85 @@ export class ResourcesController {
       mainView.style.display = machine ? 'none' : 'flex';
       machineView.style.display = machine ? 'flex' : 'none';
       if (actionsEl) actionsEl.style.display = machine ? 'none' : 'flex';
+      const machineActionsEl = overlay.querySelector('#ps-machine-actions');
+      if (machineActionsEl) machineActionsEl.style.display = machine ? 'flex' : 'none';
       titleEl.textContent = machine ? `📋 Progress การผลิตแยกเครื่อง (${sum.perProject.length} โครงการ: ${sum.perProject.map(r => r.project).slice(0, 3).join(', ')}${sum.perProject.length > 3 ? '…' : ''})` : mainTitle;
     };
     overlay.querySelector('#btn-ps-machine-view')?.addEventListener('click', () => showPage(true));
     overlay.querySelector('#btn-ps-back')?.addEventListener('click', () => showPage(false));
+    // Progress summary as PDF (print window): clones the progress table; optional "แบบงาน" column = link to the drawing PDF of each item
+    overlay.querySelector('#btn-ps-machine-pdf')?.addEventListener('click', async () => {
+      const table = overlay.querySelector('#ps-machine-view table');
+      const toast = (m, t) => this.state.ganttController?.showToast?.(m, t);
+      if (!table) return;
+      const win = window.open('', '_blank'); // opened synchronously so the browser does not block it
+      if (!win) { toast('⚠️ เบราว์เซอร์บล็อกหน้าต่างใหม่ กรุณาอนุญาต Pop-up', 'error'); return; }
+      win.document.write('<p style="font-family:sans-serif;padding:20px;">กำลังสร้างรายงาน... (ถ้าเลือกแสดงแบบงาน จะค้นไฟล์แบบจาก Drive ทีละ item อาจใช้เวลาสักครู่)</p>');
+      const clone = table.cloneNode(true);
+      clone.querySelectorAll('.ps-item-code').forEach(el => { el.style.cursor = 'default'; el.removeAttribute('title'); });
+      if (overlay.querySelector('#chk-ps-pdf-dwg')?.checked) {
+        const sync = this.state.storageSync;
+        const ep = sync?.getEndpointUrl?.() || '';
+        const folder = sync?.getDwgFolderId?.() || '';
+        const lookup = async (code) => {
+          if (!ep || !ep.startsWith('http')) return null;
+          try {
+            const sep = ep.includes('?') ? '&' : '?';
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 20000);
+            const res = await fetch(`${ep}${sep}action=find-dwg-pdf&dwgNo=${encodeURIComponent(code)}&dwgFolderId=${encodeURIComponent(folder)}&t=${Date.now()}`, { signal: ctrl.signal });
+            clearTimeout(timer);
+            const d = res.ok ? await res.json() : null;
+            if (d && d.status === 'success' && (d.fileId || d.viewUrl)) {
+              return { url: d.fileId ? `https://drive.google.com/file/d/${d.fileId}/view` : d.viewUrl, name: d.filename || d.fileName || '' };
+            }
+          } catch (e) { /* not found / offline */ }
+          return null;
+        };
+        const codes = [...new Set([...clone.querySelectorAll('.ps-item-code')].map(el => el.dataset.code).filter(Boolean))];
+        const found = new Map();
+        await Promise.all(codes.map(async c => found.set(c, await lookup(c))));
+        const headRow = clone.querySelector('thead tr');
+        const th = document.createElement('th');
+        th.style.cssText = 'padding:6px 8px;'; th.textContent = 'แบบงาน';
+        headRow.insertBefore(th, headRow.children[2]);
+        clone.querySelectorAll('tbody tr').forEach(tr => {
+          const td = document.createElement('td');
+          td.style.cssText = 'padding:5px 8px;white-space:nowrap;';
+          const code = tr.querySelector('.ps-item-code')?.dataset.code;
+          const f = code ? found.get(code) : null;
+          if (f) { const a = document.createElement('a'); a.href = f.url; a.target = '_blank'; a.textContent = `📄 ${f.name || 'เปิดแบบ'}`; a.style.cssText = 'color:#1d4ed8;font-size:11px;'; td.appendChild(a); }
+          else if (code) { td.textContent = 'ไม่พบไฟล์แบบ'; td.style.color = '#94a3b8'; }
+          if (tr.children.length > 2 && tr.children[1]) tr.insertBefore(td, tr.children[2]); else tr.appendChild(td);
+        });
+      }
+      const legendHtml = overlay.querySelector('#ps-machine-view span[style*="gap:14px"]')?.innerHTML || '';
+      const title = overlay.querySelector('#ps-title')?.textContent || 'Progress การผลิตแยกเครื่อง';
+      const stamp = new Date().toLocaleString('th-TH');
+      win.document.open();
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
+        <style>
+          @page { size: A4 landscape; margin: 10mm; }
+          body { font-family: system-ui, "Sarabun", Arial, sans-serif; color: #0f172a; margin: 0; padding: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          h1 { font-size: 16px; margin: 0 0 4px; } .meta { font-size: 11px; color: #475569; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 12px; }
+          table { border-collapse: collapse; width: 100%; font-size: 11px; } th { background: #f1f5f9; text-align: left; } td, th { border-bottom: 1px solid #e2e8f0; }
+          tr { page-break-inside: avoid; } a { text-decoration: none; }
+          .noprint { margin-bottom: 8px; } @media print { .noprint { display: none; } }
+        </style></head><body>
+        <div class="noprint"><button onclick="window.print()" style="padding:6px 14px;">🖨 พิมพ์ / Save as PDF</button></div>
+        <h1>${title}</h1>
+        <div class="meta"><span>แสดงรายงานเมื่อ ${stamp}</span><span style="display:flex;gap:14px;">${legendHtml}</span></div>
+        ${clone.outerHTML}
+        <script>window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 400); });<\/script>
+        </body></html>`);
+      win.document.close();
+    });
+    // Double click an Item code (progress page) -> open the drawing PDF of that item
+    overlay.addEventListener('dblclick', (e) => {
+      const el = e.target.closest('.ps-item-code');
+      if (!el || !el.dataset.code) return;
+      if (typeof window.openDwgPdfViewer === 'function') window.openDwgPdfViewer(el.dataset.code);
+    });
     // Click a PD number to open its detail window on top of this popup
     overlay.querySelectorAll('.project-summary-pd').forEach(el => el.addEventListener('click', () => {
       const pdModal = document.getElementById('pd-plan-modal');
