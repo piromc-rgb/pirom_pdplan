@@ -878,7 +878,7 @@ export class ResourcesController {
             </div>
             <div id="ps-machine-actions" style="display:none;flex-direction:column;align-items:flex-end;gap:6px;">
               <button type="button" id="btn-ps-machine-pdf" style="padding:5px 12px;border:1px solid #15803d;border-radius:6px;background:#f0fdf4;color:#166534;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;" title="สรุป Progress การผลิตแยกเครื่องเป็น PDF (พิมพ์ / Save as PDF)">🖨 สรุป Progress เป็น PDF</button>
-              <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#334155;cursor:pointer;user-select:none;" title="เพิ่มคอลัมน์ลิงก์ไฟล์แบบงาน (Drawing PDF) ของ item นั้นๆ ต่อจาก Item Code"><input type="checkbox" id="chk-ps-pdf-dwg">แสดงแบบงาน (Drawing) หลัง Item Code</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#334155;cursor:pointer;user-select:none;" title="เปิด = รายงาน PDF มีคอลัมน์แบบงาน (รูป Drawing + ลิงก์ไฟล์) ต่อจาก Item Code"><span>แบบงาน</span><span class="ios-toggle"><input type="checkbox" id="chk-ps-pdf-dwg"><span class="ios-toggle-slider"></span></span></label>
             </div>
             <button type="button" id="btn-close-project-summary" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
           </div>
