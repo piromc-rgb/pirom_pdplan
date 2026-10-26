@@ -938,6 +938,10 @@ export class ResourcesController {
       win.document.write('<p style="font-family:sans-serif;padding:20px;">กำลังสร้างรายงาน... (ถ้าเลือกแสดงแบบงาน จะค้นไฟล์แบบจาก Drive ทีละ item อาจใช้เวลาสักครู่)</p>');
       const clone = table.cloneNode(true);
       clone.querySelectorAll('.ps-item-code').forEach(el => { el.style.cursor = 'default'; el.removeAttribute('title'); });
+      // The report keeps the progress bar only: drop the last 3 columns (เสร็จ / กำลังผลิต / รอผลิต %)
+      clone.querySelectorAll('tr').forEach(tr => {
+        if (tr.children.length >= 9) for (let k = 0; k < 3; k++) tr.lastElementChild.remove();
+      });
       if (overlay.querySelector('#chk-ps-pdf-dwg')?.checked) {
         const sync = this.state.storageSync;
         const ep = sync?.getEndpointUrl?.() || '';
