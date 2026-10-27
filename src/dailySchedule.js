@@ -141,6 +141,29 @@ export class DailyScheduleController {
     return `เดือน${monthsFull[date.getMonth()]} ${yearThai}`;
   }
 
+  // PD -> Work Centers whose Operation is "Active" / "Ready to Start" (cached a few seconds: the scan walks the whole Status Overview map)
+  getOpWorkCenters(woId) {
+    if (!this._opWcCache || Date.now() - this._opWcCache.t > 3000) {
+      const map = { active: new Map(), ready: new Map() };
+      try {
+        const collect = (status, target) => {
+          this.state.getReadyToStartByWorkCenter(status).forEach((rows, wc) => {
+            rows.forEach(r => {
+              if (!target.has(r.pdId)) target.set(r.pdId, []);
+              if (!target.get(r.pdId).includes(wc)) target.get(r.pdId).push(wc);
+            });
+          });
+        };
+        collect('active', map.active);
+        collect('ready to start', map.ready);
+      } catch (e) { /* label only - never break the render */ }
+      this._opWcCache = { t: Date.now(), map };
+    }
+    const active = this._opWcCache.map.active.get(woId) || [];
+    const ready = (this._opWcCache.map.ready.get(woId) || []).filter(c => !active.includes(c));
+    return { active, ready };
+  }
+
   formatTime(date) {
     const hh = String(date.getHours()).padStart(2, '0');
     const mm = String(date.getMinutes()).padStart(2, '0');
@@ -331,10 +354,18 @@ export class DailyScheduleController {
       const curStep = sortedSteps.find(s => s.stepNum === job.stepNum) || job;
       const curName = curStep.name || curStep.stepName || curStep.partName || job.stepName || job.name || 'Operation';
       const curWCStr = `${curName} (${curStep.machine || job.machine})`;
+      // Work Centers of this PD that are Active (blinking green) / Ready to Start (dark yellow) in the Status Overview
+      const opWc = typeof this.state.getReadyToStartByWorkCenter === 'function' ? this.getOpWorkCenters(job.woId) : { active: [], ready: [] };
+      const wcName = (c) => this.state.workCenters?.[c]?.name || c;
+      const opWcHtml = (opWc.active.length || opWc.ready.length)
+        ? `<span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: 6px;">${
+            opWc.active.length ? `<strong class="dsc-wc-active" title="Work Center ที่ Active">▶ ${opWc.active.map(wcName).join(', ')}</strong>` : ''}${
+            opWc.ready.length ? `<strong style="color: #a16207;" title="Work Center ที่ Ready to Start">⏳ ${opWc.ready.map(wcName).join(', ')}</strong>` : ''}</span>`
+        : '';
       const opChainHtml = `<span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <strong style="color: #15803d;">${prevWCStr}</strong>
               <span>&gt;</span><strong class="rev-blink">${curWCStr}</strong>
-              <span>&gt;</span><strong style="color: var(--text-primary);">${nextWCStr}</strong>
+              <span>&gt;</span><strong style="color: var(--text-primary);">${nextWCStr}</strong>${opWcHtml}
             </span>`;
 
       const latestRev = this.state.getLatestRevision ? this.state.getLatestRevision(job.woId) : null;

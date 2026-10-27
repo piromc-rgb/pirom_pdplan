@@ -518,6 +518,16 @@ body.dark-theme .user-mode-item.item-plan.active {
   50% { opacity: 0.35; }
 }
 
+.dsc-wc-active {
+  color: #16a34a;
+  animation: dsc-wc-blink 1s infinite alternate;
+}
+
+@keyframes dsc-wc-blink {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
+
 @keyframes pulse-flash {
   from { opacity: 0.7; transform: scale(0.9); }
   to { opacity: 1; transform: scale(1.1); }
