@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const compileVersion = '5.10';
+const compileVersion = '5.11';
 const PRODUCTION_DATES_SHEET_ID = '1MwvA8HPTStZiESym9cPWxPuRb6q72wZk3hxKkJJXwgg';
 const PRODUCTION_DATES_DEFAULT_GIDS = ['2120309268']; // fallback when the tab list cannot be discovered
 
@@ -114,7 +114,7 @@ export default defineConfig({
 
           const readCloudConfig = () => {
             const cfg = {
-              endpointUrl: 'https://script.google.com/macros/s/AKfycbzLDxqPOnJAC8aRVyr8-_oNLWLdXEbSvJqbGSh-5W-zFVo_cwdVhsQPISjUUF3NSpJJFg/exec',
+              endpointUrl: 'https://script.google.com/macros/s/AKfycbxqAxfv6erb24SqvOBxtSs660sr8ar1Wo9ScGd1a3ikwXmVOvhh9gcKS1_zZSDOCZIqew/exec',
               driveFolderUrl: 'https://drive.google.com/drive/folders/1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA?lfhs=2',
               dwgFolderUrl: 'https://drive.google.com/drive/folders/1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm',
               statusOverviewFilename: 'LN Status Overview.xlsx'

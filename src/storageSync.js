@@ -10,7 +10,9 @@ export const DEFAULT_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/
 export const DEFAULT_DRIVE_FOLDER_ID = '1Yt8drFmq0END9fAEWUy0No6sZ76H1dtA';
 export const DEFAULT_DWG_FOLDER_URL = 'https://drive.google.com/drive/folders/1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm';
 export const DEFAULT_DWG_FOLDER_ID = '1M-QDPilC7Nn-YW_5YxLQITUS6ZOYEyFm';
-export const DEFAULT_SYNC_ENDPOINT_URL = 'https://script.google.com/macros/s/AKfycbzLDxqPOnJAC8aRVyr8-_oNLWLdXEbSvJqbGSh-5W-zFVo_cwdVhsQPISjUUF3NSpJJFg/exec';
+export const DEFAULT_SYNC_ENDPOINT_URL = 'https://script.google.com/macros/s/AKfycbxqAxfv6erb24SqvOBxtSs660sr8ar1Wo9ScGd1a3ikwXmVOvhh9gcKS1_zZSDOCZIqew/exec';
+// Previous Apps Script deployment (archived, lacks the Drawing File Tools); saved copies are moved to the new URL
+const LEGACY_SYNC_ENDPOINT_URL = 'https://script.google.com/macros/s/AKfycbzLDxqPOnJAC8aRVyr8-_oNLWLdXEbSvJqbGSh-5W-zFVo_cwdVhsQPISjUUF3NSpJJFg/exec';
 
 const STORAGE_ENDPOINT_KEY = 'PDPLAN_STORAGE_ENDPOINT';
 const STORAGE_CACHE_KEY = 'pdplan_cached_plan';
@@ -35,6 +37,10 @@ export class StorageSyncManager {
       window.openDwgPdfViewer = (dwgNo) => this.openDwgPdfViewer(dwgNo);
     }
     this.endpointUrl = localStorage.getItem(STORAGE_ENDPOINT_KEY) || DEFAULT_SYNC_ENDPOINT_URL;
+    if (this.endpointUrl.trim() === LEGACY_SYNC_ENDPOINT_URL) {
+      this.endpointUrl = DEFAULT_SYNC_ENDPOINT_URL;
+      localStorage.setItem(STORAGE_ENDPOINT_KEY, this.endpointUrl);
+    }
     this.autoSync = localStorage.getItem(STORAGE_AUTO_SYNC_KEY) !== 'false';
     this.lastSyncTime = localStorage.getItem(STORAGE_LAST_SYNC_KEY) || null;
     this.syncStatus = 'idle'; // 'idle' | 'syncing' | 'success' | 'error' | 'local_only'
