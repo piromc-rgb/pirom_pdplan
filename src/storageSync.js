@@ -1,3 +1,4 @@
+import { DWG_TOOLS_GAS } from './gasDwgTools.js';
 // ==============================================================================
 // CHAKEN Planing v1.0 - Storage Location & Cloud Sync Manager
 // ==============================================================================
@@ -3115,8 +3116,11 @@ function readJsonFile(folder, filename) {
   return null;
 }
 
+${DWG_TOOLS_GAS}
 function doGet(e) {
   try {
+    const dwgToolResponse = handleDwgToolAction_(e);
+    if (dwgToolResponse) return dwgToolResponse;
     const folder = DriveApp.getFolderById(TARGET_FOLDER_ID);
     if (e && e.parameter && (e.parameter.action === 'status-overview' || e.parameter.file === 'status-overview')) {
       const targetName = e.parameter.filename ? e.parameter.filename.trim() : '';

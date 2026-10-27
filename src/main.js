@@ -15,6 +15,7 @@ import { DailyScheduleController } from './dailySchedule.js';
 import { AssemblyTreeController, matchesAssemblyQuery } from './assemblyTree.js';
 import { ContinuityAnalysisController } from './continuityAnalysis.js';
 import { QcCheckController } from './qcCheck.js';
+import { DwgToolsController } from './dwgTools.js';
 import { MatIssueReportController } from './matIssueReport.js';
 import { BacklogMatSummaryController } from './backlogMatSummary.js';
 import { StorageSyncManager } from './storageSync.js';
@@ -127,7 +128,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.08';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.09';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -1829,6 +1830,10 @@ class App {
         });
       }
     }
+
+    // 7.1b Drawing File Tools (sub menu inside Planing Tools)
+    this.dwgTools = new DwgToolsController(state);
+    this.dwgTools.init();
 
     // 7.2 Backlog Tools Dropdown Menu (same behaviour as Planing Tools)
     const backlogToolsDropdown = document.getElementById('backlog-tools-dropdown');

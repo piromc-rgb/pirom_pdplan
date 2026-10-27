@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V5.08 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V5.09 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-DMLje_iU.js"></script>
+    <script type="module" crossorigin src="./assets/index-CjJezFEe.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-Co7XLetr.css">
   </head>
   <body>
@@ -248,6 +248,18 @@
                 </svg>
                 <span>ตรวจสอบ Mat รอเบิก</span>
               </button>
+
+              <div id="btn-dwg-tools" role="button" tabindex="0" class="btn btn-glowing" title="เครื่องมือจัดการไฟล์แบบงาน (Drawing PDF) ใน Google Drive" style="width: 100%; justify-content: flex-start; padding: 8px 12px; font-size: 11.5px; border-radius: 7px; margin: 0; background: linear-gradient(135deg, #6d28d9, #a855f7); color: #fff; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span style="flex: 1;">เครื่องมือจัดการ File Drawing</span>
+                <svg class="dwg-tools-arrow" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </div>
+              <div id="dwg-tools-submenu" style="display: none; flex-direction: column; gap: 5px; padding-left: 12px;">
+                <button id="btn-dwg-reindex" class="btn" title="สแกนไฟล์ PDF แบบงานทั้งหมดใน Google Drive แล้วสร้างรายการ (dwg_index.json) เพื่อให้ค้นเร็วขึ้น" style="width: 100%; justify-content: flex-start; padding: 7px 10px; font-size: 11px; border-radius: 6px; margin: 0; background: #f5f3ff; border: 1px solid #c4b5fd; color: #5b21b6; font-weight: 700; cursor: pointer; text-align: left;">1. Reindex ไฟล์ PDF แบบงาน</button>
+                <button id="btn-dwg-duplicates" class="btn" title="หาไฟล์แบบซ้ำ แนะนำไฟล์ Rev เก่าที่ควรลบ เพื่อให้เหลือ Rev ล่าสุด" style="width: 100%; justify-content: flex-start; padding: 7px 10px; font-size: 11px; border-radius: 6px; margin: 0; background: #f5f3ff; border: 1px solid #c4b5fd; color: #5b21b6; font-weight: 700; cursor: pointer; text-align: left;">2. ตรวจไฟล์ซ้ำ / ลบ Rev เก่า</button>
+              </div>
             </div>
           </div>
         </div>
