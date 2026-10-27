@@ -141,27 +141,27 @@ export class DailyScheduleController {
     return `เดือน${monthsFull[date.getMonth()]} ${yearThai}`;
   }
 
-  // PD -> Work Centers whose Operation is "Active" / "Ready to Start" (cached a few seconds: the scan walks the whole Status Overview map)
-  getOpWorkCenters(woId) {
-    if (!this._opWcCache || Date.now() - this._opWcCache.t > 3000) {
-      const map = { active: new Map(), ready: new Map() };
+  // PD -> { stepNum: 'active' | 'ready' } for Operations whose Status Overview status is Active / Ready to Start
+  // (cached a few seconds: the scan walks the whole Status Overview map)
+  getOpStatusSteps(woId) {
+    if (!this._opStCache || Date.now() - this._opStCache.t > 3000) {
+      const map = new Map();
       try {
-        const collect = (status, target) => {
-          this.state.getReadyToStartByWorkCenter(status).forEach((rows, wc) => {
+        const collect = (status, tag) => {
+          this.state.getReadyToStartByWorkCenter(status).forEach(rows => {
             rows.forEach(r => {
-              if (!target.has(r.pdId)) target.set(r.pdId, []);
-              if (!target.get(r.pdId).includes(wc)) target.get(r.pdId).push(wc);
+              if (!map.has(r.pdId)) map.set(r.pdId, new Map());
+              const m = map.get(r.pdId);
+              if (m.get(r.stepNum) !== 'active') m.set(r.stepNum, tag);
             });
           });
         };
-        collect('active', map.active);
-        collect('ready to start', map.ready);
+        collect('ready to start', 'ready');
+        collect('active', 'active');
       } catch (e) { /* label only - never break the render */ }
-      this._opWcCache = { t: Date.now(), map };
+      this._opStCache = { t: Date.now(), map };
     }
-    const active = this._opWcCache.map.active.get(woId) || [];
-    const ready = (this._opWcCache.map.ready.get(woId) || []).filter(c => !active.includes(c));
-    return { active, ready };
+    return this._opStCache.map.get(woId) || new Map();
   }
 
   formatTime(date) {
@@ -354,19 +354,35 @@ export class DailyScheduleController {
       const curStep = sortedSteps.find(s => s.stepNum === job.stepNum) || job;
       const curName = curStep.name || curStep.stepName || curStep.partName || job.stepName || job.name || 'Operation';
       const curWCStr = `${curName} (${curStep.machine || job.machine})`;
-      // Work Centers of this PD that are Active (blinking green) / Ready to Start (dark yellow) in the Status Overview
-      const opWc = typeof this.state.getReadyToStartByWorkCenter === 'function' ? this.getOpWorkCenters(job.woId) : { active: [], ready: [] };
-      const wcName = (c) => this.state.workCenters?.[c]?.name || c;
-      const opWcHtml = (opWc.active.length || opWc.ready.length)
-        ? `<span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: 6px;">${
-            opWc.active.length ? `<strong class="dsc-wc-active" title="Work Center ที่ Active">▶ ${opWc.active.map(wcName).join(', ')}</strong>` : ''}${
-            opWc.ready.length ? `<strong style="color: #a16207;" title="Work Center ที่ Ready to Start">⏳ ${opWc.ready.map(wcName).join(', ')}</strong>` : ''}</span>`
-        : '';
-      const opChainHtml = `<span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+      let opChainHtml = `<span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <strong style="color: #15803d;">${prevWCStr}</strong>
               <span>&gt;</span><strong class="rev-blink">${curWCStr}</strong>
-              <span>&gt;</span><strong style="color: var(--text-primary);">${nextWCStr}</strong>${opWcHtml}
+              <span>&gt;</span><strong style="color: var(--text-primary);">${nextWCStr}</strong>
             </span>`;
+      // Operations in Active (blinking green) / Ready to Start (green) status: the chain runs from the earlier of the
+      // previous step and the first such step, through the last such step, plus the step after it
+      const opStatus = typeof this.state.getReadyToStartByWorkCenter === 'function' ? this.getOpStatusSteps(job.woId) : new Map();
+      const curIdx = sortedSteps.findIndex(s => s.stepNum === job.stepNum);
+      const statusIdxs = sortedSteps.map((s, i) => opStatus.has(s.stepNum) ? i : -1).filter(i => i >= 0);
+      if (curIdx >= 0 && statusIdxs.length > 0) {
+        const startIdx = Math.max(0, Math.min(curIdx - 1, statusIdxs[0]));
+        const endIdx = Math.min(sortedSteps.length - 1, Math.max(curIdx + 1, statusIdxs[statusIdxs.length - 1] + 1));
+        const chips = [];
+        for (let i = startIdx; i <= endIdx; i++) {
+          const st = sortedSteps[i];
+          const label = `${st.name || st.stepName || st.partName || 'Operation'} (${st.machine})`;
+          const tag = opStatus.get(st.stepNum);
+          const tagHtml = tag === 'active' ? ' · Active' : (tag === 'ready' ? ' · Ready to Start' : '');
+          let cls = '';
+          let color = i < curIdx ? '#15803d' : 'var(--text-primary)';
+          if (i === curIdx) cls = 'rev-blink';
+          else if (tag === 'active') { cls = 'dsc-wc-active'; color = '#16a34a'; }
+          else if (tag === 'ready') color = '#15803d';
+          chips.push(`<strong class="${cls}" style="color: ${color};" ${tag ? `title="${tag === 'active' ? 'Active' : 'Ready to Start'}"` : ''}>${label}${tagHtml}</strong>`);
+        }
+        if (endIdx === sortedSteps.length - 1 && curIdx === endIdx) chips.push(`<strong style="color: var(--text-primary);">${nextWCStr}</strong>`);
+        opChainHtml = `<span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">${chips.join('<span>&gt;</span>')}</span>`;
+      }
 
       const latestRev = this.state.getLatestRevision ? this.state.getLatestRevision(job.woId) : null;
       const revHtml = latestRev ? ` <span class="rev-blink" title="Rev ${latestRev.rev} (ปรับปรุงแบบล่าสุด) · แจ้ง ${latestRev.noticeDate || '-'} · ใบแจ้ง ${latestRev.noticeNo || '-'}">Rev ${latestRev.rev}</span>` : '';
