@@ -342,7 +342,11 @@ export class DailyScheduleController {
 
       // If we are in weekly/monthly view, prepend the date to the card time block
       let datePrefix = '';
+      // Weekly/monthly view mixes several days: the card's left edge uses the Thai day-of-week colour
+      const dayColors = ['#f0301a', '#ffff33', '#f8bbd0', '#86ff6b', '#f7941d', '#3eabff', '#862e86'];
+      let cardEdgeColor = 'var(--accent-teal)';
       if (viewMode !== 'daily') {
+        cardEdgeColor = dayColors[dateStart.getDay()];
         const daysShort = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
         const monthsShort = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
         datePrefix = `<span style="font-size: 9.5px; color: var(--accent-cyan); font-weight: bold; margin-bottom: 3px; display: block; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 2px; width: 100%; text-align: left;">${daysShort[dateStart.getDay()]} ${dateStart.getDate()} ${monthsShort[dateStart.getMonth()]}</span>`;
@@ -363,7 +367,7 @@ export class DailyScheduleController {
         display: flex;
         background: rgba(255,255,255,0.02);
         border: 1px solid var(--border-glass);
-        border-left: 4px solid var(--accent-teal);
+        border-left: 6px solid ${cardEdgeColor};
         border-radius: 8px;
         padding: 12px;
         gap: 12px;
