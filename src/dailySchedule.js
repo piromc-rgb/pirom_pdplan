@@ -1,3 +1,7 @@
+// Operation status icons: crouching start-position figure (black) = Ready to Start, running figure (blue) = Active
+const DSC_ICON_READY = '<svg viewBox="0 0 100 80" width="19" height="15" style="vertical-align: -3px;" fill="none" stroke="#111" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><circle cx="88" cy="16" r="9" fill="#111" stroke="none"/><path d="M34 42 Q52 26 78 32" stroke-width="15"/><path d="M80 34 V72"/><path d="M34 44 L9 62"/><path d="M42 46 L54 58 L46 72"/></svg>';
+const DSC_ICON_ACTIVE = '<svg viewBox="0 0 100 100" width="16" height="16" style="vertical-align: -3px;" fill="none" stroke="#3b9ae1" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"><circle cx="63" cy="12" r="10" fill="#3b9ae1" stroke="none"/><path d="M57 28 L45 54" stroke-width="15"/><path d="M55 32 L38 34 L34 46"/><path d="M60 32 L74 42 L88 34"/><path d="M45 54 L66 68 L70 92"/><path d="M45 54 L28 72 L8 72"/></svg>';
+
 export class DailyScheduleController {
   constructor(state) {
     this.state = state;
@@ -372,7 +376,7 @@ export class DailyScheduleController {
           const st = sortedSteps[i];
           const label = `${st.name || st.stepName || st.partName || 'Operation'} (${st.machine})`;
           const tag = opStatus.get(st.stepNum);
-          const tagHtml = tag === 'active' ? ' · Active' : (tag === 'ready' ? ' · Ready to Start' : '');
+          const tagHtml = tag === 'active' ? ' ' + DSC_ICON_ACTIVE : (tag === 'ready' ? ' ' + DSC_ICON_READY : '');
           let cls = '';
           let color = i < curIdx ? '#15803d' : 'var(--text-primary)';
           if (i === curIdx) cls = 'rev-blink';
@@ -441,10 +445,10 @@ export class DailyScheduleController {
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">
             <span>Customer: <strong style="color: var(--text-primary);">${job.customer || 'N/A'}</strong></span>
             <span>เลขที่ SO: <strong style="color: var(--accent-teal); font-weight: bold;">${job.project || 'N/A'}</strong></span>
+            ${issueHtml}
           </div>
           ${matHtml ? `
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap; align-items: center;">
-            ${issueHtml}
             ${matHtml}
           </div>
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">
@@ -452,7 +456,6 @@ export class DailyScheduleController {
           </div>` : `
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">
             ${opChainHtml}
-            ${issueHtml}
           </div>`}
         </div>
       `;
