@@ -1,5 +1,5 @@
-// Operation status icons: crouching start-position figure (black) = Ready to Start, running figure (blue) = Active
-const DSC_ICON_READY = '<svg viewBox="0 0 100 80" width="19" height="15" style="vertical-align: -3px;" fill="none" stroke="#111" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><circle cx="88" cy="16" r="9" fill="#111" stroke="none"/><path d="M34 42 Q52 26 78 32" stroke-width="15"/><path d="M80 34 V72"/><path d="M34 44 L9 62"/><path d="M42 46 L54 58 L46 72"/></svg>';
+// Operation status icons: crouching start-position figure (dark yellow, follows the chip colour) = Ready to Start, running figure (blue) = Active
+const DSC_ICON_READY = '<svg viewBox="0 0 100 80" width="19" height="15" style="vertical-align: -3px;" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><circle cx="88" cy="16" r="9" fill="currentColor" stroke="none"/><path d="M34 42 Q52 26 78 32" stroke-width="15"/><path d="M80 34 V72"/><path d="M34 44 L9 62"/><path d="M42 46 L54 58 L46 72"/></svg>';
 const DSC_ICON_ACTIVE = '<svg viewBox="0 0 100 100" width="16" height="16" style="vertical-align: -3px;" fill="none" stroke="#3b9ae1" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"><circle cx="63" cy="12" r="10" fill="#3b9ae1" stroke="none"/><path d="M57 28 L45 54" stroke-width="15"/><path d="M55 32 L38 34 L34 46"/><path d="M60 32 L74 42 L88 34"/><path d="M45 54 L66 68 L70 92"/><path d="M45 54 L28 72 L8 72"/></svg>';
 
 export class DailyScheduleController {
@@ -329,12 +329,12 @@ export class DailyScheduleController {
         if (currentIndex > 0) {
           prevStep = sortedSteps[currentIndex - 1];
           const name = prevStep.name || prevStep.stepName || prevStep.partName || 'Operation';
-          prevWCStr = `${name} (${prevStep.machine})`;
+          prevWCStr = name;
         }
         if (currentIndex !== -1 && currentIndex < sortedSteps.length - 1) {
           nextStep = sortedSteps[currentIndex + 1];
           const name = nextStep.name || nextStep.stepName || nextStep.partName || 'Operation';
-          nextWCStr = `${name} (${nextStep.machine})`;
+          nextWCStr = name;
         } else {
           // Last step: check if it goes to another PD
           if (this.state.assemblyLinks) {
@@ -357,10 +357,10 @@ export class DailyScheduleController {
       // Operation chain around this card's own step: previous (green) > current (red, blinking) > next
       const curStep = sortedSteps.find(s => s.stepNum === job.stepNum) || job;
       const curName = curStep.name || curStep.stepName || curStep.partName || job.stepName || job.name || 'Operation';
-      const curWCStr = `${curName} (${curStep.machine || job.machine})`;
+      const curWCStr = curName;
       let opChainHtml = `<span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <strong style="color: #15803d;">${prevWCStr}</strong>
-              <span>&gt;</span><strong class="rev-blink">${curWCStr}</strong>
+              <span>&gt;</span><strong class="rev-blink" style="border: 1.5px solid #16a34a; border-radius: 3px; padding: 0 5px;">${curWCStr}</strong>
               <span>&gt;</span><strong style="color: var(--text-primary);">${nextWCStr}</strong>
             </span>`;
       // Operations in Active (blinking green) / Ready to Start (green) status: the chain runs from the earlier of the
@@ -374,15 +374,16 @@ export class DailyScheduleController {
         const chips = [];
         for (let i = startIdx; i <= endIdx; i++) {
           const st = sortedSteps[i];
-          const label = `${st.name || st.stepName || st.partName || 'Operation'} (${st.machine})`;
+          const label = st.name || st.stepName || st.partName || 'Operation';
           const tag = opStatus.get(st.stepNum);
           const tagHtml = tag === 'active' ? ' ' + DSC_ICON_ACTIVE : (tag === 'ready' ? ' ' + DSC_ICON_READY : '');
           let cls = '';
           let color = i < curIdx ? '#15803d' : 'var(--text-primary)';
           if (i === curIdx) cls = 'rev-blink';
           else if (tag === 'active') { cls = 'dsc-wc-active'; color = '#16a34a'; }
-          else if (tag === 'ready') color = '#15803d';
-          chips.push(`<strong class="${cls}" style="color: ${color};" ${tag ? `title="${tag === 'active' ? 'Active' : 'Ready to Start'}"` : ''}>${label}${tagHtml}</strong>`);
+          else if (tag === 'ready') color = '#a16207';
+          const box = i === curIdx ? ' border: 1.5px solid #16a34a; border-radius: 3px; padding: 0 5px;' : '';
+          chips.push(`<strong class="${cls}" style="color: ${color};${box}" ${tag ? `title="${tag === 'active' ? 'Active' : 'Ready to Start'}"` : ''}>${tagHtml ? tagHtml.trim() + ' ' : ''}${label}</strong>`);
         }
         if (endIdx === sortedSteps.length - 1 && curIdx === endIdx) chips.push(`<strong style="color: var(--text-primary);">${nextWCStr}</strong>`);
         opChainHtml = `<span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">${chips.join('<span>&gt;</span>')}</span>`;
