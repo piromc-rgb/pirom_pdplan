@@ -2,6 +2,9 @@
 const DSC_ICON_READY = '<svg viewBox="0 0 100 80" width="19" height="15" style="vertical-align: -3px;" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><circle cx="88" cy="16" r="9" fill="currentColor" stroke="none"/><path d="M34 42 Q52 26 78 32" stroke-width="15"/><path d="M80 34 V72"/><path d="M34 44 L9 62"/><path d="M42 46 L54 58 L46 72"/></svg>';
 const DSC_ICON_ACTIVE = '<svg viewBox="0 0 100 100" width="16" height="16" style="vertical-align: -3px;" fill="none" stroke="#3b9ae1" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"><circle cx="63" cy="12" r="10" fill="#3b9ae1" stroke="none"/><path d="M57 28 L45 54" stroke-width="15"/><path d="M55 32 L38 34 L34 46"/><path d="M60 32 L74 42 L88 34"/><path d="M45 54 L66 68 L70 92"/><path d="M45 54 L28 72 L8 72"/></svg>';
 
+// Seated figure (red) = the PD's first Operation is still Planned (waiting)
+const DSC_ICON_WAIT = '<svg viewBox="0 0 100 110" width="14" height="15" style="vertical-align: -3px; color: #dc2626;" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><circle cx="78" cy="18" r="12" fill="currentColor" stroke="none"/><path d="M80 36 V96" stroke-width="17"/><path d="M80 96 L48 84 L16 102" stroke-width="10"/><path d="M74 46 L66 54 L38 66" stroke-width="8"/></svg>';
+
 export class DailyScheduleController {
   constructor(state) {
     this.state = state;
@@ -166,6 +169,14 @@ export class DailyScheduleController {
       this._opStCache = { t: Date.now(), map };
     }
     return this._opStCache.map.get(woId) || new Map();
+  }
+
+  // True when the PD's first Operation is still "Planned" in the imported Status Overview
+  isFirstStepPlanned(woId, firstStep) {
+    if (!firstStep) return false;
+    const ops = this.state.pdOpStatusMap && this.state.pdOpStatusMap[woId];
+    const st = ops ? ops[String(firstStep.stepNum)] : null;
+    return String(st || '').trim().toLowerCase() === 'planned';
   }
 
   formatTime(date) {
@@ -358,9 +369,12 @@ export class DailyScheduleController {
       const curStep = sortedSteps.find(s => s.stepNum === job.stepNum) || job;
       const curName = curStep.name || curStep.stepName || curStep.partName || job.stepName || job.name || 'Operation';
       const curWCStr = curName;
+      const firstPlanned = this.isFirstStepPlanned(job.woId, sortedSteps[0]);
+      const waitIcon = (idx) => (firstPlanned && idx === 0 ? DSC_ICON_WAIT + ' ' : '');
+      const curIdxDef = sortedSteps.findIndex(s => s.stepNum === job.stepNum);
       let opChainHtml = `<span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-              <strong style="color: #15803d;">${prevWCStr}</strong>
-              <span>&gt;</span><strong class="rev-blink" style="border: 1.5px solid #16a34a; border-radius: 3px; padding: 0 5px;">${curWCStr}</strong>
+              <strong style="color: #15803d;">${waitIcon(curIdxDef - 1)}${prevWCStr}</strong>
+              <span>&gt;</span><strong class="rev-blink" style="border: 1.5px solid #16a34a; border-radius: 3px; padding: 0 5px;">${waitIcon(curIdxDef)}${curWCStr}</strong>
               <span>&gt;</span><strong style="color: var(--text-primary);">${nextWCStr}</strong>
             </span>`;
       // Operations in Active (blinking green) / Ready to Start (green) status: the chain runs from the earlier of the
@@ -376,7 +390,7 @@ export class DailyScheduleController {
           const st = sortedSteps[i];
           const label = st.name || st.stepName || st.partName || 'Operation';
           const tag = opStatus.get(st.stepNum);
-          const tagHtml = tag === 'active' ? ' ' + DSC_ICON_ACTIVE : (tag === 'ready' ? ' ' + DSC_ICON_READY : '');
+          const tagHtml = tag === 'active' ? ' ' + DSC_ICON_ACTIVE : (tag === 'ready' ? ' ' + DSC_ICON_READY : (firstPlanned && i === 0 ? ' ' + DSC_ICON_WAIT : ''));
           let cls = '';
           let color = i < curIdx ? '#15803d' : 'var(--text-primary)';
           if (i === curIdx) cls = 'rev-blink';
