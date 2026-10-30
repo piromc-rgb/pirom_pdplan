@@ -1,6 +1,8 @@
 // Backlog Mat. requirement summary: lists the Op01 raw materials each Backlog Production Order
 // needs, one row per PD-Mat pair, so planners can see material demand before a PD is even scheduled.
 
+import { isJobPriorityVisible, isJobProjectVisible, isJobCustomerVisible, isJobPdRangeVisible } from './gantt.js';
+
 const TONE_STYLES = {
   warn: 'border:1px solid #d97706;color:#b45309;background:rgba(245,158,11,0.15);',
   info: 'border:1px solid #0284c7;color:#0369a1;background:rgba(2,132,199,0.15);',
@@ -69,7 +71,19 @@ export class BacklogMatSummaryController {
   buildReport() {
     const state = this.state;
     const rows = [];
+    // Follows the "ตามตัวกรอง" switch under Backlog Tools: ON = only the Backlog PDs that pass the Priority / Project /
+    // Customer / PD Range filters, OFF = every PD in the Backlog
+    const filteredOnly = !!(state.workflowController && state.workflowController.backlogFilteredOnly);
+    const passesFilters = (wo) => {
+      const probe = { id: wo.id, woId: wo.id, priority: wo.priority, project: wo.project, customer: wo.customer };
+      return isJobPriorityVisible(probe, state) && isJobProjectVisible(probe, state) &&
+        isJobCustomerVisible(probe, state) && isJobPdRangeVisible(probe, state);
+    };
+    const totalPd = (state.workOrders || []).length;
+    let scopePd = 0;
     (state.workOrders || []).forEach(wo => {
+      if (filteredOnly && !passesFilters(wo)) return;
+      scopePd++;
       const steps = wo.steps || [];
       if (steps.length === 0) return;
       const op1StepNum = Math.min(...steps.map(s => Number(s.stepNum) || 10));
@@ -89,7 +103,7 @@ export class BacklogMatSummaryController {
       });
     });
     rows.sort((a, b) => a.pdNo.localeCompare(b.pdNo));
-    return { rows, generatedAt: new Date() };
+    return { rows, generatedAt: new Date(), filteredOnly, totalPd, scopePd };
   }
 
   // Same-Mat. rows across every Backlog PD collapsed into one row per Mat.: QTY summed across
@@ -225,7 +239,7 @@ export class BacklogMatSummaryController {
         <div style="font-size:15px;font-weight:700;">สรุปความต้องการ Mat. ของ PD ใน Backlog</div>
         <button type="button" id="btn-close-backlog-mat-summary" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
       </div>
-      <div style="color:#64748b;margin:2px 0 2px;font-size:11.5px;">วัตถุดิบ Op01 ของ PD ทุกตัวที่ยังอยู่ใน Backlog (ยังไม่ถูกจัดลงแผน) · สร้างเมื่อ ${escapeHtml(report.generatedAt.toLocaleString('th-TH'))}</div>
+      <div style="color:#64748b;margin:2px 0 2px;font-size:11.5px;">วัตถุดิบ Op01 ของ PD ${report.filteredOnly ? `<strong style="color:#0369a1;">ตามตัวกรอง ${report.scopePd} จาก ${report.totalPd} PD</strong>` : `ทุกตัว (${report.totalPd} PD)`} ที่ยังอยู่ใน Backlog (ยังไม่ถูกจัดลงแผน) · สร้างเมื่อ ${escapeHtml(report.generatedAt.toLocaleString('th-TH'))}</div>
       <div style="color:#94a3b8;margin:0 0 10px;font-size:10.5px;">จำนวนในคลัง/พอเบิก-ไม่พอ: ดึงจากไฟล์ Status Overview (.xlsx) ชีต "Plan + Mat" คอลัมน์ Mat.To Issue by Warehouse · วันที่ที่จะผลิต: ดึงจากทุก Tab ใน Google Sheet "ตรวจสอบรายการแมทและ STD ที่ใช้ผลิต" (จับคู่ Production Order + Material No.) · Inventory on Hand: ดึงจากไฟล์ Material to issue.xlsx เช่นกัน (สต๊อกรวมของบริษัท ไม่ผูกกับ PD ใดโดยเฉพาะ)</div>
       <div style="display:flex;gap:6px;margin:6px 0;">
         ${viewToggleBtn('pd', 'จัดกลุ่มตาม PD No')}
