@@ -1040,19 +1040,26 @@ export class ResourcesController {
     const mode = state.storageSync && typeof state.storageSync.getUserMode === 'function' ? state.storageSync.getUserMode() : 'plan';
     const editable = mode === 'plan';
     const uid = () => 'm' + Math.random().toString(36).slice(2, 9);
-    let rows = ((state.projectMachineLists || {})[proj] || []).map(r => ({ id: r.id || uid(), itemCode: r.itemCode || '', qty: r.qty ?? '', targetDate: r.targetDate || '', qtyAuto: false }));
-    // The plan has no list for this project (e.g. an older Plan.json was pulled): fall back to the last list saved on this device
+    const stateList = (state.projectMachineLists || {})[proj] || [];
+    const listSig = (l) => JSON.stringify((l || []).map(r => [String(r.itemCode || '').trim(), r.qty ?? null, r.targetDate || '']));
+    const stateSig = listSig(stateList);
+    const mapRows = (l) => l.map(r => ({ id: r.id || uid(), itemCode: r.itemCode || '', qty: r.qty ?? '', targetDate: r.targetDate || '', qtyAuto: false }));
+    let rows = mapRows(stateList);
+    // Saving only updates the local draft; a newer Plan pulled from the cloud can bring back the older list.
+    // The last list saved on this device wins while the plan list is still the one it was edited from.
     const lastSavedKey = `pms_last_saved_${proj}`;
     let restoredFromLocal = false;
-    if (rows.length === 0) {
-      try {
-        const bak = JSON.parse(localStorage.getItem(lastSavedKey) || 'null');
-        if (Array.isArray(bak) && bak.length > 0) {
-          rows = bak.map(r => ({ id: r.id || uid(), itemCode: r.itemCode || '', qty: r.qty ?? '', targetDate: r.targetDate || '', qtyAuto: false }));
+    try {
+      const bak = JSON.parse(localStorage.getItem(lastSavedKey) || 'null');
+      const bakList = Array.isArray(bak) ? bak : (bak && Array.isArray(bak.list) ? bak.list : []);
+      if (bakList.length > 0 && listSig(bakList) !== stateSig) {
+        const legacy = Array.isArray(bak);
+        if ((legacy && rows.length === 0) || (!legacy && (rows.length === 0 || bak.base === stateSig))) {
+          rows = mapRows(bakList);
           restoredFromLocal = true;
         }
-      } catch (e) { /* no backup */ }
-    }
+      }
+    } catch (e) { /* no backup */ }
     if (rows.length === 0 && editable) rows.push({ id: uid(), itemCode: '', qty: '', targetDate: '', qtyAuto: false });
 
     const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1109,7 +1116,7 @@ export class ResourcesController {
         </div>
       </div>`;
     document.body.appendChild(overlay);
-    if (restoredFromLocal) state.ganttController?.showToast?.(`♻️ ใช้รายการที่บันทึกล่าสุดในเครื่องนี้ของ ${proj} (ใน Plan ยังไม่มีรายการ) — กดบันทึกเพื่อยืนยัน`, 'success');
+    if (restoredFromLocal) state.ganttController?.showToast?.(`♻️ ใช้รายการที่บันทึกล่าสุดในเครื่องนี้ของ ${proj} (Plan ที่ดึงมายังเป็นรุ่นเก่า) — กดบันทึกเพื่อยืนยัน`, 'success');
     const body = overlay.querySelector('#pms-body');
     const dis = editable ? '' : ' disabled';
     const inputCss = 'width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid #cbd5e1;border-radius:5px;font-size:12.5px;';
@@ -1355,7 +1362,15 @@ export class ResourcesController {
       if (cleaned.length > 0) state.projectMachineLists[proj] = cleaned;
       else delete state.projectMachineLists[proj];
       try {
-        if (cleaned.length > 0) localStorage.setItem(lastSavedKey, JSON.stringify(cleaned));
+        if (cleaned.length > 0) {
+          // Keep the original plan-list signature while the plan still holds our own earlier save
+          let base = stateSig;
+          try {
+            const prev = JSON.parse(localStorage.getItem(lastSavedKey) || 'null');
+            if (prev && Array.isArray(prev.list) && prev.base !== undefined && listSig(prev.list) === stateSig) base = prev.base;
+          } catch (e) { /* first save */ }
+          localStorage.setItem(lastSavedKey, JSON.stringify({ list: cleaned, base }));
+        }
         else localStorage.removeItem(lastSavedKey);
       } catch (e) { /* backup only */ }
       state.savePlanToFile();
