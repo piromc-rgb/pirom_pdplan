@@ -1361,7 +1361,6 @@ export class ResourcesController {
       state.savePlanToFile();
       state.notify();
       toast(`💾 บันทึกรายการเครื่องจักรของ ${proj} แล้ว (${cleaned.length} รายการ)`, 'success');
-      close();
     });
   }
 
