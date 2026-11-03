@@ -1339,10 +1339,11 @@ export class ResourcesController {
       if (!state.projectMachineLists) state.projectMachineLists = {};
       if (cleaned.length > 0) state.projectMachineLists[proj] = cleaned;
       else delete state.projectMachineLists[proj];
-      state.savePlanToFile();
+      // Commit to the cloud (like the main Save button); a draft-only save is replaced by the cloud Plan on the next open
+      state.savePlanToFile(true);
       state.notify();
       const md = downloadMd();
-      toast(`💾 บันทึกรายการเครื่องจักรของ ${proj} แล้ว (${cleaned.length} รายการ)${md ? ` · ไฟล์สำรอง: ${md.name} — ดึงคืนด้วยปุ่ม Import MD` : ''}`, 'success');
+      toast(`💾 บันทึกรายการเครื่องจักรของ ${proj} แล้ว (${cleaned.length} รายการ) และส่งขึ้น Cloud${md ? ` · ไฟล์สำรอง: ${md.name} — ดึงคืนด้วยปุ่ม Import MD` : ''}`, 'success');
     });
   }
 
