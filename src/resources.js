@@ -1040,26 +1040,7 @@ export class ResourcesController {
     const mode = state.storageSync && typeof state.storageSync.getUserMode === 'function' ? state.storageSync.getUserMode() : 'plan';
     const editable = mode === 'plan';
     const uid = () => 'm' + Math.random().toString(36).slice(2, 9);
-    const stateList = (state.projectMachineLists || {})[proj] || [];
-    const listSig = (l) => JSON.stringify((l || []).map(r => [String(r.itemCode || '').trim(), r.qty ?? null, r.targetDate || '']));
-    const stateSig = listSig(stateList);
-    const mapRows = (l) => l.map(r => ({ id: r.id || uid(), itemCode: r.itemCode || '', qty: r.qty ?? '', targetDate: r.targetDate || '', qtyAuto: false }));
-    let rows = mapRows(stateList);
-    // Saving only updates the local draft; a newer Plan pulled from the cloud can bring back the older list.
-    // The last list saved on this device wins while the plan list is still the one it was edited from.
-    const lastSavedKey = `pms_last_saved_${proj}`;
-    let restoredFromLocal = false;
-    try {
-      const bak = JSON.parse(localStorage.getItem(lastSavedKey) || 'null');
-      const bakList = Array.isArray(bak) ? bak : (bak && Array.isArray(bak.list) ? bak.list : []);
-      if (bakList.length > 0 && listSig(bakList) !== stateSig) {
-        const legacy = Array.isArray(bak);
-        if ((legacy && rows.length === 0) || (!legacy && (rows.length === 0 || bak.base === stateSig))) {
-          rows = mapRows(bakList);
-          restoredFromLocal = true;
-        }
-      }
-    } catch (e) { /* no backup */ }
+    let rows = ((state.projectMachineLists || {})[proj] || []).map(r => ({ id: r.id || uid(), itemCode: r.itemCode || '', qty: r.qty ?? '', targetDate: r.targetDate || '', qtyAuto: false }));
     if (rows.length === 0 && editable) rows.push({ id: uid(), itemCode: '', qty: '', targetDate: '', qtyAuto: false });
 
     const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1107,7 +1088,6 @@ export class ResourcesController {
         <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e2e8f0;">
           ${editable ? `<div style="margin-right:auto;display:flex;gap:8px;">
             <button type="button" id="pms-import" title="นำเข้าไฟล์ .md (ตาราง Machine Code / Delivery date) มาต่อท้ายรายการ" style="padding:6px 14px;border:1px solid #2563eb;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-weight:700;cursor:pointer;">📥 Import MD</button>
-            <button type="button" id="pms-save-md" title="บันทึกรายการเครื่องจักรในหน้านี้เป็นไฟล์ .md (Machine Code | Delivery date | QTY | Description) นำกลับมา Import MD ได้" style="padding:6px 14px;border:1px solid #16a34a;border-radius:6px;background:#f0fdf4;color:#15803d;font-weight:700;cursor:pointer;">📄 Save .md</button>
             <button type="button" id="pms-clear" title="ล้างรายการ setup เก่าทั้งหมด (ต้องกดบันทึกเพื่อยืนยัน)" style="padding:6px 14px;border:1px solid #fecaca;border-radius:6px;background:#fff;color:#dc2626;font-weight:700;cursor:pointer;">🧹 Clear</button>
             <input type="file" id="pms-import-file" accept=".md,.markdown,.txt,text/markdown,text/plain" style="display:none;">
           </div>` : ''}
@@ -1116,7 +1096,6 @@ export class ResourcesController {
         </div>
       </div>`;
     document.body.appendChild(overlay);
-    if (restoredFromLocal) state.ganttController?.showToast?.(`♻️ ใช้รายการที่บันทึกล่าสุดในเครื่องนี้ของ ${proj} (Plan ที่ดึงมายังเป็นรุ่นเก่า) — กดบันทึกเพื่อยืนยัน`, 'success');
     const body = overlay.querySelector('#pms-body');
     const dis = editable ? '' : ' disabled';
     const inputCss = 'width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid #cbd5e1;border-radius:5px;font-size:12.5px;';
@@ -1313,11 +1292,10 @@ export class ResourcesController {
       const unknown = parsed.filter(p => !byCode.has(p.code)).length;
       toast(`📥 Import ${parsed.length} รายการจาก ${file.name}${unknown ? ` (ไม่พบใน Status Overview ${unknown} รายการ)` : ''} — กดบันทึกเพื่อยืนยัน`, 'success');
     });
-    // Save .md: the list on screen as a markdown table (same layout Import MD reads back)
-    overlay.querySelector('#pms-save-md')?.addEventListener('click', () => {
-      const toast = (m, t) => state.ganttController?.showToast?.(m, t);
+    // Markdown table of the list on screen (same layout Import MD reads back), downloaded when the list is saved
+    const downloadMd = () => {
       const list = rows.filter(r => String(r.itemCode || '').trim());
-      if (list.length === 0) { toast('⚠️ ยังไม่มีรายการให้บันทึก', 'error'); return; }
+      if (list.length === 0) return null;
       const cell = (v) => String(v ?? '').replace(/\|/g, '/').replace(/\s+/g, ' ').trim();
       const lines = [
         `# Setup รายการเครื่องจักร — ${proj}`,
@@ -1340,8 +1318,8 @@ export class ResourcesController {
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      toast(`📄 บันทึกไฟล์ ${a.download} แล้ว (${list.length} รายการ)`, 'success');
-    });
+      return { name: a.download, count: list.length };
+    };
     overlay.querySelector('#pms-save')?.addEventListener('click', () => {
       const toast = (m, t) => state.ganttController?.showToast?.(m, t);
       const cleaned = [];
@@ -1361,21 +1339,10 @@ export class ResourcesController {
       if (!state.projectMachineLists) state.projectMachineLists = {};
       if (cleaned.length > 0) state.projectMachineLists[proj] = cleaned;
       else delete state.projectMachineLists[proj];
-      try {
-        if (cleaned.length > 0) {
-          // Keep the original plan-list signature while the plan still holds our own earlier save
-          let base = stateSig;
-          try {
-            const prev = JSON.parse(localStorage.getItem(lastSavedKey) || 'null');
-            if (prev && Array.isArray(prev.list) && prev.base !== undefined && listSig(prev.list) === stateSig) base = prev.base;
-          } catch (e) { /* first save */ }
-          localStorage.setItem(lastSavedKey, JSON.stringify({ list: cleaned, base }));
-        }
-        else localStorage.removeItem(lastSavedKey);
-      } catch (e) { /* backup only */ }
       state.savePlanToFile();
       state.notify();
-      toast(`💾 บันทึกรายการเครื่องจักรของ ${proj} แล้ว (${cleaned.length} รายการ)`, 'success');
+      const md = downloadMd();
+      toast(`💾 บันทึกรายการเครื่องจักรของ ${proj} แล้ว (${cleaned.length} รายการ)${md ? ` · ไฟล์สำรอง: ${md.name} — ดึงคืนด้วยปุ่ม Import MD` : ''}`, 'success');
     });
   }
 
