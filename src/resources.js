@@ -1041,6 +1041,18 @@ export class ResourcesController {
     const editable = mode === 'plan';
     const uid = () => 'm' + Math.random().toString(36).slice(2, 9);
     let rows = ((state.projectMachineLists || {})[proj] || []).map(r => ({ id: r.id || uid(), itemCode: r.itemCode || '', qty: r.qty ?? '', targetDate: r.targetDate || '', qtyAuto: false }));
+    // The plan has no list for this project (e.g. an older Plan.json was pulled): fall back to the last list saved on this device
+    const lastSavedKey = `pms_last_saved_${proj}`;
+    let restoredFromLocal = false;
+    if (rows.length === 0) {
+      try {
+        const bak = JSON.parse(localStorage.getItem(lastSavedKey) || 'null');
+        if (Array.isArray(bak) && bak.length > 0) {
+          rows = bak.map(r => ({ id: r.id || uid(), itemCode: r.itemCode || '', qty: r.qty ?? '', targetDate: r.targetDate || '', qtyAuto: false }));
+          restoredFromLocal = true;
+        }
+      } catch (e) { /* no backup */ }
+    }
     if (rows.length === 0 && editable) rows.push({ id: uid(), itemCode: '', qty: '', targetDate: '', qtyAuto: false });
 
     const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1088,6 +1100,7 @@ export class ResourcesController {
         <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e2e8f0;">
           ${editable ? `<div style="margin-right:auto;display:flex;gap:8px;">
             <button type="button" id="pms-import" title="นำเข้าไฟล์ .md (ตาราง Machine Code / Delivery date) มาต่อท้ายรายการ" style="padding:6px 14px;border:1px solid #2563eb;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-weight:700;cursor:pointer;">📥 Import MD</button>
+            <button type="button" id="pms-save-md" title="บันทึกรายการเครื่องจักรในหน้านี้เป็นไฟล์ .md (Machine Code | Delivery date | QTY | Description) นำกลับมา Import MD ได้" style="padding:6px 14px;border:1px solid #16a34a;border-radius:6px;background:#f0fdf4;color:#15803d;font-weight:700;cursor:pointer;">📄 Save .md</button>
             <button type="button" id="pms-clear" title="ล้างรายการ setup เก่าทั้งหมด (ต้องกดบันทึกเพื่อยืนยัน)" style="padding:6px 14px;border:1px solid #fecaca;border-radius:6px;background:#fff;color:#dc2626;font-weight:700;cursor:pointer;">🧹 Clear</button>
             <input type="file" id="pms-import-file" accept=".md,.markdown,.txt,text/markdown,text/plain" style="display:none;">
           </div>` : ''}
@@ -1096,6 +1109,7 @@ export class ResourcesController {
         </div>
       </div>`;
     document.body.appendChild(overlay);
+    if (restoredFromLocal) state.ganttController?.showToast?.(`♻️ ใช้รายการที่บันทึกล่าสุดในเครื่องนี้ของ ${proj} (ใน Plan ยังไม่มีรายการ) — กดบันทึกเพื่อยืนยัน`, 'success');
     const body = overlay.querySelector('#pms-body');
     const dis = editable ? '' : ' disabled';
     const inputCss = 'width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid #cbd5e1;border-radius:5px;font-size:12.5px;';
@@ -1278,18 +1292,48 @@ export class ResourcesController {
         let date = '';
         const m = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2}|\d{4}))?$/);
         if (m) date = parseDate(`${m[1]}/${m[2]}/${m[3] || year}`) || '';
-        parsed.push({ code, date });
+        const qtyTxt = (cells[2] || '').replace(/[*`,\s]/g, '');
+        parsed.push({ code, date, qty: /^\d+(\.\d+)?$/.test(qtyTxt) ? Number(qtyTxt) : null });
       });
       if (parsed.length === 0) { toast('⚠️ ไม่พบรายการในไฟล์ (ต้องเป็นตาราง Machine Code | Delivery date)', 'error'); return; }
       rows = rows.filter(r => String(r.itemCode || '').trim() || (r.qty !== '' && r.qty !== null) || String(r.targetDate || '').trim());
       parsed.forEach(p => {
         const c = byCode.get(p.code);
         const hasQty = !!(c && c.qty !== null && c.qty !== undefined);
-        rows.push({ id: uid(), itemCode: p.code, qty: hasQty ? c.qty : '', targetDate: p.date, qtyAuto: hasQty });
+        rows.push({ id: uid(), itemCode: p.code, qty: p.qty !== null ? p.qty : (hasQty ? c.qty : ''), targetDate: p.date, qtyAuto: p.qty === null && hasQty });
       });
       render();
       const unknown = parsed.filter(p => !byCode.has(p.code)).length;
       toast(`📥 Import ${parsed.length} รายการจาก ${file.name}${unknown ? ` (ไม่พบใน Status Overview ${unknown} รายการ)` : ''} — กดบันทึกเพื่อยืนยัน`, 'success');
+    });
+    // Save .md: the list on screen as a markdown table (same layout Import MD reads back)
+    overlay.querySelector('#pms-save-md')?.addEventListener('click', () => {
+      const toast = (m, t) => state.ganttController?.showToast?.(m, t);
+      const list = rows.filter(r => String(r.itemCode || '').trim());
+      if (list.length === 0) { toast('⚠️ ยังไม่มีรายการให้บันทึก', 'error'); return; }
+      const cell = (v) => String(v ?? '').replace(/\|/g, '/').replace(/\s+/g, ' ').trim();
+      const lines = [
+        `# Setup รายการเครื่องจักร — ${proj}`,
+        '',
+        '| Machine Code (No Hyphen) | Delivery date | QTY | Description |',
+        '|---|---|---|---|',
+        ...list.map(r => {
+          const code = String(r.itemCode).trim();
+          const c = byCode.get(code);
+          return `| ${cell(code)} | ${cell(parseDate(r.targetDate) || '-')} | ${r.qty === '' || r.qty === null ? '' : cell(r.qty)} | ${cell(c ? c.description : '')} |`;
+        }),
+        ''
+      ];
+      const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), lines.join('\r\n')], { type: 'text/markdown;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Machine_Setup_${proj.replace(/[^\w.-]+/g, '_')}.md`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast(`📄 บันทึกไฟล์ ${a.download} แล้ว (${list.length} รายการ)`, 'success');
     });
     overlay.querySelector('#pms-save')?.addEventListener('click', () => {
       const toast = (m, t) => state.ganttController?.showToast?.(m, t);
@@ -1310,6 +1354,10 @@ export class ResourcesController {
       if (!state.projectMachineLists) state.projectMachineLists = {};
       if (cleaned.length > 0) state.projectMachineLists[proj] = cleaned;
       else delete state.projectMachineLists[proj];
+      try {
+        if (cleaned.length > 0) localStorage.setItem(lastSavedKey, JSON.stringify(cleaned));
+        else localStorage.removeItem(lastSavedKey);
+      } catch (e) { /* backup only */ }
       state.savePlanToFile();
       state.notify();
       toast(`💾 บันทึกรายการเครื่องจักรของ ${proj} แล้ว (${cleaned.length} รายการ)`, 'success');
