@@ -74,18 +74,41 @@ export function computeHybridFlow(allJobs, childrenOf, minHours = HYBRID_MIN_DAY
   hoursByWo.forEach((h, woId) => {
     if (weldWo.has(woId) && h > minHours) roots.push(woId);
   });
+  // Level = longest distance from a flow PD (root = 0, deepest sub-PD = highest). Linear time:
+  // iterative DFS over the sub-PD graph (cycles / shared children are common - back edges are
+  // ignored), then longest-path relaxation in topological order.
   const levelByWo = new Map();
-  const visit = (woId, depth, path) => {
-    if ((levelByWo.get(woId) ?? -1) < depth) levelByWo.set(woId, depth);
-    (childrenOf.get(woId) || []).forEach(c => {
-      if (!path.has(c) && c !== woId) {
-        path.add(c);
-        visit(c, depth + 1, path);
-        path.delete(c);
+  const state = new Map(); // 1 = on stack, 2 = done
+  const post = [];
+  roots.forEach(r => {
+    if (state.has(r)) return;
+    state.set(r, 1);
+    const stack = [{ id: r, kids: childrenOf.get(r) || [], i: 0 }];
+    while (stack.length) {
+      const top = stack[stack.length - 1];
+      if (top.i < top.kids.length) {
+        const c = top.kids[top.i++];
+        if (!state.has(c)) {
+          state.set(c, 1);
+          stack.push({ id: c, kids: childrenOf.get(c) || [], i: 0 });
+        }
+      } else {
+        state.set(top.id, 2);
+        post.push(top.id);
+        stack.pop();
       }
+    }
+  });
+  const topo = post.reverse();
+  const order = new Map(topo.map((id, i) => [id, i]));
+  roots.forEach(r => levelByWo.set(r, 0));
+  topo.forEach(u => {
+    if (!levelByWo.has(u)) levelByWo.set(u, 0);
+    const lu = levelByWo.get(u);
+    (childrenOf.get(u) || []).forEach(c => {
+      if (order.has(c) && order.get(c) > order.get(u) && (levelByWo.get(c) ?? -1) < lu + 1) levelByWo.set(c, lu + 1);
     });
-  };
-  roots.forEach(r => visit(r, 0, new Set([r])));
+  });
   return { roots, levelByWo };
 }
 
