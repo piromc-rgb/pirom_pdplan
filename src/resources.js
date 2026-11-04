@@ -1,4 +1,4 @@
-import { getPriorityWeight } from './scheduler.js';
+import { getPriorityWeight, computeHybridFlow, HYBRID_MIN_DAYS, HYBRID_DAY_HOURS } from './scheduler.js';
 import { getJobPriority, isJobPriorityVisible, isJobProjectVisible, isJobCustomerVisible, isJobPdRangeVisible, isPdMatchingRange } from './gantt.js';
 
 function parseColorToHex(colorStr) {
@@ -171,6 +171,7 @@ export class ResourcesController {
 
     // Project filter Select All / Deselect All
     document.getElementById('btn-project-summary')?.addEventListener('click', () => this.showProjectSummary());
+    document.getElementById('btn-project-fast-track')?.addEventListener('click', () => this.showFastTrack());
     document.getElementById('btn-project-select-all')?.addEventListener('click', () => {
       Object.keys(this.state.activeProjects).forEach(k => { this.state.activeProjects[k] = true; });
       this.state.notify();
@@ -685,6 +686,114 @@ export class ResourcesController {
     overlay.querySelector('#rts-expand').addEventListener('click', () => body.querySelectorAll('details.rts-group').forEach(d => { d.open = true; }));
     overlay.querySelector('#rts-collapse').addEventListener('click', () => body.querySelectorAll('details.rts-group').forEach(d => { d.open = false; }));
     render();
+  }
+
+  // "Fast Track" button of the Project filter: only usable while exactly one project is ticked
+  getSingleSelectedProject() {
+    const keys = Object.keys(this.state.activeProjects || {}).filter(k => this.state.activeProjects[k] !== false);
+    return keys.length === 1 ? keys[0] : null;
+  }
+
+  updateFastTrackButton() {
+    const btn = document.getElementById('btn-project-fast-track');
+    if (!btn) return;
+    const ok = this.getSingleSelectedProject() !== null;
+    btn.disabled = !ok;
+    btn.style.opacity = ok ? '' : '0.45';
+    btn.style.cursor = ok ? 'pointer' : 'not-allowed';
+  }
+
+  // PDs of one project (Board + Backlog) whose total production time - excluding painting, adjusting and
+  // assembly steps - exceeds hybridMinDays x hybridDayHours AND that have a welding step. Same rule as the
+  // Hybrid Production Flow (computeHybridFlow), limited to the given project.
+  getFastTrackPds(project) {
+    const state = this.state;
+    const norm = (p) => String(p || 'General').trim() || 'General';
+    const jobs = [];
+    const seen = new Set();
+    const add = (id, woId, machine, stepName, estHours) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      jobs.push({ woId, machine, stepName, estHours: Number(estHours) || 0 });
+    };
+    (state.scheduledJobs || []).forEach(j => { if (norm(j.project) === project) add(j.id, j.woId || j.id, j.machine || j.originalMachine, j.stepName || j.name, j.estHours); });
+    (state.workOrders || []).forEach(w => { if (norm(w.project) === project) (w.steps || []).forEach(st => add(st.id || `${w.id}-${st.stepNum}`, w.id, st.machine, st.name || st.stepName, st.estHours)); });
+    const dayHours = Number(state.hybridDayHours) > 0 ? Number(state.hybridDayHours) : HYBRID_DAY_HOURS;
+    const minDays = Number(state.hybridMinDays) > 0 ? Number(state.hybridMinDays) : HYBRID_MIN_DAYS;
+    const { roots } = computeHybridFlow(jobs, new Map(), minDays * dayHours);
+    const hoursByWo = new Map();
+    const isExcluded = (j) => {
+      const m = String(j.machine || '').toUpperCase();
+      if (['DEB021', 'DEA062', 'DEC001', 'DED001'].includes(m)) return true;
+      const n = String(j.stepName || '').toLowerCase();
+      return n.includes('ทำสี') || n.includes('ปรับแต่ง') || n.includes('assy') || n.includes('ประกอบ');
+    };
+    jobs.forEach(j => { if (!isExcluded(j)) hoursByWo.set(j.woId, (hoursByWo.get(j.woId) || 0) + j.estHours); });
+    const info = new Map();
+    (state.workOrders || []).forEach(w => { if (norm(w.project) === project) info.set(w.id, { partName: w.partName, qty: w.qty, where: 'Backlog' }); });
+    (state.scheduledJobs || []).forEach(j => { if (norm(j.project) === project) info.set(j.woId || j.id, { partName: j.partName, qty: j.qty, where: 'Board' }); });
+    return roots.map(id => {
+      const hours = hoursByWo.get(id) || 0;
+      const i = info.get(id) || {};
+      const st = state.getPdOrderStatusDisplay ? state.getPdOrderStatusDisplay(id) : null;
+      return { pdId: id, partName: i.partName || '', qty: i.qty, where: i.where || '-', hours, days: hours / dayHours, status: st ? st.label : '-', statusColor: st ? st.color : '#64748b' };
+    }).sort((a, b) => b.hours - a.hours || a.pdId.localeCompare(b.pdId));
+  }
+
+  showFastTrack() {
+    const project = this.getSingleSelectedProject();
+    if (!project) {
+      this.state.ganttController?.showToast?.('⚠️ Fast Track ใช้ได้เมื่อเลือก 1 โครงการเท่านั้น', 'error');
+      return;
+    }
+    const state = this.state;
+    const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const rows = this.getFastTrackPds(project);
+    const dayHours = Number(state.hybridDayHours) > 0 ? Number(state.hybridDayHours) : HYBRID_DAY_HOURS;
+    const minDays = Number(state.hybridMinDays) > 0 ? Number(state.hybridMinDays) : HYBRID_MIN_DAYS;
+    const old = document.getElementById('fast-track-popup');
+    if (old) old.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'fast-track-popup';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    const bodyRows = rows.length === 0
+      ? '<tr><td colspan="7" style="padding:14px;color:#94a3b8;text-align:center;">ไม่พบ PD ที่เข้าเงื่อนไขในโครงการนี้</td></tr>'
+      : rows.map((r, i) => `<tr style="border-top:1px solid #f1f5f9;">
+          <td style="padding:5px 8px;text-align:center;color:#64748b;">${i + 1}</td>
+          <td class="ft-pd" data-pd="${esc(r.pdId)}" title="คลิกเพื่อเปิดรายละเอียด PD" style="padding:5px 8px;font-family:monospace;font-weight:700;white-space:nowrap;color:#2563eb;cursor:pointer;">${esc(r.pdId)}</td>
+          <td style="padding:5px 8px;">${esc(r.partName || '-')}</td>
+          <td style="padding:5px 8px;text-align:right;">${r.qty ?? '-'}</td>
+          <td style="padding:5px 8px;text-align:right;font-weight:700;">${r.hours.toFixed(1)}</td>
+          <td style="padding:5px 8px;text-align:right;font-weight:700;color:#b91c1c;">${r.days.toFixed(1)}</td>
+          <td style="padding:5px 8px;white-space:nowrap;"><span style="color:${r.statusColor};font-weight:600;">${esc(r.status)}</span> <span style="color:#94a3b8;font-size:10.5px;">${esc(r.where)}</span></td>
+        </tr>`).join('');
+    overlay.innerHTML = `
+      <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:900px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
+        <div style="padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div>
+            <div style="font-size:15px;font-weight:700;">⚡ Fast Track · โครงการ ${esc(project)}</div>
+            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">PD ที่เวลาผลิตรวมเกิน ${minDays} วัน (1 วัน = ${dayHours} ชม. = เกิน ${minDays * dayHours} ชม.) ไม่รวมทำสี / ปรับแต่ง / Assembly และมี process เชื่อม · ${rows.length} PD · นับจาก PD ที่อยู่ใน Board + Backlog</div>
+          </div>
+          <button type="button" id="ft-x" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
+        </div>
+        <div style="padding:4px 18px 12px;overflow:auto;">
+          <table style="border-collapse:collapse;width:100%;font-size:12px;">
+            <thead><tr style="background:#f1f5f9;text-align:left;"><th style="padding:6px 8px;text-align:center;">#</th><th style="padding:6px 8px;">PD</th><th style="padding:6px 8px;">ชื่องาน</th><th style="padding:6px 8px;text-align:right;">QTY</th><th style="padding:6px 8px;text-align:right;">เวลารวม (ชม.)</th><th style="padding:6px 8px;text-align:right;">วัน</th><th style="padding:6px 8px;">สถานะ</th></tr></thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </div>
+        <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;border-top:1px solid #e2e8f0;"><button type="button" id="ft-close" style="padding:6px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">ปิด</button></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('#ft-x').addEventListener('click', close);
+    overlay.querySelector('#ft-close').addEventListener('click', close);
+    overlay.querySelectorAll('.ft-pd').forEach(el => el.addEventListener('click', () => {
+      const pdModal = document.getElementById('pd-plan-modal');
+      if (pdModal) pdModal.style.zIndex = '100001';
+      window.dispatchEvent(new CustomEvent('open-pd-modal', { detail: { woId: el.dataset.pd } }));
+    }));
   }
 
   // "สรุปภาพรวมโครงการที่เลือก": popup for the projects currently ticked in the Project filter.
@@ -1500,6 +1609,8 @@ export class ResourcesController {
         delete this.state.activeProjects[proj];
       }
     });
+
+    this.updateFastTrackButton();
 
     // 4. Filter the list by the search box (matches against activeProjects/counts
     // computed above from the full list, so select-all/deselect-all still act on

@@ -641,8 +641,11 @@ export class Scheduler {
 
     const scheduled = [];
     let remainingCount = jobs.length;
+    let totalPasses = 0; // hard cap on dispatch passes so a bad sub-PD link can never freeze the page
+    let stallPasses = 0; // consecutive passes where nothing could start and no end time was pending
 
     while (remainingCount > 0) {
+      totalPasses++;
       let bestMachine = null;
       let minMachineTime = Infinity;
       allMachines.forEach(m => {
@@ -745,12 +748,36 @@ export class Scheduler {
             });
           }
         });
+        let forceStat = null;
         if (pendingEnds.length > 0) {
           nextTime = Math.min(...pendingEnds);
+        } else {
+          // Nothing on this machine can start until another machine schedules something (its next
+          // PD / sub-PD). Instead of creeping 0.25h per pass up to that machine's time, jump straight
+          // to the first 0.25h step at or after it; with no other machine left to wait for, the wait
+          // can never end (cyclic / unreachable sub-PD link), so force the first job through.
+          let otherMin = Infinity;
+          allMachines.forEach(m => {
+            if (m === bestMachine) return;
+            const b = jobsByMachine.get(m);
+            if (!b || b.size === 0) return;
+            const lt = machineLanes[m][getMinLaneIdx(m)];
+            if (lt < otherMin) otherMin = lt;
+          });
+          stallPasses++;
+          if (otherMin === Infinity || stallPasses > 200 + allMachines.length * 20 || totalPasses > 100000 + jobs.length * 200) {
+            forceStat = { job: candidates[0], readyTime: t, gap: 0 };
+          } else if (otherMin > t + 1e-9) {
+            nextTime = t + Math.ceil((otherMin - t) / 0.25 - 1e-9) * 0.25;
+          }
         }
-        machineLanes[bestMachine][bestLaneIdx] = nextTime;
-        continue;
+        if (!forceStat) {
+          machineLanes[bestMachine][bestLaneIdx] = nextTime;
+          continue;
+        }
+        validCandidates.push(forceStat);
       }
+      stallPasses = 0;
 
       // Prioritize:
       // 0. Same-Item Grouping (if enabled): favor jobs matching the last item on this machine lane to keep setup continuous

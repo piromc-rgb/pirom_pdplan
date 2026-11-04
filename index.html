@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V5.142 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V5.143 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-BxIHfN4A.js"></script>
+    <script type="module" crossorigin src="./assets/index-BHBzFkvk.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-Bu-z-g-9.css">
   </head>
   <body>
@@ -839,6 +839,7 @@
                 <button id="btn-project-select-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; white-space: nowrap; text-align: center; display: flex; align-items: center; justify-content: center; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-teal); color: var(--accent-teal); border-radius: 4px; cursor: pointer; font-weight: bold;">Select All</button>
                 <button id="btn-project-deselect-all" class="btn" style="flex: 1; font-size: 9.5px; padding: 4px 6px; white-space: nowrap; text-align: center; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-weight: bold;">Deselect All</button>
                 <button id="btn-project-summary" class="btn" title="สรุปภาพรวมของโครงการที่เลือกอยู่ในตัวกรอง: จำนวน PD, อยู่ใน Board / Backlog, Mat ไม่พร้อม, รอ PD ลูก" style="flex: 1; font-size: 9.5px; padding: 4px 6px; white-space: nowrap; text-align: center; display: flex; align-items: center; justify-content: center; background: rgba(37, 99, 235, 0.1); border: 1px solid #2563eb; color: #1d4ed8; border-radius: 4px; cursor: pointer; font-weight: bold;">Recap</button>
+                <button id="btn-project-fast-track" class="btn" disabled title="เลือก 1 โครงการก่อนจึงจะใช้ได้ · หา PD ในโครงการนั้นที่เวลาผลิตรวมเกิน 2 วัน (ไม่รวมทำสี ปรับแต่ง Assembly) และมี process เชื่อม" style="flex: 1; font-size: 9.5px; padding: 4px 6px; white-space: nowrap; text-align: center; display: flex; align-items: center; justify-content: center; background: rgba(220, 38, 38, 0.1); border: 1px solid #dc2626; color: #b91c1c; border-radius: 4px; cursor: pointer; font-weight: bold; opacity: 0.45;">Fast Track</button>
               </div>
 
               <input type="text" id="project-search-input" placeholder="ค้นหาโครงการ..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.05); color: var(--text-primary); outline: none; margin-bottom: 8px;">
