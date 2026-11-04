@@ -88,11 +88,13 @@ export class DailyScheduleController {
       }
     }
 
-    if (initialDate) {
+    // Default = today (daily/weekly view) or the current month (monthly view). A date is only kept when the
+    // caller also hands back the view mode it was showing (returning from the Production Order editor).
+    if (initialDate && viewMode) {
       this.selectedDate = new Date(initialDate.getTime());
     } else {
-      const baseDate = this.state.getBaseDate();
-      this.selectedDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), 0, 0, 0);
+      const today = new Date();
+      this.selectedDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
     }
     
     if (this.modal) {
@@ -403,6 +405,11 @@ export class DailyScheduleController {
         opChainHtml = `<span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">${chips.join('<span>&gt;</span>')}</span>`;
       }
 
+      // Special PD planned by Hybrid Production Flow (heavy-welding PD or one of its sub-PDs): red "Hybrid" tag left of the priority
+      const hybridHtml = (this.state.schedulingModel === 'hybrid' && this.state.hybridInfo?.woIds?.includes(job.woId))
+        ? '<span title="วางแผนแบบ Hybrid Production Flow" style="color: #dc2626; font-size: 11px; font-weight: 800; letter-spacing: 0.3px;">Hybrid</span>'
+        : '';
+
       const latestRev = this.state.getLatestRevision ? this.state.getLatestRevision(job.woId) : null;
       const revHtml = latestRev ? ` <span class="rev-blink" title="Rev ${latestRev.rev} (ปรับปรุงแบบล่าสุด) · แจ้ง ${latestRev.noticeDate || '-'} · ใบแจ้ง ${latestRev.noticeNo || '-'}">Rev ${latestRev.rev}</span>` : '';
 
@@ -455,7 +462,7 @@ export class DailyScheduleController {
         <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding-left: 4px;">
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
             <span style="font-size: 13px; color: var(--text-primary);"><strong style="color: var(--accent-teal);">PD ID: ${job.woId}</strong> &nbsp;·&nbsp; ชื่องาน: <strong>${job.partName}</strong> &nbsp;·&nbsp; รหัสแบบ: <strong style="color: var(--accent-cyan); font-family: monospace;">${job.dwgNo || 'N/A'}</strong>${revHtml} &nbsp;·&nbsp; จำนวนผลิต: <strong>${job.qty}</strong> pcs</span>
-            <span class="priority-badge ${job.priority ? job.priority.toLowerCase() : 'normal'}" style="font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 700; flex-shrink: 0;">${job.priority || 'Normal'}</span>
+            <span style="display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0;">${hybridHtml}<span class="priority-badge ${job.priority ? job.priority.toLowerCase() : 'normal'}" style="font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 700; flex-shrink: 0;">${job.priority || 'Normal'}</span></span>
           </div>
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">
             <span>Customer: <strong style="color: var(--text-primary);">${job.customer || 'N/A'}</strong></span>
