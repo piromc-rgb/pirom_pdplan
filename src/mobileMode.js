@@ -22,7 +22,20 @@ export class MobileModeController {
     this.build();
     if (this.btn) this.btn.addEventListener('click', () => (this.active ? this.exit() : this.enter()));
     this.state.subscribe(() => { if (this.active) this.render(); });
+    // Opened on a phone: start in Mobile Mode (unless the user left it during this browser session)
+    if (this.isPhone() && !this.optedOut()) this.enter();
   }
+
+  isPhone() {
+    try {
+      const ua = /Android.+Mobile|iPhone|iPod|Windows Phone/i.test(navigator.userAgent || '');
+      const smallTouch = window.matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 600;
+      return ua || smallTouch;
+    } catch (e) { return false; }
+  }
+
+  optedOut() { try { return sessionStorage.getItem('mm-desktop') === '1'; } catch (e) { return false; } }
+  setOptedOut(v) { try { v ? sessionStorage.setItem('mm-desktop', '1') : sessionStorage.removeItem('mm-desktop'); } catch (e) { /* storage blocked */ } }
 
   build() {
     const el = document.createElement('div');
@@ -50,6 +63,7 @@ export class MobileModeController {
   }
 
   enter() {
+    this.setOptedOut(false);
     this.active = true;
     this.stack = [{ screen: 'wc' }];
     this.date = new Date();
@@ -60,6 +74,7 @@ export class MobileModeController {
   }
 
   exit() {
+    this.setOptedOut(true);
     this.active = false;
     this.el.classList.add('hidden');
     document.body.classList.remove('mm-active');
