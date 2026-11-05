@@ -1,6 +1,8 @@
 // Mobile Mode: read-only portrait view for a ~6 inch phone.
 // Screens: Work Center list -> daily schedule of one Work Center -> PD detail (+ drawing PDF).
-const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+import { DSC_ICON_READY, DSC_ICON_ACTIVE, DSC_ICON_WAIT } from './dailySchedule.js';
+
+const esc =(v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const pad2 = (n) => String(n).padStart(2, '0');
 
 const OP_STYLES = {
@@ -164,10 +166,21 @@ export class MobileModeController {
       const b = s.workingHourToDate(job.startHour + job.estHours);
       const steps = this.getSortedSteps(job.woId);
       const i = steps.findIndex(x => x.stepNum === job.stepNum);
+      // Status figures as on the desktop cards: crouching = Ready to Start, running = Active, red seated = first Operation still Planned
+      const opSt = dsc && dsc.getOpStatusSteps ? dsc.getOpStatusSteps(job.woId) : new Map();
+      const firstPlanned = dsc && dsc.isFirstStepPlanned ? dsc.isFirstStepPlanned(job.woId, steps[0]) : false;
+      const icon = (idx) => {
+        const st = steps[idx];
+        if (!st) return '';
+        const tag = opSt.get(st.stepNum);
+        if (tag === 'active') return DSC_ICON_ACTIVE + ' ';
+        if (tag === 'ready') return `<span style="color:#a16207;">${DSC_ICON_READY}</span> `;
+        return firstPlanned && idx === 0 ? DSC_ICON_WAIT + ' ' : '';
+      };
       const prev = i > 0 ? this.stepLabel(steps[i - 1]) : '';
       const next = i >= 0 && i < steps.length - 1 ? this.stepLabel(steps[i + 1]) : '';
       const cur = this.stepLabel(steps[i] || job) || job.stepName || job.name;
-      const chain = [prev && `<span style="color:#15803d;">${esc(prev)}</span>`, `<b style="border:1.5px solid #16a34a;border-radius:4px;padding:0 4px;">${esc(cur)}</b>`, next && `<span>${esc(next)}</span>`].filter(Boolean).join(' › ');
+      const chain = [prev && `<span style="color:#15803d;">${icon(i - 1)}${esc(prev)}</span>`, `<b style="border:1.5px solid #16a34a;border-radius:4px;padding:0 4px;">${icon(i)}${esc(cur)}</b>`, next && `<span>${icon(i + 1)}${esc(next)}</span>`].filter(Boolean).join(' › ');
       const iss = s.getStepMaterialIssueSummary(job.woId, job.stepNum);
       const mat = iss ? `<div style="font-size:12px;margin-top:4px;">📦 <b style="color:${MAT_TONES[iss.tone] || '#0369a1'};">${esc(iss.label)}</b></div>` : '';
       return `<div class="mm-job" data-pd="${esc(job.woId)}" style="background:#fff;border-radius:10px;border-left:5px solid #0ea5e9;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
