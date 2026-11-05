@@ -718,6 +718,17 @@ export class ResourcesController {
     };
     (state.scheduledJobs || []).forEach(j => { if (norm(j.project) === project) add(j.id, j.woId || j.id, j.machine || j.originalMachine, j.stepName || j.name, j.estHours); });
     (state.workOrders || []).forEach(w => { if (norm(w.project) === project) (w.steps || []).forEach(st => add(st.id || `${w.id}-${st.stepNum}`, w.id, st.machine, st.name || st.stepName, st.estHours)); });
+    // Operations already Completed in the Status Overview never reach the Backlog, but their hours still count
+    const stepKey = (woId, machine, name) => `${woId}|${String(machine || '').toUpperCase()}|${String(name || '').trim().toLowerCase()}`;
+    const present = new Set(jobs.map(j => stepKey(j.woId, j.machine, j.stepName)));
+    [...new Set(jobs.map(j => j.woId))].forEach(woId => {
+      ((state.pdDoneOps || {})[woId] || []).forEach(op => {
+        const key = stepKey(woId, op.machine, op.name);
+        if (present.has(key)) return;
+        present.add(key);
+        jobs.push({ woId, machine: op.machine, stepName: op.name, estHours: Number(op.estHours) || 0 });
+      });
+    });
     const dayHours = Number(state.hybridDayHours) > 0 ? Number(state.hybridDayHours) : HYBRID_DAY_HOURS;
     const minDays = Number(state.hybridMinDays) > 0 ? Number(state.hybridMinDays) : HYBRID_MIN_DAYS;
     const { roots } = computeHybridFlow(jobs, new Map(), minDays * dayHours);

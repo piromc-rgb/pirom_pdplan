@@ -1626,6 +1626,7 @@ export class WorkflowController {
         const dwgCandidates = {};
         // Per PD: how many operations exist and how many are Completed (rule: all Completed -> Order Status Closed)
         const pdOpAgg = {};
+        const pdDoneOps = {};
         for (let i = 1; i < raw2D.length; i++) {
           const rawRow = raw2D[i];
           if (!rawRow || rawRow.length === 0) continue;
@@ -1642,7 +1643,21 @@ export class WorkflowController {
 
           if (!pdOpAgg[pdId]) pdOpAgg[pdId] = { total: 0, done: 0, orderStatus };
           pdOpAgg[pdId].total++;
-          if (/^complete(d)?$/i.test(opStatus)) pdOpAgg[pdId].done++;
+          if (/^complete(d)?$/i.test(opStatus)) {
+            pdOpAgg[pdId].done++;
+            // Remember the finished operation's hours: Fast Track counts them even though they never reach the Backlog
+            const doneMachine = this.matchWorkCenter(wcDesc, wcCode);
+            const doneQty = parseInt(rawRow[col.qty]) || 1;
+            const doneCap = this.state.workCenters[doneMachine]?.capacity || 1;
+            const doneCyc = parseFloat(rawRow[col.cycleTime]) || 1.0;
+            const doneSetup = parseFloat(rawRow[col.setupTime]) || 0.0;
+            (pdDoneOps[pdId] || (pdDoneOps[pdId] = [])).push({
+              stepNum: opNum,
+              name: wcDesc || this.state.workCenters[doneMachine]?.name || doneMachine,
+              machine: doneMachine,
+              estHours: parseFloat(((doneSetup + doneQty * doneCyc) / 60.0 / doneCap).toFixed(4)) || 0
+            });
+          }
           if (orderStatus) pdOpAgg[pdId].orderStatus = orderStatus;
 
           if (opStatus) {
@@ -1692,6 +1707,7 @@ export class WorkflowController {
         attachDwgCandidates(dwgToPdMap, dwgCandidates);
         this.state.dwgToPdMap = dwgToPdMap;
         this.state.pdOpStatusMap = pdOpStatusMap;
+        this.state.pdDoneOps = Object.assign({}, this.state.pdDoneOps || {}, pdDoneOps);
 
         // Rule: a PD whose operations are ALL Completed is Closed automatically (never imported, never planned).
         const allOpsCompleteIds = new Set(Object.keys(pdOpAgg).filter(id => pdOpAgg[id].total > 0 && pdOpAgg[id].done === pdOpAgg[id].total));

@@ -265,6 +265,7 @@ class CentralState {
     this.showDependencyLines = false;
     this.planMaterials = {};
     this.dwgToPdMap = {};
+    this.pdDoneOps = {}; // PD -> [{ stepNum, name, machine, estHours }] Completed operations from the Status Overview (counted by Fast Track)
 
     // Load backlog and plan on startup
     this.loadWorkOrdersFromFile();
@@ -2866,7 +2867,8 @@ class CentralState {
       removedStepHistory: this.removedStepHistory || {},
       planMaterials: this.planMaterials || {},
       dwgToPdMap: this.dwgToPdMap || {},
-      pdOpStatusMap: this.pdOpStatusMap || {}
+      pdOpStatusMap: this.pdOpStatusMap || {},
+      pdDoneOps: this.pdDoneOps || {}
     };
   }
 
@@ -3219,6 +3221,7 @@ class CentralState {
       if (data.planMaterials) this.planMaterials = data.planMaterials;
       if (data.dwgToPdMap) this.dwgToPdMap = data.dwgToPdMap;
       if (data.pdOpStatusMap) this.pdOpStatusMap = data.pdOpStatusMap;
+      if (data.pdDoneOps && typeof data.pdDoneOps === 'object') this.pdDoneOps = data.pdDoneOps;
       this.cascadeCompletedPdsToChildren();
       this.syncOverviewStatusToJobs();
 
