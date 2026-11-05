@@ -6,12 +6,11 @@ class CentralState {
   constructor() {
     this.subscribers = [];
     
-    // Configurable scheduling model: 'whiteboard' | 'finite' | 'infinite' | 'hybrid'
+    // Configurable scheduling model: 'whiteboard' | 'finite' | 'infinite'
     this.schedulingModel = 'finite';
-    // Hybrid Production Flow: a PD is a flow PD when its production time (excl. paint/adjust/assembly) exceeds hybridMinDays x hybridDayHours and it has a welding step
+    // Fast Track (Project filter): a PD qualifies when its production time (excl. paint/adjust/assembly) exceeds hybridMinDays x hybridDayHours and it has a welding step
     this.hybridMinDays = 2;
     this.hybridDayHours = 8;
-    this.hybridInfo = null;
     
     // Active time scale: 'hr' | 'day' | 'week' | 'month'
     this.activeScale = 'day';
@@ -516,7 +515,7 @@ class CentralState {
 
   // Switch scheduling model
   setSchedulingModel(model) {
-    this.schedulingModel = model;
+    this.schedulingModel = model === 'hybrid' ? 'finite' : model; // Hybrid Production Flow was removed
     this.notify();
   }
 
@@ -542,8 +541,8 @@ class CentralState {
     if (shouldRecompute) {
       if (this.schedulingModel === 'infinite') {
         this.scheduledJobs = Scheduler.applyBackwardsInfinite(this.scheduledJobs, scale);
-      } else if (this.schedulingModel === 'finite' || this.schedulingModel === 'hybrid') {
-        this.scheduledJobs = this.runForwardsOrHybrid(this.scheduledJobs, scale, nowWorkingHour);
+      } else if (this.schedulingModel === 'finite') {
+        this.scheduledJobs = this.runForwardsFinite(this.scheduledJobs, scale, nowWorkingHour);
       }
     }
 
@@ -557,24 +556,14 @@ class CentralState {
     }
   }
 
-  // Forwards Finite pass; in 'hybrid' (Hybrid Production Flow) mode heavy-welding PDs and their
-  // sub-PD tree are dispatched first, deepest sub-PD upward, and everything else stays Forwards.
-  runForwardsOrHybrid(jobs, scale, nowWorkingHour) {
-    const hybrid = this.schedulingModel === 'hybrid';
-    if (!hybrid) this.hybridInfo = null;
-    const options = {
+  // Forwards Finite pass over the given jobs
+  runForwardsFinite(jobs, scale, nowWorkingHour) {
+    return Scheduler.applyForwardsFinite(jobs, scale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem, {
       planMaterials: this.planMaterials,
       groupMat: this.groupMat === true,
       dwgToPdMap: this.dwgToPdMap,
-      assemblyLinks: this.assemblyLinks,
-      hybridMinDays: this.hybridMinDays,
-      hybridDayHours: this.hybridDayHours
-    };
-    if (hybrid) {
-      options.onHybridInfo = (info) => { this.hybridInfo = info; };
-      return Scheduler.applyHybridFlow(jobs, scale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem, options);
-    }
-    return Scheduler.applyForwardsFinite(jobs, scale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem, options);
+      assemblyLinks: this.assemblyLinks
+    });
   }
 
   // Re-runs the Forward Finite / Backward Infinite pass over the current board
@@ -590,8 +579,8 @@ class CentralState {
 
     if (this.schedulingModel === 'infinite') {
       this.scheduledJobs = Scheduler.applyBackwardsInfinite(this.scheduledJobs, this.activeScale);
-    } else if (this.schedulingModel === 'finite' || this.schedulingModel === 'hybrid') {
-      this.scheduledJobs = this.runForwardsOrHybrid(this.scheduledJobs, this.activeScale, nowWorkingHour);
+    } else if (this.schedulingModel === 'finite') {
+      this.scheduledJobs = this.runForwardsFinite(this.scheduledJobs, this.activeScale, nowWorkingHour);
     }
 
     this.notify();
@@ -682,7 +671,7 @@ class CentralState {
     if (planData.scheduledJobs) this.scheduledJobs = planData.scheduledJobs;
     if (planData.workOrders) this.workOrders = planData.workOrders;
     if (planData.nests) this.nests = planData.nests;
-    if (planData.schedulingModel) this.schedulingModel = planData.schedulingModel;
+    if (planData.schedulingModel) this.schedulingModel = planData.schedulingModel === 'hybrid' ? 'finite' : planData.schedulingModel; // Hybrid Production Flow was removed
     if (planData.activeScale) this.activeScale = planData.activeScale;
     if (planData.timelineOffset !== undefined) this.timelineOffset = planData.timelineOffset;
     if (planData.priorityColors) this.priorityColors = planData.priorityColors;

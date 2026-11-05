@@ -830,13 +830,10 @@ export class GanttController {
     const modelLabels = {
       whiteboard: 'Model: Whiteboard & Cell (Manual)',
       finite: 'Model: Forwards Finite Capacity',
-      infinite: 'Model: Backwards Infinite Capacity',
-      hybrid: 'Model: Hybrid Production Flow'
+      infinite: 'Model: Backwards Infinite Capacity'
     };
     if (this.modelTag) {
-      const hi = this.state.schedulingModel === 'hybrid' ? this.state.hybridInfo : null;
-      const hybridNote = hi ? ` (${hi.roots.length} flow PD · ${hi.familyCount} PD in tree · depth ${hi.maxDepth})` : '';
-      this.modelTag.textContent = `${modelLabels[this.state.schedulingModel]}${hybridNote} [Scale: ${scale.toUpperCase()}]`;
+      this.modelTag.textContent = `${modelLabels[this.state.schedulingModel]} [Scale: ${scale.toUpperCase()}]`;
     }
 
     // Update the timeline range label
@@ -1482,7 +1479,7 @@ export class GanttController {
               // 1. Detect sequence routing overlaps (Sequence Warning)
               let isSeqError = false;
               let isParentChildViolation = false;
-              if (job.woId && (this.state.schedulingModel !== 'finite' && this.state.schedulingModel !== 'hybrid')) {
+              if (job.woId && this.state.schedulingModel !== 'finite') {
                 const sisterSteps = getJobsForWo(job.woId).filter(j => j.id !== job.id);
                 sisterSteps.forEach(sister => {
                   if (sister.stepNum < job.stepNum) {
@@ -2071,7 +2068,7 @@ export class GanttController {
           // 1. Detect sequence routing overlaps (Sequence Warning)
           let isSeqError = false;
           let isParentChildViolation = false;
-          if (job.woId && (this.state.schedulingModel !== 'finite' && this.state.schedulingModel !== 'hybrid')) {
+          if (job.woId && this.state.schedulingModel !== 'finite') {
             const sisterSteps = getJobsForWo(job.woId).filter(j => j.id !== job.id);
             sisterSteps.forEach(sister => {
               const moveBuffer = (sister.machine !== job.machine) ? (10.0 / 60.0) : 0.0;
@@ -2407,7 +2404,7 @@ export class GanttController {
       });
 
         // 3. Render Overlap Warnings
-        if ((this.state.schedulingModel !== 'finite' && this.state.schedulingModel !== 'hybrid')) {
+        if (this.state.schedulingModel !== 'finite') {
           const overlaps = this.detectOverlaps(machineJobs);
           overlaps.forEach(overlap => {
             const timelineEnd = config.startOffset + config.totalHours;

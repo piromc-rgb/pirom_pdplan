@@ -44,8 +44,8 @@ export function getJobMatKeys(job, planMaterials) {
   return [...keys];
 }
 
-// --- Hybrid Production Flow ---------------------------------------------------
-// A PD is a "flow PD" when its total production time (excluding painting, adjusting
+// --- Fast Track rule -----------------------------------------------------------
+// A PD qualifies when its total production time (excluding painting, adjusting
 // and assembly) exceeds HYBRID_MIN_DAYS working days AND it has a welding step.
 // Such a PD and its whole sub-PD tree are planned from the deepest sub-PD upward;
 // every other PD is planned Forwards Finite as usual.
@@ -538,24 +538,6 @@ export class Scheduler {
       childrenOf.set(parentId, Array.from(children));
     }
 
-    // Hybrid Production Flow: PDs meeting the heavy-welding condition plus their whole
-    // sub-PD tree are dispatched first, deepest sub-PD level first; the rest stays Forwards.
-    let hybridLevel = null;
-    if (options.hybridFlow === true) {
-      const minDays = Number(options.hybridMinDays) > 0 ? Number(options.hybridMinDays) : HYBRID_MIN_DAYS;
-      const dayHours = Number(options.hybridDayHours) > 0 ? Number(options.hybridDayHours) : HYBRID_DAY_HOURS;
-      const hf = computeHybridFlow(allCombinedJobs, childrenOf, minDays * dayHours);
-      hybridLevel = hf.levelByWo;
-      if (typeof options.onHybridInfo === 'function') {
-        options.onHybridInfo({
-          roots: hf.roots,
-          woIds: [...hf.levelByWo.keys()],
-          familyCount: hf.levelByWo.size,
-          maxDepth: Math.max(-1, ...hf.levelByWo.values())
-        });
-      }
-    }
-
     // Remaining (not-yet-scheduled) steps per WO - sorted ascending by stepNum
     const remainingStepsByWo = new Map();
     jobs.forEach(job => {
@@ -793,13 +775,6 @@ export class Scheduler {
         const pA = getPriorityWeight(a.job.priority);
         const pB = getPriorityWeight(b.job.priority);
 
-        if (hybridLevel) {
-          const lA = hybridLevel.has(a.job.woId) ? hybridLevel.get(a.job.woId) : -1;
-          const lB = hybridLevel.has(b.job.woId) ? hybridLevel.get(b.job.woId) : -1;
-          if ((lA >= 0) !== (lB >= 0)) return lA >= 0 ? -1 : 1; // flow PDs before the rest
-          if (lA !== lB) return lB - lA;                         // deepest sub-PD first
-        }
-
         if (groupSameItem && lastItemOnLane) {
           const aMatch = (getItemKey(a.job) === lastItemOnLane) ? 1 : 0;
           const bMatch = (getItemKey(b.job) === lastItemOnLane) ? 1 : 0;
@@ -889,12 +864,6 @@ export class Scheduler {
     const completedJobs = jobs.filter(j => j.status === 'Completed');
     const pendingJobs = jobs.filter(j => j.status !== 'Completed');
     return this.applyActiveJobShopScheduling(pendingJobs, scale, nowWorkingHour, completedJobs, workCenters, allowOffload, groupSameItem, options);
-  }
-
-  // Hybrid Production Flow: flow PDs (heavy welding assemblies) are planned from their deepest
-  // sub-PD upward, every other PD Forwards Finite - both in one pass over shared machine capacity.
-  static applyHybridFlow(jobs, scale = 'hr', nowWorkingHour = 0.0, workCenters = {}, allowOffload = true, groupSameItem = true, options = {}) {
-    return this.applyForwardsFinite(jobs, scale, nowWorkingHour, workCenters, allowOffload, groupSameItem, { ...options, hybridFlow: true });
   }
 
   // Backward Active Job Shop Scheduling Pass
