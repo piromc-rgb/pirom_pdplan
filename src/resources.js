@@ -752,6 +752,31 @@ export class ResourcesController {
     }).sort((a, b) => b.hours - a.hours || a.pdId.localeCompare(b.pdId));
   }
 
+  // The displayed Fast Track PDs plus every sub-PD below them (id prefix "PD-xx", assembly links and Plan+Mat
+  // child PDs, recursively). Parents of the displayed PDs are never included (only downward traversal).
+  getFastTrackFamily(rootIds) {
+    const st = this.state;
+    const all = new Set();
+    (st.scheduledJobs || []).forEach(j => all.add(j.woId || j.id));
+    (st.workOrders || []).forEach(w => all.add(w.id));
+    const kids = new Map();
+    const link = (p, c) => { if (!p || !c || p === c || !all.has(p) || !all.has(c)) return; if (!kids.has(p)) kids.set(p, new Set()); kids.get(p).add(c); };
+    all.forEach(id => { let i = id.indexOf('-'); while (i !== -1) { link(id.substring(0, i), id); i = id.indexOf('-', i + 1); } });
+    (st.assemblyLinks || []).forEach(l => link((l.to || '').split('-')[0], (l.from || '').split('-')[0]));
+    all.forEach(pid => {
+      ((st.planMaterials || {})[pid] || []).forEach(m => link(pid, (st.dwgToPdMap || {})[String(m.mat || '').trim()]?.pdId));
+    });
+    const out = new Set();
+    const stack = [...rootIds];
+    while (stack.length) {
+      const id = stack.pop();
+      if (out.has(id)) continue;
+      out.add(id);
+      (kids.get(id) || []).forEach(c => stack.push(c));
+    }
+    return out;
+  }
+
   showFastTrack() {
     const project = this.getSingleSelectedProject();
     if (!project) {
@@ -832,7 +857,13 @@ export class ResourcesController {
             <tbody>${bodyRows}</tbody>
           </table>
         </div>
-        <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;border-top:1px solid #e2e8f0;"><button type="button" id="ft-close" style="padding:6px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">ปิด</button></div>
+        <div style="padding:10px 18px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid #e2e8f0;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span style="font-size:12px;color:#475569;">Priority ปัจจุบัน: <b id="ft-cur-p" style="color:#0f172a;"></b></span>
+            <input id="ft-new-p" type="text" placeholder="Priority ใหม่" style="width:110px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;">
+            <button type="button" id="ft-apply-p" style="padding:5px 12px;border:none;border-radius:6px;background:#0d9488;color:#fff;font-weight:700;cursor:pointer;">ปรับ</button>
+          </div>
+          <button type="button" id="ft-close" style="padding:6px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">ปิด</button></div>
       </div>`;
     document.body.appendChild(overlay);
     const close = () => overlay.remove();
@@ -844,6 +875,43 @@ export class ResourcesController {
       if (pdModal) pdModal.style.zIndex = '100001';
       window.dispatchEvent(new CustomEvent('open-pd-modal', { detail: { woId: el.dataset.pd } }));
     }));
+
+    // Priority of the listed PDs + all their sub-PDs (parents of the listed PDs are untouched)
+    const family = this.getFastTrackFamily(rows.map(r => r.pdId));
+    const famJobs = () => (state.scheduledJobs || []).filter(j => family.has(j.woId || j.id));
+    const famWos = () => (state.workOrders || []).filter(w => family.has(w.id));
+    const curEl = overlay.querySelector('#ft-cur-p');
+    const newInput = overlay.querySelector('#ft-new-p');
+    const refreshCur = () => {
+      const counts = {};
+      [...famJobs().map(j => j.priority), ...famWos().map(w => w.priority)].forEach(p => { const k = String(p ?? 'Normal'); counts[k] = (counts[k] || 0) + 1; });
+      const keys = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+      curEl.textContent = keys.length === 0 ? '-' : (keys.length > 3 ? `${keys.slice(0, 3).join(', ')} …` : keys.join(', '));
+      curEl.title = `${family.size} PD (รวมลูกย่อย) · ${keys.join(', ')}`;
+      if (!newInput.value) newInput.value = keys[0] || '';
+    };
+    refreshCur();
+    overlay.querySelector('#ft-apply-p').addEventListener('click', () => {
+      const newP = newInput.value.trim();
+      if (!newP) return;
+      const jobs = famJobs(), wos = famWos();
+      if (jobs.length + wos.length === 0) return;
+      if (!confirm(`ตั้ง Priority เป็น "${newP}" ให้ PD ที่แสดง ${rows.length} PD และลูกย่อยทั้งหมด (รวม ${family.size} PD)
+PD แม่ของ PD ที่แสดงจะไม่ถูกปรับ (ย้อนกลับได้ด้วย Undo)
+
+ยืนยันหรือไม่?`)) return;
+      state.saveStateToHistory();
+      jobs.forEach(j => { j.priority = newP; });
+      wos.forEach(w => { w.priority = newP; });
+      if (state.activePriorities[newP] === undefined) state.activePriorities[newP] = true;
+      state.savePlanToFile();
+      state.saveWorkOrdersToFile();
+      state.notify();
+      state.dispatchHistoryEvent?.();
+      newInput.value = '';
+      refreshCur();
+      state.ganttController?.showToast?.(`✅ ตั้ง Priority เป็น "${newP}" ให้ ${family.size} PD (Fast Track + ลูกย่อย) แล้ว — กด Undo เพื่อย้อนกลับได้`, 'success');
+    });
   }
 
   // "สรุปภาพรวมโครงการที่เลือก": popup for the projects currently ticked in the Project filter.
