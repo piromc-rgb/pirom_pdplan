@@ -12,6 +12,7 @@ import {
 import { ResourcesController } from './resources.js';
 import { KioskController } from './kiosk.js';
 import { DailyScheduleController } from './dailySchedule.js';
+import { MobileModeController } from './mobileMode.js';
 import { AssemblyTreeController, matchesAssemblyQuery } from './assemblyTree.js';
 import { ContinuityAnalysisController } from './continuityAnalysis.js';
 import { QcCheckController } from './qcCheck.js';
@@ -128,7 +129,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.145';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.146';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -157,6 +158,7 @@ class App {
     state.resourcesController = this.resources;
     this.kiosk = new KioskController(state);
     this.dailySchedule = new DailyScheduleController(state);
+    this.mobileMode = new MobileModeController(state);
     this.assemblyTree = new AssemblyTreeController(state, this.gantt);
     state.assemblyTree = this.assemblyTree;
     window.assemblyTree = this.assemblyTree;
