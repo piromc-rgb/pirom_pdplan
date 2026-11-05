@@ -290,7 +290,7 @@ export class MobileModeController {
           <b style="font-size:15px;">${pad2(a.getHours())}:${pad2(a.getMinutes())} - ${pad2(b.getHours())}:${pad2(b.getMinutes())}</b>
           <span style="font-size:11.5px;color:#64748b;">${job.estHours.toFixed(2)} h</span>
         </div>
-        <div style="margin-top:4px;"><span class="mm-pd" style="color:#2563eb;font-weight:700;text-decoration:underline;font-size:14px;">${esc(job.woId)}</span> <span style="font-size:12px;color:#64748b;">· ${esc(job.qty)} pcs · ${esc(job.project || '')}</span></div>
+        <div style="margin-top:4px;"><span class="mm-pd" style="color:#2563eb;font-weight:700;text-decoration:underline;font-size:14px;">${s.isFastTrackPd(job.woId) ? '⚡ ' : ''}${esc(job.woId)}</span> <span style="font-size:12px;color:#64748b;">· ${esc(job.qty)} pcs · ${esc(job.project || '')}</span></div>
         <div style="font-size:13px;margin-top:2px;">${esc(job.partName || '')}</div>
         ${mat}
         <div style="font-size:12px;margin-top:6px;color:#475569;">${chain}</div>
@@ -359,7 +359,7 @@ export class MobileModeController {
   renderPd(cur) {
     const s = this.state;
     const pdId = cur.pdId;
-    this.title.textContent = pdId;
+    this.title.textContent = (s.isFastTrackPd(pdId) ? '⚡ ' : '') + pdId;
     const wo = (s.workOrders || []).find(w => w.id === pdId);
     const jobs = (s.scheduledJobs || []).filter(j => (j.woId || j.id) === pdId);
     const head = wo || jobs[0] || {};

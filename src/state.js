@@ -1,5 +1,5 @@
 // MIE Trak Pro - Production Scheduling Central State
-import { Scheduler, getPriorityWeight } from './scheduler.js';
+import { Scheduler, getPriorityWeight, computeHybridFlow } from './scheduler.js';
 import { isJobPriorityVisible, isJobProjectVisible, isJobPdRangeVisible } from './gantt.js';
 
 class CentralState {
@@ -496,8 +496,38 @@ class CentralState {
     this.notify();
   }
 
+  // Fast Track PD: production hours (excl. paint/adjust/assembly) above hybridMinDays x hybridDayHours (default 16 h)
+  // and a welding step - same rule as the Fast Track popup. Cached until the next notify().
+  isFastTrackPd(woId) {
+    const key = `${(this.scheduledJobs || []).length}|${(this.workOrders || []).length}`;
+    if (!this._ftCache || this._ftCache.key !== key) {
+      const jobs = [];
+      const seen = new Set();
+      const add = (id, wo, machine, name, h) => { if (seen.has(id)) return; seen.add(id); jobs.push({ woId: wo, machine, stepName: name, estHours: Number(h) || 0 }); };
+      (this.scheduledJobs || []).forEach(j => add(j.id, j.woId || j.id, j.machine || j.originalMachine, j.stepName || j.name, j.estHours));
+      (this.workOrders || []).forEach(w => (w.steps || []).forEach(st => add(st.id || `${w.id}-${st.stepNum}`, w.id, st.machine, st.name || st.stepName, st.estHours)));
+      const sk = (wo, m, n) => `${wo}|${String(m || '').toUpperCase()}|${String(n || '').trim().toLowerCase()}`;
+      const present = new Set(jobs.map(j => sk(j.woId, j.machine, j.stepName)));
+      [...new Set(jobs.map(j => j.woId))].forEach(wo => {
+        ((this.pdDoneOps || {})[wo] || []).forEach(op => {
+          const k = sk(wo, op.machine, op.name);
+          if (present.has(k)) return;
+          present.add(k);
+          jobs.push({ woId: wo, machine: op.machine, stepName: op.name, estHours: Number(op.estHours) || 0 });
+        });
+      });
+      const dayH = Number(this.hybridDayHours) > 0 ? Number(this.hybridDayHours) : 8;
+      const minD = Number(this.hybridMinDays) > 0 ? Number(this.hybridMinDays) : 2;
+      let roots = [];
+      try { roots = computeHybridFlow(jobs, new Map(), minD * dayH).roots; } catch (e) { roots = []; }
+      this._ftCache = { key, set: new Set(roots) };
+    }
+    return this._ftCache.set.has(woId);
+  }
+
   // Notify all subscribers
   notify() {
+    this._ftCache = null;
     this._oeeCache = null;
     this._childBlockCache = null;
     // One failing subscriber (e.g. a render error) must not stop the others, nor skip the debounced save below

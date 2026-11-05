@@ -456,7 +456,7 @@ export class DailyScheduleController {
         <!-- Job details: 3 fixed lines -->
         <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding-left: 4px;">
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
-            <span style="font-size: 13px; color: var(--text-primary);"><strong style="color: var(--accent-teal);">PD ID: ${job.woId}</strong> &nbsp;·&nbsp; ชื่องาน: <strong>${job.partName}</strong> &nbsp;·&nbsp; รหัสแบบ: <strong style="color: var(--accent-cyan); font-family: monospace;">${job.dwgNo || 'N/A'}</strong>${revHtml} &nbsp;·&nbsp; จำนวนผลิต: <strong>${job.qty}</strong> pcs</span>
+            <span style="font-size: 13px; color: var(--text-primary);"><strong style="color: var(--accent-teal);">${this.state.isFastTrackPd(job.woId) ? '<span title="Fast Track">⚡</span> ' : ''}PD ID: ${job.woId}</strong> &nbsp;·&nbsp; ชื่องาน: <strong>${job.partName}</strong> &nbsp;·&nbsp; รหัสแบบ: <strong style="color: var(--accent-cyan); font-family: monospace;">${job.dwgNo || 'N/A'}</strong>${revHtml} &nbsp;·&nbsp; จำนวนผลิต: <strong>${job.qty}</strong> pcs</span>
             <span style="display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0;"><span class="priority-badge ${job.priority ? job.priority.toLowerCase() : 'normal'}" style="font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 700; flex-shrink: 0;">${job.priority || 'Normal'}</span></span>
           </div>
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; gap: 20px; flex-wrap: wrap;">

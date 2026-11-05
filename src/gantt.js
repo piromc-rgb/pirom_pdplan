@@ -3702,7 +3702,7 @@ export class GanttController {
     const dueHour = backlogWO?.dueHour !== undefined ? backlogWO.dueHour : (firstSource?.dueHour !== undefined ? firstSource.dueHour : null);
 
     // 2. Populate form fields
-    if (titleEl) titleEl.textContent = `Production Order: ${woId}`;
+    if (titleEl) titleEl.textContent = `${this.state.isFastTrackPd?.(woId) ? '⚡ ' : ''}Production Order: ${woId}`;
     if (favoriteBtnEl) {
       const renderFavoriteIcon = () => {
         const isFav = this.state.isPdFavorite(woId);
