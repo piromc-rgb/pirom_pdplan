@@ -1221,6 +1221,11 @@ export class GanttController {
           }
         }
 
+        // Fast Track PD: lightning emoji to the left of the part counter (e.g. 1/1)
+        if (assemblyLabelHtml && this.state.isFastTrackPd(woId)) {
+          assemblyLabelHtml = `<span style="display: inline-flex; align-items: center; gap: 3px; margin-left: auto; flex-shrink: 0;"><span title="Fast Track" style="font-size: 11px;">⚡</span>${assemblyLabelHtml}</span>`;
+        }
+
         const labelIndicatorHtml = isParent 
           ? `<span class="pd-collapse-toggle" style="cursor: pointer; padding: 0 4px 0 0; font-weight: bold; font-family: monospace; user-select: none; font-size: 11px;" title="${this.collapsedParents.has(woId) ? 'คลิกเพื่อกางออก (Expand)' : 'คลิกเพื่อยุบ (Collapse)'}">${this.collapsedParents.has(woId) ? '⊞' : '⊟'}</span>`
           : '';
