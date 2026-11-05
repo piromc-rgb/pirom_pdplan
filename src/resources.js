@@ -706,7 +706,7 @@ export class ResourcesController {
   // PDs of one project (Board + Backlog) whose total production time - excluding painting, adjusting and
   // assembly steps - exceeds hybridMinDays x hybridDayHours AND that have a welding step. Same rule as the
   // Hybrid Production Flow (computeHybridFlow), limited to the given project.
-  getFastTrackPds(project) {
+  getFastTrackPds(project, thresholdHours) {
     const state = this.state;
     const norm = (p) => String(p || 'General').trim() || 'General';
     const jobs = [];
@@ -731,7 +731,8 @@ export class ResourcesController {
     });
     const dayHours = Number(state.hybridDayHours) > 0 ? Number(state.hybridDayHours) : HYBRID_DAY_HOURS;
     const minDays = Number(state.hybridMinDays) > 0 ? Number(state.hybridMinDays) : HYBRID_MIN_DAYS;
-    const { roots } = computeHybridFlow(jobs, new Map(), minDays * dayHours);
+    const threshold = Number(thresholdHours) > 0 ? Number(thresholdHours) : minDays * dayHours;
+    const { roots } = computeHybridFlow(jobs, new Map(), threshold);
     const hoursByWo = new Map();
     const isExcluded = (j) => {
       const m = String(j.machine || '').toUpperCase();
@@ -757,9 +758,47 @@ export class ResourcesController {
       this.state.ganttController?.showToast?.('⚠️ Fast Track ใช้ได้เมื่อเลือก 1 โครงการเท่านั้น', 'error');
       return;
     }
+    this.askFastTrackHours(project);
+  }
+
+  // Asks for the minimum PD production hours (default 16) before listing the Fast Track PDs
+  askFastTrackHours(project) {
+    const def = (Number(this.state.hybridDayHours) > 0 ? Number(this.state.hybridDayHours) : HYBRID_DAY_HOURS) * (Number(this.state.hybridMinDays) > 0 ? Number(this.state.hybridMinDays) : HYBRID_MIN_DAYS);
+    let last = def;
+    try { const v = Number(localStorage.getItem('chaken_fast_track_hours')); if (v > 0) last = v; } catch (e) { /* ignore */ }
+    document.getElementById('fast-track-ask')?.remove();
+    const ov = document.createElement('div');
+    ov.id = 'fast-track-ask';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.innerHTML = `<div style="background:#fff;color:#0f172a;border-radius:10px;width:320px;max-width:100%;padding:16px 18px;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:13px;">
+      <div style="font-size:15px;font-weight:700;margin-bottom:6px;">⚡ Fast Track</div>
+      <div style="color:#64748b;font-size:12px;margin-bottom:10px;">แสดง PD ที่เวลาผลิตรวม (ไม่รวมทำสี/ปรับแต่ง/Assembly) เกินกี่ชั่วโมง (ค่าเริ่มต้น ${def})</div>
+      <input id="ft-hours" type="number" min="0.1" step="0.5" value="${last}" style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;">
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+        <button type="button" id="ft-ask-cancel" style="padding:6px 14px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;">ยกเลิก</button>
+        <button type="button" id="ft-ask-ok" style="padding:6px 16px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">ตกลง</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    const input = ov.querySelector('#ft-hours');
+    input.focus(); input.select();
+    const close = () => ov.remove();
+    const ok = () => {
+      const v = Number(input.value);
+      if (!(v > 0)) { input.style.borderColor = '#dc2626'; return; }
+      try { localStorage.setItem('chaken_fast_track_hours', String(v)); } catch (e) { /* ignore */ }
+      close();
+      this.renderFastTrack(project, v);
+    };
+    ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+    ov.querySelector('#ft-ask-cancel').addEventListener('click', close);
+    ov.querySelector('#ft-ask-ok').addEventListener('click', ok);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') ok(); else if (e.key === 'Escape') close(); });
+  }
+
+  renderFastTrack(project, thresholdHours) {
     const state = this.state;
     const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    const rows = this.getFastTrackPds(project);
+    const rows = this.getFastTrackPds(project, thresholdHours);
     const dayHours = Number(state.hybridDayHours) > 0 ? Number(state.hybridDayHours) : HYBRID_DAY_HOURS;
     const minDays = Number(state.hybridMinDays) > 0 ? Number(state.hybridMinDays) : HYBRID_MIN_DAYS;
     const old = document.getElementById('fast-track-popup');
@@ -783,7 +822,7 @@ export class ResourcesController {
         <div style="padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <div>
             <div style="font-size:15px;font-weight:700;">⚡ Fast Track · โครงการ ${esc(project)}</div>
-            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">PD ที่เวลาผลิตรวมเกิน ${minDays} วัน (1 วัน = ${dayHours} ชม. = เกิน ${minDays * dayHours} ชม.) ไม่รวมทำสี / ปรับแต่ง / Assembly และมี process เชื่อม · ${rows.length} PD · นับจาก PD ที่อยู่ใน Board + Backlog</div>
+            <div style="color:#64748b;font-size:11.5px;margin-top:3px;">PD ที่เวลาผลิตรวมเกิน ${thresholdHours} ชม. (${(thresholdHours / dayHours).toFixed(1)} วัน @ ${dayHours} ชม./วัน) ไม่รวมทำสี / ปรับแต่ง / Assembly และมี process เชื่อม · ${rows.length} PD · นับจาก PD ที่อยู่ใน Board + Backlog</div>
           </div>
           <button type="button" id="ft-x" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
         </div>
