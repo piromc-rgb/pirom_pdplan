@@ -993,9 +993,8 @@ export class AssemblyTreeController {
     this.mainPdMode = mode === 'manual' ? 'manual' : 'filter';
     try { localStorage.setItem('assembly_main_pd_mode', this.mainPdMode); } catch (e) { /* ignore */ }
     if (refresh && this.mainPdMode === 'filter') {
-      const ranges = this.state.getPriorityFilterPdRanges ? this.state.getPriorityFilterPdRanges() : null;
       this.allAssemblies = this.getAllAssemblies();
-      const cands = ranges ? this.getMainPdCandidates(this.allAssemblies) : [];
+      const cands = this.getMainPdFilterState().status === 'ok' ? this.getMainPdCandidates(this.allAssemblies) : [];
       if (cands.length > 0) { this.selectAssembly(cands[0].id); return; }
     }
     this.render();
@@ -1004,11 +1003,24 @@ export class AssemblyTreeController {
 
   // Assemblies that may be chosen as Main PD: in 'filter' mode only PDs inside the PD Ranges of the ticked Priorities
   // (when the Summary Project Order is loaded), in 'manual' mode everything.
+  // Filter mode allows exactly ONE ticked Priority (one set of PD Ranges). 'none' = nothing ticked (show nothing),
+  // 'multi' = more than one ticked, 'norange' = the ticked Priority has no Summary range, 'loading' = Summary not loaded yet.
+  getMainPdFilterState() {
+    const st = this.state;
+    if (!st.projectPrioritySummary) return { status: 'loading', ranges: null, count: 0 };
+    const ticked = Object.keys(st.activePriorities || {}).filter(k => st.activePriorities[k] !== false && /^\d+$/.test(String(k).trim()));
+    if (ticked.length === 0) return { status: 'none', ranges: null, count: 0 };
+    if (ticked.length > 1) return { status: 'multi', ranges: null, count: ticked.length };
+    const ranges = st.getPriorityFilterPdRanges ? st.getPriorityFilterPdRanges() : null;
+    return ranges ? { status: 'ok', ranges, count: 1, priority: ticked[0] } : { status: 'norange', ranges: null, count: 1, priority: ticked[0] };
+  }
+
   getMainPdCandidates(list) {
     if (this.mainPdMode === 'manual') return list;
-    const ranges = this.state.getPriorityFilterPdRanges ? this.state.getPriorityFilterPdRanges() : null;
-    if (!ranges) return list;
-    return list.filter(a => this.isPdInRanges(a.id, ranges));
+    const fs = this.getMainPdFilterState();
+    if (fs.status === 'loading') return list;
+    if (fs.status !== 'ok') return [];
+    return list.filter(a => this.isPdInRanges(a.id, fs.ranges));
   }
 
   // "PD2608784-PD2608904, PD2610950" / "2608784-2608904" -> [{a,b}]; null unless every comma/space separated part is a
@@ -1034,16 +1046,22 @@ export class AssemblyTreeController {
     return Number.isFinite(n) && ranges.some(r => n >= r.a && n <= r.b);
   }
 
-  updateMainPdModeUi(candidateCount, ranges) {
-    const on = 'background: rgba(0, 242, 254, 0.2); border-color: var(--accent-teal); font-weight: 800;';
+  updateMainPdModeUi(candidateCount) {
     const setBtn = (btn, active) => { if (btn) { btn.style.background = active ? 'rgba(0, 242, 254, 0.2)' : ''; btn.style.borderColor = active ? 'var(--accent-teal)' : ''; btn.style.fontWeight = active ? '800' : ''; } };
     setBtn(this.btnMainPdModeFilter, this.mainPdMode !== 'manual');
     setBtn(this.btnMainPdModeManual, this.mainPdMode === 'manual');
-    if (this.mainPdModeHint) {
-      if (this.mainPdMode === 'manual') this.mainPdModeHint.textContent = 'กรอก/ค้นหาเลขที่ PD เองได้ทุกตัว';
-      else if (!ranges) this.mainPdModeHint.textContent = 'ตามตัวกรอง Priority: ยังไม่มี PD Range (ติ๊ก Priority ด้านขวา หรือรอโหลด Summary) จึงแสดงทุก PD';
-      else this.mainPdModeHint.textContent = `ตามตัวกรอง Priority: ${ranges.length} ช่วง PD · เลือกได้ ${candidateCount} PD`;
-    }
+    if (!this.mainPdModeHint) return;
+    if (this.mainPdMode === 'manual') { this.mainPdModeHint.textContent = 'กรอก/ค้นหาเลขที่ PD เองได้ทุกตัว'; return; }
+    const fs = this.getMainPdFilterState();
+    const msg = {
+      loading: 'ตามตัวกรอง Priority: กำลังโหลด Summary Project Order...',
+      none: 'ตามตัวกรอง Priority: ยังไม่ได้เลือก Priority จึงไม่แสดงผัง (ติ๊กเลือก 1 Priority ที่แผงขวา)',
+      multi: `ตามตัวกรอง Priority: เลือกได้เพียง 1 Priority (ตอนนี้ติ๊ก ${fs.count}) จึงไม่แสดงผัง`,
+      norange: `ตามตัวกรอง Priority: Priority ${fs.priority} ไม่มี PD Range ใน Summary`,
+      ok: () => `ตามตัวกรอง Priority ${fs.priority}: ${fs.ranges.map(r => r.a === r.b ? 'PD' + r.a : `PD${r.a}-PD${r.b}`).join(', ')} · เลือกได้ ${candidateCount} PD`
+    };
+    const m = msg[fs.status];
+    this.mainPdModeHint.textContent = typeof m === 'function' ? m() : m;
   }
 
   selectAssembly(woId) {
@@ -2112,16 +2130,22 @@ export class AssemblyTreeController {
     // selection in the search box's text (only while the user isn't actively typing).
     this.allAssemblies = assemblies;
     {
-      // Default mode 'filter': the Main PD follows the PD Ranges of the ticked Priorities. When nothing is selected, or the
-      // selection is outside those ranges, jump to the first PD inside them.
-      const ranges = this.mainPdMode === 'manual' ? null : (this.state.getPriorityFilterPdRanges ? this.state.getPriorityFilterPdRanges() : null);
+      // Default mode 'filter': the Main PD follows the PD Ranges of the ONE ticked Priority. Nothing ticked / more than one
+      // ticked / no range -> nothing is shown. When the selection is outside the ranges, jump to the first PD inside them.
+      const fs = this.mainPdMode === 'manual' ? { status: 'manual' } : this.getMainPdFilterState();
       const cands = this.getMainPdCandidates(assemblies);
-      this.updateMainPdModeUi(cands.length, ranges);
+      this.updateMainPdModeUi(cands.length);
       const typing = document.activeElement === this.sidebarMainPdInput || document.activeElement === this.searchInput;
-      if (ranges && cands.length > 0 && !typing && (!this.selectedWoId || !this.isPdInRanges(this.selectedWoId, ranges)) && !this._autoSelectingMainPd) {
-        this._autoSelectingMainPd = true;
-        try { this.selectAssembly(cands[0].id); } finally { this._autoSelectingMainPd = false; }
-        return;
+      if (['none', 'multi', 'norange'].includes(fs.status)) {
+        if (this.selectedWoId) { this.selectedWoId = null; this.focusedWoId = null; }
+        this._mainPdEmptyReason = fs.status;
+      } else {
+        this._mainPdEmptyReason = null;
+        if (fs.status === 'ok' && cands.length > 0 && !typing && (!this.selectedWoId || !this.isPdInRanges(this.selectedWoId, fs.ranges)) && !this._autoSelectingMainPd) {
+          this._autoSelectingMainPd = true;
+          try { this.selectAssembly(cands[0].id); } finally { this._autoSelectingMainPd = false; }
+          return;
+        }
       }
     }
     const currentVal = this.selectedWoId;
@@ -2144,7 +2168,7 @@ export class AssemblyTreeController {
             <div style="font-size: 40px; margin-bottom: 14px;">🌿</div>
             <div style="font-weight: 700; font-size: 16px; color: #1e293b; margin-bottom: 8px;">ผังโครงสร้างชุดประกอบ (Assembly Tree)</div>
             <div style="color: #64748b; max-width: 440px; margin: 0 auto; line-height: 1.6;">
-              กรุณาระบุหรือเลือกเลขที่ PD ตัว Main จากช่องค้นหาด้านบน หรือเลือกจากแถบด้านซ้าย เพื่อดูผังโครงสร้างชุดประกอบ
+              ${{ none: 'ยังไม่ได้เลือก Priority ที่แผงตัวกรองด้านขวา กรุณาติ๊กเลือก 1 Priority เพื่อแสดงผังตาม PD Range หรือสลับเป็น "กรอก PD เอง"', multi: 'เลือก Priority ได้เพียง 1 ชุดสำหรับผัง Assembly กรุณาเหลือติ๊กไว้ 1 Priority ที่แผงตัวกรองด้านขวา', norange: 'Priority ที่เลือกไม่มี PD Range ใน Summary Project Order' }[this._mainPdEmptyReason] || 'กรุณาระบุหรือเลือกเลขที่ PD ตัว Main จากช่องค้นหาด้านบน หรือเลือกจากแถบด้านซ้าย เพื่อดูผังโครงสร้างชุดประกอบ'}
             </div>
           </div>
         `;
