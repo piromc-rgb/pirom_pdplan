@@ -1164,7 +1164,7 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
           <button type="button" id="btn-ps-back" style="padding:6px 14px;border:1px solid #2563eb;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-weight:700;cursor:pointer;">← กลับหน้าแรก</button>
           <span style="display:flex;gap:14px;">${legend}</span>
         </div>
-        <div style="color:#64748b;font-size:11.5px;">เรียงตามเป้าการส่งมอบ (ส่งก่อนอยู่บน) · เป้าส่งมอบวันเดียวกันใช้สีพื้นแถวเดียวกัน วันที่ต่างกันสีต่างกัน (ส่งก่อนสุด = แดงอ่อน) · ไม่มีเป้าส่งมอบอยู่ท้ายสุด · % = สัดส่วน PD ในชุดประกอบของเครื่องนั้น</div>
+        <div style="color:#64748b;font-size:11.5px;">เรียงตามเป้าการส่งมอบ (ส่งก่อนอยู่บน) · เป้าส่งมอบวันเดียวกันใช้สีพื้นแถวเดียวกัน วันที่ต่างกันสีต่างกัน (ส่งก่อนสุด = แดงอ่อน) · ไม่มีเป้าส่งมอบอยู่ท้ายสุด · % = สัดส่วน PD ในช่วง PD (Start-End) ของเครื่องนั้นจากไฟล์ Summary Project Order (ถ้าไม่พบช่วง ใช้ชุดประกอบ BOM แทน)</div>
         <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px;">
           <table style="border-collapse:collapse;width:100%;font-size:12px;">
             <thead><tr style="background:#f1f5f9;text-align:left;"><th style="padding:6px 8px;text-align:center;">#</th><th style="padding:6px 8px;">Item Code</th><th style="padding:6px 8px;">Description</th><th style="padding:6px 8px;text-align:right;">QTY</th><th style="padding:6px 8px;">เป้าส่งมอบ</th><th style="padding:6px 8px;text-align:right;">PD</th><th style="padding:6px 8px;">Progress</th><th style="padding:6px 8px;text-align:right;">เสร็จ</th><th style="padding:6px 8px;text-align:right;">กำลังผลิต</th><th style="padding:6px 8px;text-align:right;">รอผลิต</th></tr></thead>
