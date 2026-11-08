@@ -1384,7 +1384,9 @@ export class AssemblyTreeController {
         }
       }
 
-      return { childPds, rawList: Array.from(rawMats.values()) };
+      // Child PDs outside the parent's Summary PD range are not shown (whatever way the link was found)
+      const visibleChildPds = childPds.filter(c => !this.state.isChildOutsideParentSummaryRange(woId, c.pdId));
+      return { childPds: visibleChildPds, rawList: Array.from(rawMats.values()) };
     };
 
     const createPdNode = (id, nodeKey, depth, parentKey) => {
@@ -1559,6 +1561,45 @@ export class AssemblyTreeController {
     const result = { rootTree, allTreeNodes };
     this._cachedTreeNodes.set(cacheKey, result);
     return result;
+  }
+
+  // Filter mode: every PD inside the PD Ranges of the ticked Priority as ONE tree. A virtual "Priority N" node holds one
+  // sub-tree per top-level PD (PDs that are not a child of another PD of the range; child PDs outside the range are
+  // already hidden by the range check). Returns null when the filter mode / range is not usable.
+  buildPriorityForest() {
+    if (this.mainPdMode === 'manual') return null;
+    const fs = this.getMainPdFilterState();
+    if (fs.status !== 'ok') return null;
+    const idSet = new Set();
+    this.state.getPdProjectIndex().forEach((pj, id) => { if (this.isPdInRanges(id, fs.ranges)) idSet.add(id); });
+    (this.allAssemblies || []).forEach(a => { if (this.isPdInRanges(a.id, fs.ranges)) idSet.add(a.id); });
+    const ids = [...idSet].sort();
+    if (ids.length === 0) return null;
+    const trees = new Map();
+    const underOther = new Set();
+    ids.forEach(id => {
+      const t = this.buildAssemblyTree(id);
+      trees.set(id, t);
+      (t.allTreeNodes || []).forEach(n => { if (!n.isRawMat && n.id !== id && idSet.has(n.id)) underOther.add(n.id); });
+    });
+    const rootIds = ids.filter(id => !underOther.has(id));
+    const VKEY = '__PRIORITY_FOREST__';
+    const label = fs.ranges.map(r => r.a === r.b ? `PD${r.a}` : `PD${r.a}-PD${r.b}`).join(', ');
+    const virtual = {
+      id: VKEY, nodeKey: VKEY, displayId: `Priority ${fs.priority}`, partName: label, dwgNo: '', depth: 0,
+      parentId: null, isRawMat: false, isVirtual: true, status: 'working', visual: '', isDone: false,
+      stepNames: `${ids.length} PD · ${rootIds.length} ชุด`, qty: 1, children: [], hasChildren: true
+    };
+    const all = [virtual];
+    rootIds.forEach(id => {
+      const t = trees.get(id);
+      if (!t || !t.rootTree) return;
+      const rootClone = { ...t.rootTree, parentId: VKEY };
+      virtual.children.push(rootClone);
+      all.push(rootClone);
+      (t.allTreeNodes || []).forEach(n => { if (n !== t.rootTree) all.push(n); });
+    });
+    return { rootTree: virtual, allTreeNodes: all };
   }
 
   // Counts, among a root's sub-PDs (every family node below depth 0), how many have
@@ -2218,8 +2259,11 @@ export class AssemblyTreeController {
       this.btnTreeResetFocus.style.display = isEnlarged ? 'inline-flex' : 'none';
     }
 
-    const { rootTree: tree, allTreeNodes: allNodes } = this.buildAssemblyTree(activeWoId);
+    // Filter mode (not zoomed into a PD): draw all PDs of the ticked Priority's ranges together
+    const forest = !isEnlarged ? this.buildPriorityForest() : null;
+    const { rootTree: tree, allTreeNodes: allNodes } = forest || this.buildAssemblyTree(activeWoId);
     if (!tree) return;
+    if (forest && this.treeFocusText) this.treeFocusText.textContent = `🏢 ทุก PD ของ ${tree.displayId}: ${tree.partName} (${tree.stepNames})`;
     const rootNode = tree;
 
     // Legend: share of PDs per status colour (all PDs of this assembly set, warehouse raw material rows excluded)
@@ -2237,7 +2281,7 @@ export class AssemblyTreeController {
 
     // Update Top-Left Header Box
     if (this.headerPartNo) {
-      this.headerPartNo.textContent = rootNode ? (rootNode.dwgNo && rootNode.dwgNo !== rootNode.id ? `${rootNode.id} (${rootNode.dwgNo})` : rootNode.id) : '-';
+      this.headerPartNo.textContent = rootNode && rootNode.isVirtual ? rootNode.displayId : rootNode ? (rootNode.dwgNo && rootNode.dwgNo !== rootNode.id ? `${rootNode.id} (${rootNode.dwgNo})` : rootNode.id) : '-';
     }
     if (this.headerDesc) {
       this.headerDesc.textContent = rootNode ? `${rootNode.partName} | ${rootNode.stepNames}` : '';
@@ -2521,6 +2565,7 @@ export class AssemblyTreeController {
           const isRaw = card.getAttribute('data-is-raw') === 'true';
           const parentWoId = card.getAttribute('data-parent-wo-id');
           const woId = card.getAttribute('data-wo-id');
+          if (woId === '__PRIORITY_FOREST__') return;
           if (this.gantt && this.gantt.showPDPlanModal) {
             if (isRaw && parentWoId) {
               this.gantt.showPDPlanModal(parentWoId);
@@ -2534,7 +2579,7 @@ export class AssemblyTreeController {
           if (e.target.closest('.btn-tree-toggle')) return;
           const isRaw = card.getAttribute('data-is-raw') === 'true';
           const woId = card.getAttribute('data-wo-id');
-          if (!isRaw && woId && woId !== this.focusedWoId) {
+          if (!isRaw && woId && woId !== '__PRIORITY_FOREST__' && woId !== this.focusedWoId) {
             this.focusedWoId = woId;
             this.render();
             this.renderSidebarTreeView();
