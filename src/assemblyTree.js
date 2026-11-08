@@ -86,7 +86,7 @@ export class AssemblyTreeController {
     this.btnMainPdModeFilter = document.getElementById('btn-main-pd-mode-filter');
     this.btnMainPdModeManual = document.getElementById('btn-main-pd-mode-manual');
     this.mainPdModeHint = document.getElementById('main-pd-mode-hint');
-    if (this.btnMainPdModeFilter) this.btnMainPdModeFilter.addEventListener('click', () => this.setMainPdMode('filter'));
+    if (this.btnMainPdModeFilter) this.btnMainPdModeFilter.addEventListener('click', () => this.setMainPdMode('filter', true));
     if (this.btnMainPdModeManual) this.btnMainPdModeManual.addEventListener('click', () => this.setMainPdMode('manual'));
     this.sidebarTreeview = document.getElementById('sidebar-assembly-treeview');
     this.btnSidebarTreeExpandAll = document.getElementById('btn-sidebar-tree-expand-all');
@@ -987,9 +987,17 @@ export class AssemblyTreeController {
     }, 200);
   }
 
-  setMainPdMode(mode) {
+  // refresh = true (button click on "ตามตัวกรอง Priority"): pull the PD Ranges of the currently ticked Priorities again and
+  // jump to the first PD inside them, even when the current Main PD is still in range.
+  setMainPdMode(mode, refresh = false) {
     this.mainPdMode = mode === 'manual' ? 'manual' : 'filter';
     try { localStorage.setItem('assembly_main_pd_mode', this.mainPdMode); } catch (e) { /* ignore */ }
+    if (refresh && this.mainPdMode === 'filter') {
+      const ranges = this.state.getPriorityFilterPdRanges ? this.state.getPriorityFilterPdRanges() : null;
+      this.allAssemblies = this.getAllAssemblies();
+      const cands = ranges ? this.getMainPdCandidates(this.allAssemblies) : [];
+      if (cands.length > 0) { this.selectAssembly(cands[0].id); return; }
+    }
     this.render();
     this.renderSidebarTreeView();
   }
