@@ -3982,7 +3982,8 @@ export class GanttController {
     const matCountEl = document.getElementById('pd-plan-mat-count');
 
     if (matSection && matTbody) {
-      const allMatItems = (this.state.planMaterials && this.state.planMaterials[woId]) || [];
+      const allMatItems = ((this.state.planMaterials && this.state.planMaterials[woId]) || [])
+        .filter(m => !this.state.isMatRowOutsideParentSummaryRange(woId, m.mat)); // child PD outside the Summary PD range is hidden
 
       const isWeldingOp = (s) => {
         const m = String(s.machine || '').toUpperCase();

@@ -312,6 +312,7 @@ export class MobileModeController {
     ((s.planMaterials && s.planMaterials[woId]) || []).forEach(item => {
       const code = String(item.mat || '').trim();
       if (!code) return;
+      if (s.isMatRowOutsideParentSummaryRange && s.isMatRowOutsideParentSummaryRange(woId, code)) return; // outside the Summary PD range
       const op = { stepNum: item.stepNum, operDesc: item.operDesc, wc: item.wc, operStatus: item.operStatus };
       const ex = unique.get(code);
       if (!ex) { unique.set(code, { ...item, operations: [op] }); return; }

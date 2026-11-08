@@ -1256,6 +1256,7 @@ export class AssemblyTreeController {
           childPdId = match.woId || match.id;
         }
         if (childPdId && childPdId !== woId) {
+          if (this.state.isChildOutsideParentSummaryRange(woId, childPdId)) continue; // outside the Summary PD range: not shown
           if (!seenPds.has(childPdId)) {
             seenPds.add(childPdId);
             childPds.push({ pdId: childPdId, matCode, item });

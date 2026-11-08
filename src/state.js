@@ -3708,6 +3708,33 @@ class CentralState {
     return { pdId: best.pdId, orderStatus: best.orderStatus, project: best.project, operations: best.operations, candidates: cands };
   }
 
+  // True when a child PD must NOT be shown under its parent: the parent PD sits inside a PD range (Start-End) of the
+  // Summary Project Order file and the child PD number is outside every range of that same Priority. Parent / child
+  // codes in Plan + Mat do not match the real PD allocation 100%, so the Summary range decides. False when unknown.
+  isChildOutsideParentSummaryRange(parentPdId, childPdId) {
+    const sum = this.projectPrioritySummary;
+    if (!sum || !parentPdId || !childPdId) return false;
+    const num = (id) => { const m = String(id).match(/\d+/); return m ? parseInt(m[0], 10) : NaN; };
+    const pn = num(parentPdId), cn = num(childPdId);
+    if (!Number.isFinite(pn) || !Number.isFinite(cn)) return false;
+    const proj = this.getPdProjectIndex().get(parentPdId);
+    const list = proj && sum[proj];
+    if (!list || list.length === 0) return false;
+    const inR = (e, n) => n >= num(e.start) && n <= num(e.end);
+    const hit = list.find(e => inR(e, pn));
+    if (!hit) return false;
+    return !list.filter(e => e.priority === hit.priority).some(e => inR(e, cn));
+  }
+
+  // Same check for a Plan + Mat row: only 14-char codes (child PDs) are ever hidden; raw materials always stay.
+  isMatRowOutsideParentSummaryRange(parentPdId, matCode) {
+    const code = String(matCode || '').trim();
+    if (code.length !== 14 || !this.projectPrioritySummary) return false;
+    const c = this.getChildPdInfo(code, parentPdId);
+    if (!c || !c.found || c.isRawMat || !c.pdId) return false;
+    return this.isChildOutsideParentSummaryRange(parentPdId, c.pdId);
+  }
+
   getChildPdInfo(matCode, parentPdId = null) {
     if (!matCode) return null;
     const trimmedMat = String(matCode).trim();
