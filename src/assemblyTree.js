@@ -2186,7 +2186,17 @@ export class AssemblyTreeController {
 
     if (this.sidebarMainPdInput && document.activeElement !== this.sidebarMainPdInput) {
       const currentAssembly = assemblies.find(a => a.id === currentVal);
-      this.sidebarMainPdInput.value = currentAssembly ? `${currentAssembly.id} - ${currentAssembly.partName}` : currentVal;
+      const single = currentAssembly ? `${currentAssembly.id} - ${currentAssembly.partName}` : currentVal;
+      // Filter mode: the field shows the PD Range(s) of the ticked Priority (same text as the Priority filter);
+      // the PD drawn in the tree is shown as the tooltip and in the tree header.
+      const fs = this.mainPdMode === 'manual' ? null : this.getMainPdFilterState();
+      if (fs && fs.status === 'ok' && this.isPdInRanges(currentVal, fs.ranges)) {
+        this.sidebarMainPdInput.value = fs.ranges.map(r => r.a === r.b ? `PD${r.a}` : `PD${r.a}-PD${r.b}`).join(', ');
+        this.sidebarMainPdInput.title = `PD Main ที่แสดงในผัง: ${single}`;
+      } else {
+        this.sidebarMainPdInput.value = single;
+        this.sidebarMainPdInput.title = '';
+      }
     }
 
     const rootWoId = currentVal;
