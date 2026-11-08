@@ -447,9 +447,9 @@ export class ResourcesController {
         </div>
         <div style="display: flex; flex-direction: column; min-width: 0; flex: 1; margin-left: 2px;">
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 4px;">
-            <div style="display: flex; align-items: baseline; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${p}${customerStr ? ' - ' + customerStr : ''}">
+            <div style="display: flex; align-items: baseline; min-width: 0; flex: 1;" title="${p}${customerStr ? ' - ' + customerStr : ''}">
               <span style="font-weight: bold; color: ${dotColor}; font-size: 11.5px; flex-shrink: 0;">${p}</span>
-              ${customerStr ? `<span style="font-size: 10px; color: var(--text-primary); opacity: 0.85; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${customerStr}</span>` : ''}
+              ${customerStr ? `<span style="font-size: 10px; color: var(--text-primary); opacity: 0.85; margin-left: 4px; min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.25;">${customerStr}</span>` : ''}
             </div>
             <span style="font-size: 10px; color: var(--text-secondary); flex-shrink: 0; margin-left: 4px;">(${count})</span>
           </div>
