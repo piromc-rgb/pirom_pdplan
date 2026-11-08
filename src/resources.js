@@ -360,6 +360,23 @@ export class ResourcesController {
       }));
       return names.join(', ');
     };
+    // PD range(s) (Start-End) of a Priority from the same Summary rows (Active only)
+    const summaryRangeFor = (p) => {
+      const sum = this.state.projectPrioritySummary;
+      if (!sum || !/^\d+$/.test(String(p).trim())) return '';
+      const n = Number(p);
+      const projs = new Set();
+      this.state.scheduledJobs.forEach(j => { if (projActive(j) && getJobPriority(j, this.state) === String(p).trim()) projs.add(String(j.project || 'General').trim()); });
+      (this.state.workOrders || []).forEach(w => { if (projActive(w) && String(w.priority ?? '').trim() === String(p).trim()) projs.add(String(w.project || 'General').trim()); });
+      const ranges = [];
+      projs.forEach(proj => (sum[proj] || []).forEach(e => {
+        if (String(e.status).trim().toLowerCase() === 'active' && Math.floor(Number(e.priority)) === n) {
+          const r = e.start === e.end ? e.start : `${e.start}-${e.end}`;
+          if (!ranges.includes(r)) ranges.push(r);
+        }
+      }));
+      return ranges.join(', ');
+    };
 
     // Delivery target of a Priority = earliest เป้าส่งเครื่อง (Setup รายการเครื่องจักร) among the machines of that Priority
     // (machine -> Priority from the Summary Project Order ranges), looked at only in the Projects ticked in the filter.
@@ -449,6 +466,7 @@ export class ResourcesController {
       }
       const customerList = Array.from(pCustomers);
       const summaryDetail = summaryDetailFor(p);
+      const summaryRange = summaryRangeFor(p);
       const customerStr = customerList.length > 0 ? customerList.join(', ') : '';
 
       // Calculate production date range & find the last task for this priority from scheduled jobs
@@ -523,9 +541,10 @@ export class ResourcesController {
         </div>
         <div style="display: flex; flex-direction: column; min-width: 0; flex: 1; margin-left: 2px;">
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 4px;">
-            <div style="display: flex; align-items: baseline; min-width: 0; flex: 1;" title="${p}${customerStr ? ' - ' + customerStr : ''}">
+            <div style="display: flex; flex-wrap: wrap; align-items: baseline; min-width: 0; flex: 1;" title="${p}${customerStr ? ' - ' + customerStr : ''}">
               <span style="font-weight: bold; color: ${dotColor}; font-size: 11.5px; flex-shrink: 0;">${p}</span>
-              ${customerStr && !projectFiltered ? `<span style="font-size: 10px; color: var(--text-primary); opacity: 0.85; margin-left: 4px; min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.25;">${customerStr}</span>` : ''}
+              ${summaryRange ? `<span style="font-size: 9.5px; font-family: monospace; color: var(--text-secondary); margin-left: 6px; min-width: 0; line-height: 1.25;" title="PD Range: ${summaryRange}">${summaryRange.split(', ').map(r => `<span style="white-space: nowrap;">${r}</span>`).join(', ')}</span>` : ''}
+              ${customerStr && !projectFiltered ? `<span style="font-size: 10px; color: var(--text-primary); opacity: 0.85; margin-left: ${summaryRange ? '0' : '4px'}; min-width: 0; ${summaryRange ? 'flex-basis: 100%;' : ''} white-space: normal; overflow-wrap: anywhere; line-height: 1.25;">${customerStr}</span>` : ''}
             </div>
             <span style="font-size: 10px; color: var(--text-secondary); flex-shrink: 0; margin-left: 4px;">(${count})</span>
           </div>
