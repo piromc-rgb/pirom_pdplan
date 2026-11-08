@@ -407,7 +407,7 @@ export class ResourcesController {
       }
       const customerList = Array.from(pCustomers);
       const summaryDetail = summaryDetailFor(p);
-      const customerStr = (customerList.length > 0 ? customerList.join(', ') : '') + (summaryDetail ? (customerList.length > 0 ? ' - ' : '') + summaryDetail : '');
+      const customerStr = customerList.length > 0 ? customerList.join(', ') : '';
 
       // Calculate production date range & find the last task for this priority from scheduled jobs
       // (jobs on a Work Center hidden via the Resources tab checkboxes don't count towards Finish Date)
@@ -474,9 +474,7 @@ export class ResourcesController {
             </div>
             <span style="font-size: 10px; color: var(--text-secondary); flex-shrink: 0; margin-left: 4px;">(${count})</span>
           </div>
-          <div class="priority-last-task-btn" style="display: flex; align-items: center; gap: 3px; font-size: 9px; font-weight: 700; color: ${maxFinishHour > -Infinity ? 'var(--accent-green)' : 'var(--text-secondary)'}; margin-top: 2px; cursor: pointer;" title="${fullTooltip}">
-            <span>🏁 ${lastTaskStr}</span>
-          </div>
+          ${summaryDetail ? `<div style="font-size: 10px; font-weight: 600; color: var(--text-primary); opacity: 0.8; margin-top: 2px; white-space: normal; overflow-wrap: anywhere; line-height: 1.25;" title="${summaryDetail}">${summaryDetail}</div>` : ''}
           <div style="font-size: 8px; color: var(--text-secondary); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${fullTooltip}">
             <span>${dateRangeStr}</span>
           </div>
