@@ -327,6 +327,26 @@ export class ResourcesController {
       }
     });
 
+    // Summary Project Order gives the machine / work detail of each Priority NO (e.g. "AMW-4-1 Chain Conveyor Straight L1500"),
+    // shown after the Customer name. Loaded once in the background, then the list is drawn again.
+    if (!this.state.projectPrioritySummary && !this._summaryPriLoading && this.state.storageSync?.loadSummaryProjectOrder) {
+      this._summaryPriLoading = true;
+      this.state.storageSync.loadSummaryProjectOrder().then(sum => { if (sum) this.state.notify(); }).catch(() => {});
+    }
+    const summaryDetailFor = (p) => {
+      const sum = this.state.projectPrioritySummary;
+      if (!sum || !/^\d+$/.test(String(p).trim())) return '';
+      const n = Number(p);
+      const projs = new Set();
+      this.state.scheduledJobs.forEach(j => { if (getJobPriority(j, this.state) === String(p).trim()) projs.add(String(j.project || 'General').trim()); });
+      (this.state.workOrders || []).forEach(w => { if (String(w.priority ?? '').trim() === String(p).trim()) projs.add(String(w.project || 'General').trim()); });
+      const names = [];
+      projs.forEach(proj => (sum[proj] || []).forEach(e => {
+        if (String(e.status).trim().toLowerCase() === 'active' && Math.floor(Number(e.priority)) === n && e.name && !names.includes(e.name)) names.push(e.name);
+      }));
+      return names.join(', ');
+    };
+
     // 4. Generate HTML elements
     this.priorityFiltersContainer.innerHTML = '';
     
@@ -386,7 +406,8 @@ export class ResourcesController {
         });
       }
       const customerList = Array.from(pCustomers);
-      const customerStr = customerList.length > 0 ? customerList.join(', ') : '';
+      const summaryDetail = summaryDetailFor(p);
+      const customerStr = (customerList.length > 0 ? customerList.join(', ') : '') + (summaryDetail ? (customerList.length > 0 ? ' - ' : '') + summaryDetail : '');
 
       // Calculate production date range & find the last task for this priority from scheduled jobs
       // (jobs on a Work Center hidden via the Resources tab checkboxes don't count towards Finish Date)

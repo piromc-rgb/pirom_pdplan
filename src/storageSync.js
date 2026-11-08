@@ -1565,7 +1565,7 @@ export class StorageSyncManager {
       if (!proj || !start || !Number.isFinite(pri)) continue;
       const rawName = String(r[cName] ?? '').trim();
       const k = rawName.indexOf(' - ');
-      (out[proj] = out[proj] || []).push({ priority: pri, name: k >= 0 ? rawName.slice(k + 3).trim() : rawName, start, end: end || start, status: cStatus >= 0 ? String(r[cStatus] ?? '').trim() : '' });
+      (out[proj] = out[proj] || []).push({ priority: pri, name: k >= 0 ? rawName.slice(k + 3).trim() : '', start, end: end || start, status: cStatus >= 0 ? String(r[cStatus] ?? '').trim() : '' });
     }
     Object.values(out).forEach(l => l.sort((a, b) => a.priority - b.priority || a.start.localeCompare(b.start)));
     return out;
