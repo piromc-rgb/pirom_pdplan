@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const compileVersion = '5.153';
+const compileVersion = '5.157';
 const PRODUCTION_DATES_SHEET_ID = '1MwvA8HPTStZiESym9cPWxPuRb6q72wZk3hxKkJJXwgg';
 const PRODUCTION_DATES_DEFAULT_GIDS = ['2120309268']; // fallback when the tab list cannot be discovered
 
@@ -947,7 +947,28 @@ export default defineConfig({
               return;
             }
 
-            const latestOverview = isAutoStatusName(requestedFile) ? findLatestStatusOverview([gdriveDir, __dirname]) : null;
+            const isSummaryReq = /summary\s*project\s*order/i.test(requestedFile);
+            let latestSummary = null;
+            if (isSummaryReq) {
+              let best = null;
+              for (const d of [gdriveDir, __dirname]) {
+                let names = [];
+                try { names = fs.readdirSync(d); } catch (e) { continue; }
+                for (const n of names) {
+                  if (!/summary\s*project\s*order.*\.(xlsx|xlsm)$/i.test(n) || n.startsWith('~$')) continue;
+                  const full = path.join(d, n);
+                  const mt = fs.statSync(full).mtimeMs;
+                  if (!best || mt > best.mt) best = { full, mt };
+                }
+              }
+              latestSummary = best ? best.full : null;
+              if (!latestSummary) {
+                res.statusCode = 404;
+                res.end(JSON.stringify({ error: 'No Summary Project Order file found' }));
+                return;
+              }
+            }
+            const latestOverview = isSummaryReq ? latestSummary : (isAutoStatusName(requestedFile) ? findLatestStatusOverview([gdriveDir, __dirname]) : null);
             const candidateNames = [
               ...(latestOverview ? [latestOverview] : []),
               path.join(gdriveDir, requestedFile),

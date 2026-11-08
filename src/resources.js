@@ -172,6 +172,7 @@ export class ResourcesController {
     // Project filter Select All / Deselect All
     document.getElementById('btn-project-summary')?.addEventListener('click', () => this.showProjectSummary());
     document.getElementById('btn-project-fast-track')?.addEventListener('click', () => this.showFastTrack());
+    document.getElementById('btn-project-set-priority')?.addEventListener('click', () => this.applySummaryPriorities());
     document.getElementById('btn-project-select-all')?.addEventListener('click', () => {
       Object.keys(this.state.activeProjects).forEach(k => { this.state.activeProjects[k] = true; });
       this.state.notify();
@@ -914,6 +915,33 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
     });
   }
 
+  // "Priority ตาม Summary": set PD Priority (Board + Backlog) to the integer Priority NO of the Summary Project Order
+  // file for Projects with Active status. Asks for confirmation with a per-project preview; undoable.
+  async applySummaryPriorities() {
+    const st = this.state;
+    const toast = (m, t) => st.ganttController?.showToast?.(m, t);
+    toast('⏳ กำลังอ่านไฟล์ Summary Project Order...', 'info');
+    const sum = await st.storageSync.loadSummaryProjectOrder({ force: true });
+    if (!sum) { toast('⚠️ ไม่พบไฟล์ Summary Project Order ใน folder Status Overview', 'error'); return; }
+    const plan = st.getSummaryPriorityPlan();
+    const changing = plan.filter(c => c.pdIds.size > 0);
+    if (plan.length === 0) { toast('⚠️ ไม่มีโครงการที่มีสถานะ Active ใน Summary ตรงกับ PD ในระบบ', 'error'); return; }
+    if (changing.length === 0) { toast(`✅ Priority ของ ${plan.length} โครงการ (Active) ตรงกับ Summary อยู่แล้ว`, 'success'); return; }
+    const fmt = (c) => `${c.project}  →  ${c.priorities.length > 3 ? c.priorities[0] + '–' + c.priorities[c.priorities.length - 1] : c.priorities.join(', ')}  (${c.pdIds.size} PD${c.unmatched ? `, ไม่อยู่ใน range ${c.unmatched} PD ไม่แตะ` : ''})`;
+    const lines = changing.slice(0, 25).map(fmt).join('\n') + (changing.length > 25 ? `\n… อีก ${changing.length - 25} โครงการ` : '');
+    const totalPd = changing.reduce((n, c) => n + c.pdIds.size, 0);
+    if (!confirm(`ตั้ง Priority เป็นเลขจำนวนเต็มตาม Summary Project Order (เฉพาะโครงการ Active)\n${changing.length} โครงการ · ${totalPd} PD จะเปลี่ยน\n\n${lines}\n\n(ย้อนกลับได้ด้วย Undo) ยืนยันหรือไม่?`)) return;
+    st.saveStateToHistory();
+    changing.forEach(c => {
+      [...c.jobs, ...c.wos].forEach(({ obj, to }) => { obj.priority = to; if (st.activePriorities[to] === undefined) st.activePriorities[to] = true; });
+    });
+    st.savePlanToFile();
+    st.saveWorkOrdersToFile();
+    st.notify();
+    st.dispatchHistoryEvent?.();
+    toast(`✅ ตั้ง Priority ตาม Summary แล้ว: ${changing.length} โครงการ · ${totalPd} PD — กด Undo เพื่อย้อนกลับได้`, 'success');
+  }
+
   // "สรุปภาพรวมโครงการที่เลือก": popup for the projects currently ticked in the Project filter.
   showProjectSummary() {
     const keys = Object.keys(this.state.activeProjects || {}).filter(k => this.state.activeProjects[k] !== false);
@@ -1303,6 +1331,9 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
               <th style="padding:6px 8px;width:34px;">#</th>
               <th class="pms-sort" data-sort="itemCode" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;width:190px;cursor:pointer;user-select:none;">Item Code<span class="pms-arrow"></span></th>
               <th class="pms-sort" data-sort="desc" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;cursor:pointer;user-select:none;">Description<span class="pms-arrow"></span></th>
+              <th class="pms-sort" data-sort="priority" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;width:70px;cursor:pointer;user-select:none;">Priority<span class="pms-arrow"></span></th>
+              <th style="padding:6px 8px;width:170px;" title="PD range จากไฟล์ Summary Project Order">PD range (Start-End)</th>
+              <th style="padding:6px 8px;width:70px;" title="Priority ที่เรียงใหม่ตามเป้าส่งเครื่อง (กดปุ่ม ปรับ Priority) · แสดงอย่างเดียว ไม่บันทึก">Priority ใหม่</th>
               <th class="pms-sort" data-sort="qty" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;width:90px;cursor:pointer;user-select:none;">QTY<span class="pms-arrow"></span></th>
               <th class="pms-sort" data-sort="targetDate" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;width:130px;cursor:pointer;user-select:none;">เป้าส่งเครื่อง (d/m/y)<span class="pms-arrow"></span></th>
               <th style="padding:6px 8px;width:120px;text-align:center;">ย้าย / ลบ</th>
@@ -1315,6 +1346,7 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
         <div style="padding:10px 18px 14px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e2e8f0;">
           ${editable ? `<div style="margin-right:auto;display:flex;gap:8px;">
             <button type="button" id="pms-import" title="นำเข้าไฟล์ .md (ตาราง Machine Code / Delivery date) มาต่อท้ายรายการ" style="padding:6px 14px;border:1px solid #2563eb;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-weight:700;cursor:pointer;">📥 Import MD</button>
+            <button type="button" id="pms-adjust" title="เรียงแถวตามเป้าส่งเครื่อง (เท่ากัน = ตาม Priority เดิม) แล้วให้ Priority ใหม่ · ไม่แก้ไฟล์ Summary" style="padding:6px 14px;border:1px solid #15803d;border-radius:6px;background:#f0fdf4;color:#15803d;font-weight:700;cursor:pointer;">🎯 ปรับ Priority ตามเป้าส่ง</button>
             <button type="button" id="pms-clear" title="ล้างรายการ setup เก่าทั้งหมด (ต้องกดบันทึกเพื่อยืนยัน)" style="padding:6px 14px;border:1px solid #fecaca;border-radius:6px;background:#fff;color:#dc2626;font-weight:700;cursor:pointer;">🧹 Clear</button>
             <input type="file" id="pms-import-file" accept=".md,.markdown,.txt,text/markdown,text/plain" style="display:none;">
           </div>` : ''}
@@ -1333,12 +1365,18 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
       return c && c.description ? esc(c.description) : '<span style="color:#b91c1c;">ไม่พบ Item code นี้ในโครงการ / ไฟล์ Status Overview</span>';
     };
 
+    // Priority / PD range come from the Summary Project Order file (not stored with the list)
+    const newPri = new Map(); // row id -> Priority re-ranked by target date (display only)
+    const priOf = (code) => (String(code || '').trim() ? state.getProjectItemPriority(proj, String(code).trim()) : null);
     const render = () => {
       body.innerHTML = rows.map((r, i) => `
         <tr data-id="${r.id}" ${editable ? 'draggable="true"' : ''} style="border-top:1px solid #e2e8f0;">
           <td style="padding:5px 8px;color:#64748b;${editable ? 'cursor:grab;' : ''}" title="${editable ? 'ลากเพื่อย้ายลำดับ' : ''}">${editable ? '⋮⋮ ' : ''}${i + 1}</td>
           <td style="padding:4px 8px;position:relative;"><input class="pms-code" list="pms-items" value="${esc(r.itemCode)}" placeholder="Item Code" title="Double click = ดู Assembly view ของ Item code นี้" style="${inputCss}font-family:monospace;"${dis}>${editable ? '' : '<span class="pms-code-hit" style="position:absolute;inset:4px 8px;cursor:pointer;" title="Double click = ดู Assembly view ของ Item code นี้"></span>'}</td>
           <td class="pms-desc" style="padding:5px 8px;">${descFor(r.itemCode)}</td>
+          <td class="pms-pri" style="padding:5px 8px;text-align:center;font-weight:700;">${priOf(r.itemCode) ? priOf(r.itemCode).priority : '<span style="color:#94a3b8;font-weight:400;">—</span>'}</td>
+          <td class="pms-range" style="padding:5px 8px;font-size:11.5px;font-family:monospace;">${priOf(r.itemCode) ? priOf(r.itemCode).ranges.map(esc).join('<br>') : '<span style="color:#94a3b8;">—</span>'}</td>
+          <td class="pms-newpri" style="padding:5px 8px;text-align:center;font-weight:700;color:#15803d;">${newPri.get(r.id) ?? '<span style="color:#94a3b8;font-weight:400;">—</span>'}</td>
           <td style="padding:4px 8px;"><input class="pms-qty" type="number" min="0" step="any" value="${esc(r.qty)}" style="${inputCss}text-align:right;"${dis}></td>
           <td style="padding:4px 8px;"><input class="pms-date" value="${esc(r.targetDate)}" placeholder="d/m/y" style="${inputCss}"${dis}></td>
           <td style="padding:4px 8px;text-align:center;white-space:nowrap;">
@@ -1346,10 +1384,25 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
             <button type="button" class="pms-down" title="ย้ายลง" style="border:1px solid #cbd5e1;border-radius:4px;background:#fff;cursor:pointer;"${i === rows.length - 1 || !editable ? ' disabled' : ''}>▼</button>
             <button type="button" class="pms-del" title="ลบแถว" style="border:1px solid #fecaca;border-radius:4px;background:#fff;color:#dc2626;cursor:pointer;"${dis}>🗑</button>
           </td>
-        </tr>`).join('') || '<tr><td colspan="6" style="padding:14px;text-align:center;color:#94a3b8;">ยังไม่มีรายการเครื่องจักร</td></tr>';
+        </tr>`).join('') || '<tr><td colspan="9" style="padding:14px;text-align:center;color:#94a3b8;">ยังไม่มีรายการเครื่องจักร</td></tr>';
       overlay.querySelector('#pms-count').textContent = `${rows.length} รายการ · Item ในโครงการนี้ ${catalog.length} รายการ`;
     };
     render();
+
+    // Load the Summary Project Order file once, then list the machines in Priority order
+    if (state.storageSync && typeof state.storageSync.loadSummaryProjectOrder === 'function') {
+      state.storageSync.loadSummaryProjectOrder().then(sum => {
+        if (!sum || !document.body.contains(overlay)) return;
+        rows.sort((a, b) => {
+          const pa = priOf(a.itemCode), pb = priOf(b.itemCode);
+          if (!pa && !pb) return 0;
+          if (!pa) return 1;
+          if (!pb) return -1;
+          return pa.priority - pb.priority;
+        });
+        render();
+      }).catch(() => {});
+    }
 
     // Click a column header to sort the rows (click again to reverse). Rows are re-ordered in place,
     // so the saved list order follows the sort; empty values always go last.
@@ -1357,6 +1410,7 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
     let sortDir = 1;
     const sortValue = (r, key) => {
       if (key === 'qty') return r.qty === '' || r.qty === null || r.qty === undefined ? null : Number(r.qty);
+      if (key === 'priority') { const p = priOf(r.itemCode); return p ? p.priority : null; }
       if (key === 'desc') return String(byCode.get(String(r.itemCode || '').trim())?.description || '') || null;
       if (key === 'targetDate') {
         const d = parseDate(r.targetDate);
@@ -1410,6 +1464,9 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
       if (e.target.classList.contains('pms-code')) {
         r.itemCode = e.target.value.trim();
         tr.querySelector('.pms-desc').innerHTML = descFor(r.itemCode);
+        const pi = priOf(r.itemCode);
+        tr.querySelector('.pms-pri').innerHTML = pi ? pi.priority : '<span style="color:#94a3b8;font-weight:400;">—</span>';
+        tr.querySelector('.pms-range').innerHTML = pi ? pi.ranges.map(esc).join('<br>') : '<span style="color:#94a3b8;">—</span>';
         const c = byCode.get(r.itemCode);
         const qtyInput = tr.querySelector('.pms-qty');
         // QTY follows the Status Overview (Quantity Ordered) until the user types their own number
@@ -1474,6 +1531,29 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
       rows.push({ id: uid(), itemCode: '', qty: '', targetDate: '', qtyAuto: false });
       render();
       body.querySelector('tr:last-child .pms-code')?.focus();
+    });
+    // Adjust Priority: order rows by delivery target (ties keep the old Priority order) and re-rank. Machines with the
+    // same target date and the same old Priority share one new number. Display only; the row order is saved with the list.
+    overlay.querySelector('#pms-adjust')?.addEventListener('click', () => {
+      const toast = (m, t) => state.ganttController?.showToast?.(m, t);
+      const dateKey = (r) => { const d = parseDate(r.targetDate); if (!d) return null; const [dd, mm, yy] = d.split('/'); return Number(yy) * 10000 + Number(mm) * 100 + Number(dd); };
+      const oldKey = (r) => { const p = priOf(r.itemCode); return p ? p.priority : null; };
+      const cmp = (x, y) => (x === null && y === null) ? 0 : x === null ? 1 : y === null ? -1 : x - y;
+      const idx = new Map(rows.map((r, i) => [r.id, i]));
+      rows.sort((a, b) => cmp(dateKey(a), dateKey(b)) || cmp(oldKey(a), oldKey(b)) || idx.get(a.id) - idx.get(b.id));
+      newPri.clear();
+      let n = 0, last = null;
+      rows.forEach(r => {
+        const dk = dateKey(r);
+        if (dk === null) return;
+        const k = dk + '|' + oldKey(r);
+        if (k !== last) { n++; last = k; }
+        newPri.set(r.id, n);
+      });
+      sortKey = null;
+      overlay.querySelectorAll('.pms-sort .pms-arrow').forEach(a => { a.textContent = ''; });
+      render();
+      toast(`🎯 เรียงตามเป้าส่งเครื่องแล้ว — Priority ใหม่ 1–${n} (แถวที่ไม่มีเป้าส่งอยู่ท้าย) · กดบันทึกเพื่อเก็บลำดับแถว`, 'success');
     });
     // Clear: drop every row of the old setup (nothing is stored until "บันทึก" is pressed)
     overlay.querySelector('#pms-clear')?.addEventListener('click', () => {

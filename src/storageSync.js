@@ -1540,6 +1540,83 @@ export class StorageSyncManager {
   }
 
   /**
+   * Summary Project Order (xlsx in the Status Overview folder): sheet "Priority + PD" lists, per Project (SO),
+   * the Priority No, machine name and PD range (Production Order Start - End). Result is kept in
+   * state.projectPrioritySummary = { [project]: [{ priority, name, start, end, status }] } (display only, never saved).
+   */
+  parseSummaryProjectOrder(arrayBuffer) {
+    if (typeof XLSX === 'undefined') return null;
+    const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+    const sheetName = wb.SheetNames.find(n => /priority\s*\+?\s*pd/i.test(n));
+    if (!sheetName) return null;
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: '' });
+    const hi = rows.findIndex(r => r.some(c => /^priority/i.test(String(c).trim())) && r.some(c => /^project$/i.test(String(c).trim())));
+    if (hi < 0) return null;
+    const head = rows[hi].map(c => String(c).trim().toLowerCase());
+    const col = (re) => head.findIndex(h => re.test(h));
+    const cPri = col(/^priority/), cName = col(/^customer/), cStart = col(/order start/), cEnd = col(/order end/), cStatus = col(/^status/), cProj = col(/^project$/);
+    const out = {};
+    for (let i = hi + 1; i < rows.length; i++) {
+      const r = rows[i];
+      const proj = String(r[cProj] ?? '').trim();
+      const start = String(r[cStart] ?? '').trim();
+      const end = String(r[cEnd] ?? '').trim();
+      const pri = Number(r[cPri]);
+      if (!proj || !start || !Number.isFinite(pri)) continue;
+      const rawName = String(r[cName] ?? '').trim();
+      const k = rawName.indexOf(' - ');
+      (out[proj] = out[proj] || []).push({ priority: pri, name: k >= 0 ? rawName.slice(k + 3).trim() : rawName, start, end: end || start, status: cStatus >= 0 ? String(r[cStatus] ?? '').trim() : '' });
+    }
+    Object.values(out).forEach(l => l.sort((a, b) => a.priority - b.priority || a.start.localeCompare(b.start)));
+    return out;
+  }
+
+  async loadSummaryProjectOrder(options = {}) {
+    const force = Boolean(options.force);
+    const KEY = 'PDPLAN_SUMMARY_PROJECT_ORDER';
+    if (!force && this.state.projectPrioritySummary) return this.state.projectPrioritySummary;
+    const fname = 'Summary Project Order';
+    const isLocalDev = typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.startsWith('192.168.') || window.location.port === '5173');
+    let buf = null;
+    if (isLocalDev) {
+      for (const url of [`/pirom_pdplan/api/status-overview?filename=${encodeURIComponent(fname)}`, `/api/status-overview?filename=${encodeURIComponent(fname)}`]) {
+        try {
+          const res = await fetch(url);
+          const xfn = res.headers.get('X-Filename');
+          if (res.ok && xfn && /summary\s*project\s*order/i.test(decodeURIComponent(xfn))) { buf = await res.arrayBuffer(); break; }
+        } catch (e) { /* try next */ }
+      }
+    }
+    if (!buf) {
+      const endpoint = this.getEndpointUrl();
+      if (endpoint) {
+        try {
+          const res = await fetch(`${endpoint}${endpoint.includes('?') ? '&' : '?'}action=status-overview&filename=${encodeURIComponent(fname)}&t=${Date.now()}`);
+          if (res.ok) {
+            const json = await res.json();
+            if (json.status === 'success' && json.base64 && /summary\s*project\s*order/i.test(json.filename || '')) {
+              const bin = atob(json.base64);
+              const bytes = new Uint8Array(bin.length);
+              for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+              buf = bytes.buffer;
+            }
+          }
+        } catch (e) { console.warn('Summary Project Order fetch error:', e); }
+      }
+    }
+    let parsed = null;
+    if (buf) {
+      try { parsed = this.parseSummaryProjectOrder(buf); } catch (e) { console.warn('Summary Project Order parse error:', e); }
+      if (parsed) { try { localStorage.setItem(KEY, JSON.stringify(parsed)); } catch (e) { /* quota */ } }
+    }
+    if (!parsed) { try { parsed = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { parsed = null; } }
+    if (parsed) this.state.projectPrioritySummary = parsed;
+    return parsed;
+  }
+
+  /**
    * ดึงข้อมูล Plan + Mat และ Drawing Map จาก /api/plan-materials, plan_materials_cache.json
    * หรืออ่านตรงจาก Sheet "Plan + Mat" ในไฟล์ Status Overview
    * มีระบบ Local Cache เพื่อความรวดเร็ว และหากอยู่ในโหมดวางแผนจะ Up ข้อมูลขึ้น Cloud

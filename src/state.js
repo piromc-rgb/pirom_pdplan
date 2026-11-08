@@ -3385,22 +3385,79 @@ class CentralState {
     return byWc;
   }
 
+  // Root PD of a machine Item code inside a project (Status Overview Dwg map, then the live plan)
+  getProjectItemRootPd(project, code) {
+    const proj = String(project || 'General').trim() || 'General';
+    const norm = (p) => String(p || 'General').trim() || 'General';
+    const e = (this.dwgToPdMap || {})[code];
+    if (e && e.pdId && norm(e.project) === proj) return e.pdId;
+    const c = e && (e.candidates || []).find(x => x && x.pdId && norm(x.project) === proj);
+    if (c) return c.pdId;
+    const wo = (this.workOrders || []).find(w => w.dwgNo === code && norm(w.project) === proj);
+    if (wo) return wo.id;
+    const j = (this.scheduledJobs || []).find(x => x.dwgNo === code && norm(x.project) === proj);
+    return j ? (j.woId || j.id) : null;
+  }
+
+  // Plan to set the Priority of PDs (Board + Backlog) to the integer Priority NO of the Summary Project Order file,
+  // only for Projects that have Active rows there (Closed rows are ignored). A project with a single Priority gets it
+  // on all its PDs; a project with several (e.g. SO2600006 P11-P49) gives each PD the Priority of the range holding it,
+  // PDs outside every range are left alone. Fractions are dropped (1.1 -> 1). Nothing is changed here.
+  getSummaryPriorityPlan() {
+    const sum = this.projectPrioritySummary || {};
+    const norm = (p) => String(p || 'General').trim() || 'General';
+    const num = (id) => parseInt(String(id).replace(/\D/g, ''), 10);
+    const plan = [];
+    Object.keys(sum).forEach(proj => {
+      if (!/[A-Za-z]/.test(proj)) return; // "0" = rows without a project
+      const active = (sum[proj] || []).filter(e => String(e.status).trim().toLowerCase() === 'active')
+        .map(e => ({ pri: Math.floor(Number(e.priority)), a: num(e.start), b: num(e.end) }));
+      if (active.length === 0) return;
+      const ints = [...new Set(active.map(e => e.pri))];
+      const jobs = (this.scheduledJobs || []).filter(j => norm(j.project) === proj);
+      const wos = (this.workOrders || []).filter(w => norm(w.project) === proj);
+      const targetOf = (pdId) => {
+        if (ints.length === 1) return ints[0];
+        const n = num(pdId);
+        const hits = active.filter(e => n >= e.a && n <= e.b).map(e => e.pri);
+        return hits.length ? Math.min(...hits) : null;
+      };
+      const change = { project: proj, priorities: ints.sort((x, y) => x - y), jobs: [], wos: [], pdIds: new Set(), total: new Set(), unmatched: 0 };
+      const seen = new Set();
+      const visit = (obj, id, list) => {
+        change.total.add(id);
+        const t = targetOf(id);
+        if (t === null) { if (!seen.has(id)) { seen.add(id); change.unmatched++; } return; }
+        if (String(obj.priority) !== String(t)) { list.push({ obj, to: String(t) }); change.pdIds.add(id); }
+      };
+      jobs.forEach(j => visit(j, j.woId || j.id, change.jobs));
+      wos.forEach(w => visit(w, w.id, change.wos));
+      if (change.total.size > 0) plan.push(change);
+    });
+    return plan.sort((a, b) => a.priorities[0] - b.priorities[0]);
+  }
+
+  // Priority + PD range(s) of a machine from the Summary Project Order file (state.projectPrioritySummary):
+  // the entry whose PD range (Start-End) contains the machine's root PD; lowest Priority wins. null when unknown.
+  getProjectItemPriority(project, code) {
+    const proj = String(project || 'General').trim() || 'General';
+    const list = (this.projectPrioritySummary || {})[proj];
+    if (!list || list.length === 0) return null;
+    const pdId = this.getProjectItemRootPd(proj, code);
+    const n = pdId ? parseInt(String(pdId).replace(/\D/g, ''), 10) : NaN;
+    if (!Number.isFinite(n)) return null;
+    const hit = list.find(e => n >= parseInt(e.start.replace(/\D/g, ''), 10) && n <= parseInt(e.end.replace(/\D/g, ''), 10));
+    if (!hit) return null;
+    return { priority: hit.priority, ranges: list.filter(e => e.priority === hit.priority).map(e => `${e.start}-${e.end}`) };
+  }
+
   // Progress of each machine in the project's machine list (Setup รายการเครื่องจักร): the PDs of its assembly set
   // are split by the same status colours as the Assembly tree legend (green done / yellow in production / red waiting).
   getProjectMachineProgress(project) {
     const proj = String(project || 'General').trim() || 'General';
     const norm = (p) => String(p || 'General').trim() || 'General';
     const catalog = new Map(this.getProjectItemCatalog(proj).map(c => [c.itemCode, c]));
-    const rootPdFor = (code) => {
-      const e = (this.dwgToPdMap || {})[code];
-      if (e && e.pdId && norm(e.project) === proj) return e.pdId;
-      const c = e && (e.candidates || []).find(x => x && x.pdId && norm(x.project) === proj);
-      if (c) return c.pdId;
-      const wo = (this.workOrders || []).find(w => w.dwgNo === code && norm(w.project) === proj);
-      if (wo) return wo.id;
-      const j = (this.scheduledJobs || []).find(x => x.dwgNo === code && norm(x.project) === proj);
-      return j ? (j.woId || j.id) : null;
-    };
+    const rootPdFor = (code) => this.getProjectItemRootPd(proj, code);
     return ((this.projectMachineLists || {})[proj] || []).filter(r => r && r.itemCode).map(r => {
       const pdId = rootPdFor(r.itemCode);
       const out = { project: proj, itemCode: r.itemCode, description: (catalog.get(r.itemCode) || {}).description || '', qty: r.qty, targetDate: r.targetDate || '', pdId, total: 0, done: 0, working: 0, waiting: 0 };
