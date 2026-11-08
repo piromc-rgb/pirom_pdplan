@@ -159,6 +159,7 @@ export class ResourcesController {
 
     // Priority filter Select All / Deselect All
     document.getElementById('btn-priority-select-all')?.addEventListener('click', () => {
+      if (this.state.ganttMode === 'assembly') { this.state.ganttController?.showToast?.('⚠️ โหมด Assembly Set เลือก Priority ได้ครั้งละ 1 ชุด (Single select)', 'error'); return; }
       const shown = this._shownPriorities;
       Object.keys(this.state.activePriorities).forEach(k => { if (!shown || shown.has(k)) this.state.activePriorities[k] = true; });
       this.state.notify();
@@ -599,6 +600,10 @@ export class ResourcesController {
       const checkbox = label.querySelector('input[type="checkbox"]');
       if (checkbox) {
         checkbox.addEventListener('change', () => {
+          // Assembly Set mode: single select - ticking a Priority unticks all the others
+          if (this.state.ganttMode === 'assembly' && checkbox.checked) {
+            for (const k in this.state.activePriorities) this.state.activePriorities[k] = false;
+          }
           this.state.activePriorities[p] = checkbox.checked;
           for (const k in this.state.activePriorities) {
             if (String(k).trim() === String(p).trim()) {
@@ -658,8 +663,60 @@ export class ResourcesController {
         this.confirmClosePds(j => j.priority === p, w => w.priority === p, `Priority: ${p}`);
       });
 
+      // EDIT mode: drag a Priority row onto another one to swap the two Priority numbers (all their PDs)
+      label.draggable = true;
+      label.dataset.priority = p;
+      label.addEventListener('dragstart', (e) => {
+        if (!this.isEditMode()) { e.preventDefault(); return; }
+        this._dragPriority = p;
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', p); } catch (err) { /* ignore */ }
+        label.style.opacity = '0.45';
+      });
+      label.addEventListener('dragend', () => {
+        this._dragPriority = null;
+        label.style.opacity = '';
+        this.priorityFiltersContainer.querySelectorAll('label').forEach(l => { l.style.outline = ''; });
+      });
+      label.addEventListener('dragover', (e) => {
+        if (this._dragPriority === null || this._dragPriority === undefined || this._dragPriority === p) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        label.style.outline = '2px dashed #2563eb';
+      });
+      label.addEventListener('dragleave', () => { label.style.outline = ''; });
+      label.addEventListener('drop', (e) => {
+        e.preventDefault();
+        label.style.outline = '';
+        const from = this._dragPriority;
+        this._dragPriority = null;
+        if (from === null || from === undefined || from === p || !this.isEditMode()) return;
+        this.swapPriorities(from, p);
+      });
+
       this.priorityFiltersContainer.appendChild(label);
     });
+  }
+
+  // Swap two Priority numbers: every Board / Backlog PD of Priority a becomes b and vice versa. Undoable.
+  swapPriorities(a, b) {
+    const st = this.state;
+    const A = String(a).trim(), B = String(b).trim();
+    const jobsA = [], jobsB = [], wosA = [], wosB = [];
+    (st.scheduledJobs || []).forEach(j => { const pr = getJobPriority(j, st); if (pr === A) jobsA.push(j); else if (pr === B) jobsB.push(j); });
+    (st.workOrders || []).forEach(w => { const pr = String(w.priority || 'Normal').trim(); if (pr === A) wosA.push(w); else if (pr === B) wosB.push(w); });
+    const nA = new Set([...jobsA.map(j => j.woId || j.id), ...wosA.map(w => w.id)]).size;
+    const nB = new Set([...jobsB.map(j => j.woId || j.id), ...wosB.map(w => w.id)]).size;
+    if (!confirm(`สลับลำดับ Priority\n\nPriority ${A} (${nA} PD)  ⇄  Priority ${B} (${nB} PD)\n\nPD ของ ${A} จะเป็น ${B} และ PD ของ ${B} จะเป็น ${A}\n(ย้อนกลับได้ด้วย Undo) ยืนยันหรือไม่?`)) return;
+    st.saveStateToHistory();
+    [...jobsA, ...wosA].forEach(o => { o.priority = B; });
+    [...jobsB, ...wosB].forEach(o => { o.priority = A; });
+    // The visibility tick and custom colour stay with the Priority number, as before
+    st.savePlanToFile();
+    st.saveWorkOrdersToFile();
+    st.notify();
+    st.dispatchHistoryEvent?.();
+    st.ganttController?.showToast?.(`✅ สลับ Priority ${A} ⇄ ${B} แล้ว — กด Undo เพื่อย้อนกลับได้`, 'success');
   }
 
   // Force close buttons of the Project / Priority lists: hidden unless the Option "แสดงปุ่ม Force close" is on, and they only work in EDIT mode
