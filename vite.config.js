@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const compileVersion = '5.161';
+const compileVersion = '5.164';
 const PRODUCTION_DATES_SHEET_ID = '1MwvA8HPTStZiESym9cPWxPuRb6q72wZk3hxKkJJXwgg';
 const PRODUCTION_DATES_DEFAULT_GIDS = ['2120309268']; // fallback when the tab list cannot be discovered
 
@@ -952,6 +952,10 @@ export default defineConfig({
             if (isSummaryReq) {
               let best = null;
               for (const d of [gdriveDir, __dirname]) {
+                const exact = path.join(d, requestedFile);
+                if (/\.(xlsx|xlsm)$/i.test(requestedFile) && fs.existsSync(exact)) { best = { full: exact, mt: Infinity }; break; }
+              }
+              if (!best) for (const d of [gdriveDir, __dirname]) {
                 let names = [];
                 try { names = fs.readdirSync(d); } catch (e) { continue; }
                 for (const n of names) {

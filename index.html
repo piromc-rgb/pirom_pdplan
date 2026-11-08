@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V5.161 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V5.164 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-CsCuqMOx.js"></script>
+    <script type="module" crossorigin src="./assets/index-BJ9sTqlZ.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-Bu-z-g-9.css">
   </head>
   <body>
@@ -678,8 +678,8 @@
           <div class="sidebar-right-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px; margin-bottom: 10px;">
             <div class="sidebar-tabs" style="display: flex; gap: 4px; background: var(--bg-darkest); padding: 2px; border-radius: 4px;">
               <button id="tab-right-resources" class="tab-btn active" style="font-size: 9px; padding: 4px 6px;">Resources</button>
-              <button id="tab-right-priority" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Priority</button>
               <button id="tab-right-project" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Project</button>
+              <button id="tab-right-priority" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Priority</button>
               <button id="tab-right-pdrange" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">PD Range</button>
               <button id="tab-right-customer" class="tab-btn" style="font-size: 9px; padding: 4px 6px;">Customer</button>
             </div>
@@ -1902,6 +1902,35 @@
             </div>
             <div style="font-size: 10px; color: var(--text-secondary); margin-top: 5px; line-height: 1.4;">
               * <strong>ระบบ Local Cache:</strong> ดึงข้อมูลจากไฟล์ Status Overview แคชไว้ในเครื่องเพื่อเปิดและประมวลผลได้รวดเร็วทันที · <strong>โหมดวางแผน:</strong> เมื่อดึง/อัปเดตไฟล์จะซิงค์ข้อมูลขึ้น Cloud ให้โดยอัตโนมัติ · <strong>โหมดดูแผน:</strong> เก็บไว้ในแคชเครื่องเท่านั้น
+            </div>
+          </div>
+
+          <!-- Setting: Summary Project Order File (Priority + PD range per Project) -->
+          <div style="margin-bottom: 16px; background: rgba(21, 128, 61, 0.05); border: 1px solid rgba(21, 128, 61, 0.3); border-radius: 8px; padding: 12px 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+              <label for="input-summary-po-filename" style="font-size: 12px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                <span>🏷️</span>
+                <span>ไฟล์ Summary Project Order (Priority + PD range ของแต่ละโครงการ):</span>
+              </label>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span id="badge-summary-po-file" style="font-size: 10px; font-weight: 700; color: #15803d; background: rgba(21, 128, 61, 0.15); padding: 2px 6px; border-radius: 4px; font-family: monospace;">AUTO</span>
+                <button type="button" id="btn-test-summary-po" class="btn" title="อ่านไฟล์ Summary Project Order แล้วแสดงจำนวนโครงการ" style="padding: 2px 8px; font-size: 10.5px; border: 1px solid rgba(21, 128, 61, 0.45); border-radius: 4px; background: rgba(21, 128, 61, 0.12); color: #15803d; font-weight: 600; cursor: pointer;">
+                  🔌 เช็คไฟล์
+                </button>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="input-summary-po-filename" placeholder="AUTO = ใช้ไฟล์ Summary Project Order ใหม่สุดในโฟลเดอร์ (หรือระบุชื่อไฟล์)" style="flex: 1; padding: 8px 12px; font-size: 11.5px; font-family: monospace; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(255,255,255,0.9); color: var(--text-primary);">
+              <button type="button" id="btn-save-summary-po" class="btn btn-glowing" style="padding: 6px 14px; font-size: 11.5px; border-radius: 6px; white-space: nowrap;">
+                💾 บันทึกชื่อไฟล์
+              </button>
+              <button type="button" id="btn-reset-summary-po" class="btn" title="รีเซ็ตเป็น AUTO (ใช้ไฟล์ Summary Project Order ใหม่สุดในโฟลเดอร์)" style="padding: 6px 10px; font-size: 11px; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(0,0,0,0.04); color: var(--text-secondary); white-space: nowrap;">
+                ↺ เริ่มต้น
+              </button>
+            </div>
+            <div id="summary-po-status" style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed rgba(21, 128, 61, 0.25); font-size: 11px; color: var(--text-secondary); font-weight: 600;">ยังไม่ได้อ่านไฟล์</div>
+            <div style="font-size: 10px; color: var(--text-secondary); margin-top: 5px; line-height: 1.4;">
+              * ไฟล์อยู่ในโฟลเดอร์เดียวกับ Status Overview · ใช้ชีต <strong>Priority + PD</strong> แสดง Priority / PD range ในหน้า Setup รายการเครื่องจักร, ชื่อเครื่องในแท็บ Priority และปุ่ม <strong>Priority ตาม Summary</strong> (เฉพาะ STATUS Active)
             </div>
           </div>
 

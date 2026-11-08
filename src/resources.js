@@ -159,11 +159,13 @@ export class ResourcesController {
 
     // Priority filter Select All / Deselect All
     document.getElementById('btn-priority-select-all')?.addEventListener('click', () => {
-      Object.keys(this.state.activePriorities).forEach(k => { this.state.activePriorities[k] = true; });
+      const shown = this._shownPriorities;
+      Object.keys(this.state.activePriorities).forEach(k => { if (!shown || shown.has(k)) this.state.activePriorities[k] = true; });
       this.state.notify();
     });
     document.getElementById('btn-priority-deselect-all')?.addEventListener('click', () => {
-      Object.keys(this.state.activePriorities).forEach(k => { this.state.activePriorities[k] = false; });
+      const shown = this._shownPriorities;
+      Object.keys(this.state.activePriorities).forEach(k => { if (!shown || shown.has(k)) this.state.activePriorities[k] = false; });
       this.state.notify();
     });
 
@@ -280,19 +282,28 @@ export class ResourcesController {
   renderPriorityFilters() {
     if (!this.priorityFiltersContainer) return;
     
-    // 1. Get all unique priorities from state.scheduledJobs and state.workOrders
+    // 1. Get all unique priorities from state.scheduledJobs and state.workOrders.
+    // The list only shows priorities of the Projects ticked in the Project tab (`shown`); `priorities` keeps every
+    // priority so the visibility state of the hidden ones is not thrown away.
+    const projActive = (obj) => this.state.activeProjects[obj.project || 'General'] !== false;
     const priorities = new Set();
+    const shown = new Set();
     this.state.scheduledJobs.forEach(job => {
       const p = getJobPriority(job, this.state);
       priorities.add(p);
+      if (projActive(job)) shown.add(p);
     });
     this.state.workOrders.forEach(wo => {
       const p = (wo.priority !== undefined && wo.priority !== null && String(wo.priority).trim() !== '') ? String(wo.priority).trim() : 'Normal';
       priorities.add(p);
+      if (projActive(wo)) shown.add(p);
     });
+    this._shownPriorities = shown;
+    // When the list is narrowed by the Project tab the Project / Customer name is redundant, so it is not shown
+    const projectFiltered = Object.keys(this.state.activeProjects || {}).some(k => this.state.activeProjects[k] === false);
     
     // Sort priorities by numeric priority weight ascending (lower numbers first)
-    const sortedPriorities = Array.from(priorities).sort((a, b) => {
+    const sortedAll = Array.from(priorities).sort((a, b) => {
       const pA = getPriorityWeight(a);
       const pB = getPriorityWeight(b);
       if (pA !== pB) return pA - pB;
@@ -301,20 +312,23 @@ export class ResourcesController {
     
     // 2. Count distinct PDs for each priority (a PD on the board has one job per routing step, so counting jobs over-counts)
     const pdSets = {};
-    sortedPriorities.forEach(p => pdSets[p] = new Set());
+    sortedAll.forEach(p => pdSets[p] = new Set());
     this.state.scheduledJobs.forEach(job => {
+      if (!projActive(job)) return;
       const p = getJobPriority(job, this.state);
       pdSets[p].add(job.woId || job.id);
     });
     this.state.workOrders.forEach(wo => {
+      if (!projActive(wo)) return;
       const p = (wo.priority !== undefined && wo.priority !== null && String(wo.priority).trim() !== '') ? String(wo.priority).trim() : 'Normal';
       pdSets[p].add(wo.id);
     });
     const counts = {};
-    sortedPriorities.forEach(p => counts[p] = pdSets[p].size);
+    sortedAll.forEach(p => counts[p] = pdSets[p].size);
+    const sortedPriorities = sortedAll.filter(p => shown.has(p));
     
     // 3. Update state.activePriorities keys. If a key is new, default to true.
-    sortedPriorities.forEach(p => {
+    sortedAll.forEach(p => {
       if (this.state.activePriorities[p] === undefined) {
         this.state.activePriorities[p] = true;
       }
@@ -338,8 +352,8 @@ export class ResourcesController {
       if (!sum || !/^\d+$/.test(String(p).trim())) return '';
       const n = Number(p);
       const projs = new Set();
-      this.state.scheduledJobs.forEach(j => { if (getJobPriority(j, this.state) === String(p).trim()) projs.add(String(j.project || 'General').trim()); });
-      (this.state.workOrders || []).forEach(w => { if (String(w.priority ?? '').trim() === String(p).trim()) projs.add(String(w.project || 'General').trim()); });
+      this.state.scheduledJobs.forEach(j => { if (projActive(j) && getJobPriority(j, this.state) === String(p).trim()) projs.add(String(j.project || 'General').trim()); });
+      (this.state.workOrders || []).forEach(w => { if (projActive(w) && String(w.priority ?? '').trim() === String(p).trim()) projs.add(String(w.project || 'General').trim()); });
       const names = [];
       projs.forEach(proj => (sum[proj] || []).forEach(e => {
         if (String(e.status).trim().toLowerCase() === 'active' && Math.floor(Number(e.priority)) === n && e.name && !names.includes(e.name)) names.push(e.name);
@@ -391,6 +405,7 @@ export class ResourcesController {
       // Find customer(s) associated with this priority
       const pCustomers = new Set();
       this.state.scheduledJobs.forEach(j => {
+        if (!projActive(j)) return;
         const jobP = String(j.priority || this.state.workOrders?.find(wo => wo.id === j.woId)?.priority || 'Normal').trim();
         if (jobP === String(p).trim()) {
           const cust = j.customer || this.state.workOrders?.find(wo => wo.id === j.woId)?.customer;
@@ -399,6 +414,7 @@ export class ResourcesController {
       });
       if (this.state.workOrders) {
         this.state.workOrders.forEach(wo => {
+          if (!projActive(wo)) return;
           const woP = String(wo.priority || 'Normal').trim();
           if (woP === String(p).trim()) {
             if (wo.customer && wo.customer.trim() && wo.customer !== 'Unknown') pCustomers.add(wo.customer.trim());
@@ -413,7 +429,7 @@ export class ResourcesController {
       // (jobs on a Work Center hidden via the Resources tab checkboxes don't count towards Finish Date)
       const priorityJobs = this.state.scheduledJobs.filter(j => {
         const jobP = String(j.priority || this.state.workOrders?.find(wo => wo.id === j.woId)?.priority || 'Normal').trim();
-        return jobP === String(p).trim() && typeof j.startHour === 'number' && !isNaN(j.startHour) && this.state.activeWorkCenters[j.machine] !== false;
+        return jobP === String(p).trim() && projActive(j) && typeof j.startHour === 'number' && !isNaN(j.startHour) && this.state.activeWorkCenters[j.machine] !== false;
       });
       let dateRangeStr = '-';
       let lastTaskStr = 'ยังไม่มีงานบนกระดาน';
@@ -470,7 +486,7 @@ export class ResourcesController {
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 4px;">
             <div style="display: flex; align-items: baseline; min-width: 0; flex: 1;" title="${p}${customerStr ? ' - ' + customerStr : ''}">
               <span style="font-weight: bold; color: ${dotColor}; font-size: 11.5px; flex-shrink: 0;">${p}</span>
-              ${customerStr ? `<span style="font-size: 10px; color: var(--text-primary); opacity: 0.85; margin-left: 4px; min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.25;">${customerStr}</span>` : ''}
+              ${customerStr && !projectFiltered ? `<span style="font-size: 10px; color: var(--text-primary); opacity: 0.85; margin-left: 4px; min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.25;">${customerStr}</span>` : ''}
             </div>
             <span style="font-size: 10px; color: var(--text-secondary); flex-shrink: 0; margin-left: 4px;">(${count})</span>
           </div>

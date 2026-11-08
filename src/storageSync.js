@@ -1571,11 +1571,43 @@ export class StorageSyncManager {
     return out;
   }
 
+  getSummaryPoFilename() {
+    try { return (localStorage.getItem('PDPLAN_SUMMARY_PO_FILENAME') || '').trim() || 'AUTO'; } catch (e) { return 'AUTO'; }
+  }
+
+  setSummaryPoFilename(name) {
+    const v = String(name || '').trim();
+    try {
+      if (!v || v.toUpperCase() === 'AUTO') localStorage.removeItem('PDPLAN_SUMMARY_PO_FILENAME');
+      else localStorage.setItem('PDPLAN_SUMMARY_PO_FILENAME', v);
+    } catch (e) { /* storage blocked */ }
+    this.state.projectPrioritySummary = null;
+    this.updateSummaryPoUi();
+  }
+
+  updateSummaryPoUi(message) {
+    const fn = this.getSummaryPoFilename();
+    const badge = document.getElementById('badge-summary-po-file');
+    if (badge) badge.textContent = fn;
+    const input = document.getElementById('input-summary-po-filename');
+    if (input && document.activeElement !== input) input.value = fn === 'AUTO' ? '' : fn;
+    const st = document.getElementById('summary-po-status');
+    if (st) {
+      const sum = this.state.projectPrioritySummary;
+      st.textContent = message || (sum
+        ? `✅ อ่านแล้ว: ${this.state.projectPrioritySummaryFile || '-'} · ${Object.keys(sum).length} โครงการ`
+        : 'ยังไม่ได้อ่านไฟล์');
+    }
+  }
+
   async loadSummaryProjectOrder(options = {}) {
     const force = Boolean(options.force);
     const KEY = 'PDPLAN_SUMMARY_PROJECT_ORDER';
     if (!force && this.state.projectPrioritySummary) return this.state.projectPrioritySummary;
-    const fname = 'Summary Project Order';
+    const setName = this.getSummaryPoFilename();
+    const fname = setName === 'AUTO' ? 'Summary Project Order' : setName;
+    const nameOk = (n) => /summary\s*project\s*order/i.test(n || '') || (setName !== 'AUTO' && String(n || '').toLowerCase().includes(setName.toLowerCase()));
+    let loadedName = '';
     const isLocalDev = typeof window !== 'undefined' && (
       window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ||
       window.location.hostname.startsWith('192.168.') || window.location.port === '5173');
@@ -1585,7 +1617,7 @@ export class StorageSyncManager {
         try {
           const res = await fetch(url);
           const xfn = res.headers.get('X-Filename');
-          if (res.ok && xfn && /summary\s*project\s*order/i.test(decodeURIComponent(xfn))) { buf = await res.arrayBuffer(); break; }
+          if (res.ok && xfn && nameOk(decodeURIComponent(xfn))) { buf = await res.arrayBuffer(); loadedName = decodeURIComponent(xfn); break; }
         } catch (e) { /* try next */ }
       }
     }
@@ -1596,7 +1628,8 @@ export class StorageSyncManager {
           const res = await fetch(`${endpoint}${endpoint.includes('?') ? '&' : '?'}action=status-overview&filename=${encodeURIComponent(fname)}&t=${Date.now()}`);
           if (res.ok) {
             const json = await res.json();
-            if (json.status === 'success' && json.base64 && /summary\s*project\s*order/i.test(json.filename || '')) {
+            if (json.status === 'success' && json.base64 && nameOk(json.filename)) {
+              loadedName = json.filename;
               const bin = atob(json.base64);
               const bytes = new Uint8Array(bin.length);
               for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -1612,7 +1645,8 @@ export class StorageSyncManager {
       if (parsed) { try { localStorage.setItem(KEY, JSON.stringify(parsed)); } catch (e) { /* quota */ } }
     }
     if (!parsed) { try { parsed = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { parsed = null; } }
-    if (parsed) this.state.projectPrioritySummary = parsed;
+    if (parsed) { this.state.projectPrioritySummary = parsed; if (loadedName) this.state.projectPrioritySummaryFile = loadedName; }
+    this.updateSummaryPoUi(parsed ? undefined : '⚠️ ไม่พบไฟล์ Summary Project Order ในโฟลเดอร์');
     return parsed;
   }
 
@@ -2661,6 +2695,25 @@ export class StorageSyncManager {
       window.open(val, '_blank', 'noopener');
     });
 
+    document.getElementById('btn-save-summary-po')?.addEventListener('click', async () => {
+      const v = (document.getElementById('input-summary-po-filename')?.value || '').trim();
+      this.setSummaryPoFilename(v);
+      this.showToast(`💾 บันทึกชื่อไฟล์ Summary Project Order: ${v || 'AUTO'}`, 'success');
+      await this.loadSummaryProjectOrder({ force: true });
+      this.state.notify();
+    });
+    document.getElementById('btn-reset-summary-po')?.addEventListener('click', async () => {
+      this.setSummaryPoFilename('');
+      this.showToast('↺ รีเซ็ตเป็น AUTO (ใช้ไฟล์ Summary Project Order ใหม่สุด)', 'info');
+      await this.loadSummaryProjectOrder({ force: true });
+      this.state.notify();
+    });
+    document.getElementById('btn-test-summary-po')?.addEventListener('click', async () => {
+      this.updateSummaryPoUi('⏳ กำลังอ่านไฟล์...');
+      const sum = await this.loadSummaryProjectOrder({ force: true });
+      this.showToast(sum ? `✅ อ่าน Summary Project Order สำเร็จ (${Object.keys(sum).length} โครงการ)` : '⚠️ ไม่พบไฟล์ Summary Project Order', sum ? 'success' : 'error');
+    });
+
     document.getElementById('btn-save-status-overview-file')?.addEventListener('click', () => {
       const input = document.getElementById('input-status-overview-filename');
       if (input && input.value.trim()) {
@@ -3091,6 +3144,7 @@ export class StorageSyncManager {
     const currentStatusFile = this.getStatusOverviewFilename();
     const inputStatusFile = document.getElementById('input-status-overview-filename');
     if (inputStatusFile) inputStatusFile.value = currentStatusFile;
+    this.updateSummaryPoUi();
     const inputProdSheet = document.getElementById('input-prod-dates-sheet-url');
     if (inputProdSheet) inputProdSheet.value = this.getProdDatesSheetUrl();
     const badgeStatusFile = document.getElementById('badge-status-overview-file');
