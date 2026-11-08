@@ -81,6 +81,13 @@ export class AssemblyTreeController {
     this.sidebarTab = document.getElementById('assembly-tree-sidebar-tab');
     this.sidebarMainPdInput = document.getElementById('sidebar-main-pd-input');
     this.sidebarMainPdDropdown = document.getElementById('sidebar-main-pd-dropdown');
+    // Main PD source: 'filter' (default) = PD Ranges of the Priorities ticked in the right-hand filter, 'manual' = type any PD
+    this.mainPdMode = (typeof localStorage !== 'undefined' && localStorage.getItem('assembly_main_pd_mode')) || 'filter';
+    this.btnMainPdModeFilter = document.getElementById('btn-main-pd-mode-filter');
+    this.btnMainPdModeManual = document.getElementById('btn-main-pd-mode-manual');
+    this.mainPdModeHint = document.getElementById('main-pd-mode-hint');
+    if (this.btnMainPdModeFilter) this.btnMainPdModeFilter.addEventListener('click', () => this.setMainPdMode('filter'));
+    if (this.btnMainPdModeManual) this.btnMainPdModeManual.addEventListener('click', () => this.setMainPdMode('manual'));
     this.sidebarTreeview = document.getElementById('sidebar-assembly-treeview');
     this.btnSidebarTreeExpandAll = document.getElementById('btn-sidebar-tree-expand-all');
     this.btnSidebarTreeCollapseAll = document.getElementById('btn-sidebar-tree-collapse-all');
@@ -269,7 +276,7 @@ export class AssemblyTreeController {
           this.sidebarMainPdInput.blur();
         } else if (e.key === 'Enter') {
           const val = this.sidebarMainPdInput.value.trim().toUpperCase();
-          const exact = this.allAssemblies.find(a => a.id.toUpperCase() === val);
+          const exact = this.getMainPdCandidates(this.allAssemblies).find(a => a.id.toUpperCase() === val);
           if (exact) {
             e.preventDefault();
             this.selectAssembly(exact.id);
@@ -588,7 +595,11 @@ export class AssemblyTreeController {
 
   renderSidebarMainPdDropdown(query) {
     if (!this.sidebarMainPdDropdown) return;
-    const matches = this.allAssemblies.filter(a => matchesAssemblyQuery(a.id, a.partName, query, a.dwgNo));
+    // A typed PD range list ("PD2608784-PD2608904, PD2610950") lists every PD inside those ranges, in any mode.
+    const typedRanges = this.parsePdRangeQuery(query);
+    const matches = typedRanges
+      ? this.allAssemblies.filter(a => this.isPdInRanges(a.id, typedRanges))
+      : this.getMainPdCandidates(this.allAssemblies).filter(a => matchesAssemblyQuery(a.id, a.partName, query, a.dwgNo));
 
     if (matches.length === 0) {
       this.sidebarMainPdDropdown.innerHTML = '<div style="padding: 10px 12px; font-size: 11px; color: var(--text-secondary);">ไม่พบ Assembly Set ที่ตรงกับคำค้นหา</div>';
@@ -974,6 +985,57 @@ export class AssemblyTreeController {
     setTimeout(() => {
       window.print();
     }, 200);
+  }
+
+  setMainPdMode(mode) {
+    this.mainPdMode = mode === 'manual' ? 'manual' : 'filter';
+    try { localStorage.setItem('assembly_main_pd_mode', this.mainPdMode); } catch (e) { /* ignore */ }
+    this.render();
+    this.renderSidebarTreeView();
+  }
+
+  // Assemblies that may be chosen as Main PD: in 'filter' mode only PDs inside the PD Ranges of the ticked Priorities
+  // (when the Summary Project Order is loaded), in 'manual' mode everything.
+  getMainPdCandidates(list) {
+    if (this.mainPdMode === 'manual') return list;
+    const ranges = this.state.getPriorityFilterPdRanges ? this.state.getPriorityFilterPdRanges() : null;
+    if (!ranges) return list;
+    return list.filter(a => this.isPdInRanges(a.id, ranges));
+  }
+
+  // "PD2608784-PD2608904, PD2610950" / "2608784-2608904" -> [{a,b}]; null unless every comma/space separated part is a
+  // PD number or a PD range and the text has at least a "-" or a ",".
+  parsePdRangeQuery(query) {
+    const text = String(query || '').trim();
+    if (!/[-–~,;]/.test(text)) return null;
+    const parts = text.split(/[,;]+|\s{2,}/).map(t => t.trim()).filter(Boolean);
+    if (parts.length === 0) return null;
+    const ranges = [];
+    for (const t of parts) {
+      const m = t.match(/^(?:PD)?\s*(\d{5,})\s*(?:[-–~]\s*(?:PD)?\s*(\d{5,}))?$/i);
+      if (!m) return null;
+      const a = parseInt(m[1], 10), b = m[2] ? parseInt(m[2], 10) : a;
+      ranges.push({ a: Math.min(a, b), b: Math.max(a, b) });
+    }
+    return ranges;
+  }
+
+  isPdInRanges(pdId, ranges) {
+    const m = String(pdId).match(/\d+/);
+    const n = m ? parseInt(m[0], 10) : NaN;
+    return Number.isFinite(n) && ranges.some(r => n >= r.a && n <= r.b);
+  }
+
+  updateMainPdModeUi(candidateCount, ranges) {
+    const on = 'background: rgba(0, 242, 254, 0.2); border-color: var(--accent-teal); font-weight: 800;';
+    const setBtn = (btn, active) => { if (btn) { btn.style.background = active ? 'rgba(0, 242, 254, 0.2)' : ''; btn.style.borderColor = active ? 'var(--accent-teal)' : ''; btn.style.fontWeight = active ? '800' : ''; } };
+    setBtn(this.btnMainPdModeFilter, this.mainPdMode !== 'manual');
+    setBtn(this.btnMainPdModeManual, this.mainPdMode === 'manual');
+    if (this.mainPdModeHint) {
+      if (this.mainPdMode === 'manual') this.mainPdModeHint.textContent = 'กรอก/ค้นหาเลขที่ PD เองได้ทุกตัว';
+      else if (!ranges) this.mainPdModeHint.textContent = 'ตามตัวกรอง Priority: ยังไม่มี PD Range (ติ๊ก Priority ด้านขวา หรือรอโหลด Summary) จึงแสดงทุก PD';
+      else this.mainPdModeHint.textContent = `ตามตัวกรอง Priority: ${ranges.length} ช่วง PD · เลือกได้ ${candidateCount} PD`;
+    }
   }
 
   selectAssembly(woId) {
@@ -2041,6 +2103,19 @@ export class AssemblyTreeController {
     // Keep the full list around for the search dropdown, and reflect the current
     // selection in the search box's text (only while the user isn't actively typing).
     this.allAssemblies = assemblies;
+    {
+      // Default mode 'filter': the Main PD follows the PD Ranges of the ticked Priorities. When nothing is selected, or the
+      // selection is outside those ranges, jump to the first PD inside them.
+      const ranges = this.mainPdMode === 'manual' ? null : (this.state.getPriorityFilterPdRanges ? this.state.getPriorityFilterPdRanges() : null);
+      const cands = this.getMainPdCandidates(assemblies);
+      this.updateMainPdModeUi(cands.length, ranges);
+      const typing = document.activeElement === this.sidebarMainPdInput || document.activeElement === this.searchInput;
+      if (ranges && cands.length > 0 && !typing && (!this.selectedWoId || !this.isPdInRanges(this.selectedWoId, ranges)) && !this._autoSelectingMainPd) {
+        this._autoSelectingMainPd = true;
+        try { this.selectAssembly(cands[0].id); } finally { this._autoSelectingMainPd = false; }
+        return;
+      }
+    }
     const currentVal = this.selectedWoId;
 
     if (!currentVal) {

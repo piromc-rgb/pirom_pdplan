@@ -3708,6 +3708,27 @@ class CentralState {
     return { pdId: best.pdId, orderStatus: best.orderStatus, project: best.project, operations: best.operations, candidates: cands };
   }
 
+  // PD ranges (Start-End) of the Priorities ticked in the Priority filter (right panel), from the Summary Project Order
+  // (Active rows of the Projects ticked in the Project filter). Returns null when the Summary is not loaded or nothing
+  // is ticked / matches, so callers can fall back to "no range limit".
+  getPriorityFilterPdRanges() {
+    const sum = this.projectPrioritySummary;
+    if (!sum) return null;
+    const num = (id) => { const m = String(id).match(/\d+/); return m ? parseInt(m[0], 10) : NaN; };
+    const ticked = new Set(Object.keys(this.activePriorities || {}).filter(k => this.activePriorities[k] !== false && /^\d+$/.test(String(k).trim())).map(k => Number(k)));
+    if (ticked.size === 0) return null;
+    const ranges = [];
+    Object.keys(sum).forEach(proj => {
+      if ((this.activeProjects || {})[proj] === false) return;
+      (sum[proj] || []).forEach(e => {
+        if (String(e.status).trim().toLowerCase() !== 'active' || !ticked.has(Math.floor(Number(e.priority)))) return;
+        const a = num(e.start), b = num(e.end);
+        if (Number.isFinite(a) && Number.isFinite(b)) ranges.push({ a, b, priority: Math.floor(Number(e.priority)) });
+      });
+    });
+    return ranges.length ? ranges : null;
+  }
+
   // True when a child PD must NOT be shown under its parent: the parent PD sits inside a PD range (Start-End) of the
   // Summary Project Order file and the child PD number is outside every range of that same Priority. Parent / child
   // codes in Plan + Mat do not match the real PD allocation 100%, so the Summary range decides. False when unknown.

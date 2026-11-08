@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V5.168 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V5.170 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-DEEUMa8l.js"></script>
+    <script type="module" crossorigin src="./assets/index-BMPVrkJK.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-Bu-z-g-9.css">
   </head>
   <body>
@@ -357,8 +357,13 @@
               <label for="sidebar-main-pd-input" style="display: flex; align-items: center; justify-content: space-between; font-size: 10.5px; font-weight: 700; color: var(--accent-teal); text-transform: uppercase; margin-bottom: 5px;">
                 <span>🎯 เลขที่ PD ตัว Main:</span>
               </label>
+              <div style="display: flex; gap: 4px; margin-bottom: 5px;">
+                <button type="button" id="btn-main-pd-mode-filter" class="btn-action-small" style="flex: 1; font-size: 10px; padding: 3px 4px;" title="เลือก PD Main จาก PD Range ของ Priority ที่ติ๊กในตัวกรองด้านขวา">📌 ตามตัวกรอง Priority</button>
+                <button type="button" id="btn-main-pd-mode-manual" class="btn-action-small" style="flex: 1; font-size: 10px; padding: 3px 4px;" title="กรอก/ค้นหาเลขที่ PD เอง (ไม่จำกัดช่วง)">✏️ กรอก PD เอง</button>
+              </div>
+              <div id="main-pd-mode-hint" style="font-size: 9.5px; color: var(--text-secondary); margin-bottom: 4px; line-height: 1.35;"></div>
               <div style="position: relative; width: 100%;">
-                <input type="text" id="sidebar-main-pd-input" placeholder="🔍 ค้นหา/ระบุเลขที่ PD Main..." autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 12px; font-weight: 700; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(0, 242, 254, 0.05); color: var(--text-primary); outline: none;">
+                <input type="text" id="sidebar-main-pd-input" placeholder="🔍 ค้นหา/ระบุเลขที่ PD Main หรือช่วง PD2608784-PD2608904, PD2610950" autocomplete="off" style="width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 12px; font-weight: 700; border: 1px solid var(--border-glass); border-radius: 6px; background: rgba(0, 242, 254, 0.05); color: var(--text-primary); outline: none;">
                 <div id="sidebar-main-pd-dropdown" class="hidden" style="position: absolute; top: 100%; left: 0; right: 0; margin-top: 3px; max-height: 240px; overflow-y: auto; background: var(--bg-darker); border: 1px solid var(--border-glass); border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); z-index: 200;"></div>
               </div>
               <button id="btn-sidebar-view-bom" type="button" class="btn" style="width: 100%; margin-top: 6px; padding: 5px 8px; font-size: 11px; font-weight: 700; background: rgba(16, 185, 129, 0.12); border: 1px solid var(--accent-green); color: var(--accent-green); border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; transition: background 0.2s;" title="แสดงรายการ BOM ทั้งหมดใน PD แม่ พร้อมสถานะ">
