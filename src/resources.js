@@ -361,6 +361,32 @@ export class ResourcesController {
       return names.join(', ');
     };
 
+    // Delivery target of a Priority = earliest เป้าส่งเครื่อง (Setup รายการเครื่องจักร) among the machines of that Priority
+    // (machine -> Priority from the Summary Project Order ranges), looked at only in the Projects ticked in the filter.
+    const deliveryTargetFor = (p) => {
+      if (!/^\d+$/.test(String(p).trim())) return null;
+      const n = Number(p);
+      let best = null;
+      Object.keys(this.state.projectMachineLists || {}).forEach(proj => {
+        if (this.state.activeProjects[proj] === false) return;
+        (this.state.projectMachineLists[proj] || []).forEach(r => {
+          const m = String(r.targetDate || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+          if (!m || !r.itemCode) return;
+          const pi = this.state.getProjectItemPriority(proj, String(r.itemCode).trim());
+          if (!pi || pi.priority !== n) return;
+          const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+          if (!best || d < best) best = d;
+        });
+      });
+      return best;
+    };
+    if (!document.getElementById('priority-delivery-blink-style')) {
+      const st = document.createElement('style');
+      st.id = 'priority-delivery-blink-style';
+      st.textContent = '@keyframes priority-delivery-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.15; } } .priority-delivery-late { color: #dc2626; font-weight: 800; animation: priority-delivery-blink 1s infinite; } .priority-delivery-ok { color: #166534; font-weight: 800; }';
+      document.head.appendChild(st);
+    }
+
     // 4. Generate HTML elements
     this.priorityFiltersContainer.innerHTML = '';
     
@@ -432,6 +458,7 @@ export class ResourcesController {
         return jobP === String(p).trim() && projActive(j) && typeof j.startHour === 'number' && !isNaN(j.startHour) && this.state.activeWorkCenters[j.machine] !== false;
       });
       let dateRangeStr = '-';
+      let planEnd = null;
       let lastTaskStr = 'ยังไม่มีงานบนกระดาน';
       let fullTooltip = `Priority: ${p}${customerStr ? ' (' + customerStr + ')' : ''} - ยังไม่มีแผนงานผลิต`;
       let minStartHour = Infinity;
@@ -464,6 +491,7 @@ export class ResourcesController {
 
           const startDayMidnight = new Date(dStart.getFullYear(), dStart.getMonth(), dStart.getDate());
           const endDayMidnight = new Date(dEnd.getFullYear(), dEnd.getMonth(), dEnd.getDate());
+          planEnd = endDayMidnight;
           const calDays = Math.max(1, Math.round((endDayMidnight - startDayMidnight) / (1000 * 60 * 60 * 24)) + 1);
           const daySuffix = calDays === 1 ? '1 วัน' : `${calDays} วัน`;
           
@@ -474,6 +502,17 @@ export class ResourcesController {
         }
       }
       
+      // เป้าส่งเครื่อง: red blinking when the last planned day is later than the target, dark green (steady) when on time
+      const dTarget = deliveryTargetFor(p);
+      let deliveryHtml = '';
+      let deliveryTitle = '';
+      if (dTarget) {
+        const tStr = `${dTarget.getDate()}/${dTarget.getMonth() + 1}/${String(dTarget.getFullYear()).slice(-2)}`;
+        const late = planEnd ? planEnd > dTarget : null;
+        const cls = late === null ? '' : (late ? 'priority-delivery-late' : 'priority-delivery-ok');
+        deliveryTitle = `\n• เป้าส่งเครื่อง: ${tStr}${late === null ? ' (ยังไม่มีแผนบนกระดาน)' : (late ? ' — แผนวันสุดท้ายช้ากว่าเป้า' : ' — ทันเป้า')}`;
+        deliveryHtml = `<span class="${cls}" style="white-space: nowrap; font-size: 9px;${late === null ? ' color: var(--text-secondary); font-weight: 700;' : ''}">🎯 ส่งเครื่อง ${tStr}</span>`;
+      }
       label.innerHTML = `
         <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; margin-top: 2px;">
           <input type="checkbox" style="width: auto; margin: 0; cursor: pointer;" ${isChecked ? 'checked' : ''} title="Hide / Unhide Priority (ซ่อน/แสดง)">
@@ -491,8 +530,8 @@ export class ResourcesController {
             <span style="font-size: 10px; color: var(--text-secondary); flex-shrink: 0; margin-left: 4px;">(${count})</span>
           </div>
           ${summaryDetail ? `<div style="font-size: 10px; font-weight: 600; color: var(--text-primary); opacity: 0.8; margin-top: 2px; white-space: normal; overflow-wrap: anywhere; line-height: 1.25;" title="${summaryDetail}">${summaryDetail}</div>` : ''}
-          <div style="font-size: 8px; color: var(--text-secondary); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${fullTooltip}">
-            <span>${dateRangeStr}</span>
+          <div style="font-size: 8px; color: var(--text-secondary); margin-top: 1px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;" title="${fullTooltip}${deliveryTitle}">
+            <span style="white-space: nowrap;">${dateRangeStr}</span>${deliveryHtml}
           </div>
         </div>
         <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; margin-left: 6px; align-self: flex-start;">
