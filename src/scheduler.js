@@ -46,11 +46,15 @@ export function waitsForChildren(machine, workCenters = {}) {
   if (flag === false) return false;
   return CHILD_WAIT_DEFAULT_WCS.includes(machine);
 }
+// Variant 'amw-weld': Welding is the Drum instead (use when Welding is the real constraint); every CNC is then protected.
+export const AMW_WELD_DRUM_WCS = ['DEB011', 'DEB012', 'DEB013', 'DEB014'];
+export const AMW_WELD_CNC_WCS = ['DEA012', 'DEA016', 'DEA021', 'DEA022', 'DEA023', 'DEA024', 'DEA025', 'DEA026', 'DEA027', 'DEA028'];
 export const AMW_CONSTRAINT_BUFFER_RATIO = 0.5; // Constraint Buffer = 1/2 of the upstream -> Welding lead time
 
-export function getAmwRoles(workCenters = {}) {
-  const drum = new Set(AMW_DEFAULT_DRUM_WCS);
-  const cnc = new Set(AMW_DEFAULT_CNC_WCS);
+export function getAmwRoles(workCenters = {}, variant = 'amw') {
+  const weld = variant === 'amw-weld';
+  const drum = new Set(weld ? AMW_WELD_DRUM_WCS : AMW_DEFAULT_DRUM_WCS);
+  const cnc = new Set(weld ? AMW_WELD_CNC_WCS : AMW_DEFAULT_CNC_WCS);
   Object.keys(workCenters || {}).forEach(code => {
     const role = workCenters[code] && workCenters[code].amwRole;
     if (role === 'drum') { drum.add(code); cnc.delete(code); }
@@ -997,7 +1001,7 @@ export class Scheduler {
   //     then dispatch again. Pass 2 is kept only when Welding throughput does not get worse.
   // Returns the scheduled jobs; the Drum / Rope summary is left in Scheduler.lastAmwReport.
   static applyAmwDbr(jobs, scale = 'hr', nowWorkingHour = 0.0, workCenters = {}, allowOffload = true, groupSameItem = true, options = {}) {
-    const roles = getAmwRoles(workCenters);
+    const roles = getAmwRoles(workCenters, options.amwVariant);
     const runOptions = { ...options, amw: roles };
     const pending = jobs.filter(j => j.status !== 'Completed');
     const grab = () => new Map(pending.map(j => [j, { machine: j.machine, originalMachine: j.originalMachine, isOffloaded: j.isOffloaded, startHour: j.startHour }]));

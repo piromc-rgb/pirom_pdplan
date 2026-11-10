@@ -830,6 +830,7 @@ export class GanttController {
     const modelLabels = {
       whiteboard: 'Model: Whiteboard & Cell (Manual)',
       amw: 'Model: AMW DBR (Drum = CNC VF4/VF7)',
+      'amw-weld': 'Model: AMW DBR (Drum = Welding)',
       finite: 'Model: Forwards Finite Capacity',
       infinite: 'Model: Backwards Infinite Capacity'
     };
@@ -1485,7 +1486,7 @@ export class GanttController {
               // 1. Detect sequence routing overlaps (Sequence Warning)
               let isSeqError = false;
               let isParentChildViolation = false;
-              if (job.woId && !['finite', 'amw'].includes(this.state.schedulingModel)) {
+              if (job.woId && !['finite', 'amw', 'amw-weld'].includes(this.state.schedulingModel)) {
                 const sisterSteps = getJobsForWo(job.woId).filter(j => j.id !== job.id);
                 sisterSteps.forEach(sister => {
                   if (sister.stepNum < job.stepNum) {
@@ -2074,7 +2075,7 @@ export class GanttController {
           // 1. Detect sequence routing overlaps (Sequence Warning)
           let isSeqError = false;
           let isParentChildViolation = false;
-          if (job.woId && !['finite', 'amw'].includes(this.state.schedulingModel)) {
+          if (job.woId && !['finite', 'amw', 'amw-weld'].includes(this.state.schedulingModel)) {
             const sisterSteps = getJobsForWo(job.woId).filter(j => j.id !== job.id);
             sisterSteps.forEach(sister => {
               const moveBuffer = (sister.machine !== job.machine) ? (10.0 / 60.0) : 0.0;
@@ -2410,7 +2411,7 @@ export class GanttController {
       });
 
         // 3. Render Overlap Warnings
-        if (!['finite', 'amw'].includes(this.state.schedulingModel)) {
+        if (!['finite', 'amw', 'amw-weld'].includes(this.state.schedulingModel)) {
           const overlaps = this.detectOverlaps(machineJobs);
           overlaps.forEach(overlap => {
             const timelineEnd = config.startOffset + config.totalHours;

@@ -6,7 +6,7 @@ class CentralState {
   constructor() {
     this.subscribers = [];
     
-    // Configurable scheduling model: 'whiteboard' | 'finite' | 'infinite' | 'amw' (TOC Drum-Buffer-Rope)
+    // Configurable scheduling model: 'whiteboard' | 'finite' | 'infinite' | 'amw' (TOC DBR, Drum = CNC VF4/VF7) | 'amw-weld' (TOC DBR, Drum = Welding)
     this.schedulingModel = 'finite';
     // Fast Track (Project filter): a PD qualifies when its production time (excl. paint/adjust/assembly) exceeds hybridMinDays x hybridDayHours and it has a welding step
     this.hybridMinDays = 2;
@@ -544,6 +544,11 @@ class CentralState {
     }, 500);
   }
 
+  // AMW (TOC / Drum-Buffer-Rope) family: 'amw' (Drum = CNC VF4/VF7) and 'amw-weld' (Drum = Welding)
+  isAmwModel() {
+    return this.schedulingModel === 'amw' || this.schedulingModel === 'amw-weld';
+  }
+
   // Switch scheduling model
   setSchedulingModel(model) {
     this.schedulingModel = model === 'hybrid' ? 'finite' : model; // Hybrid Production Flow was removed
@@ -572,7 +577,7 @@ class CentralState {
     if (shouldRecompute) {
       if (this.schedulingModel === 'infinite') {
         this.scheduledJobs = Scheduler.applyBackwardsInfinite(this.scheduledJobs, scale);
-      } else if (this.schedulingModel === 'finite' || this.schedulingModel === 'amw') {
+      } else if (this.schedulingModel === 'finite' || this.isAmwModel()) {
         this.scheduledJobs = this.runForwardsFinite(this.scheduledJobs, scale, nowWorkingHour);
       }
     }
@@ -590,14 +595,15 @@ class CentralState {
   // Forwards Finite pass over the given jobs
   runForwardsFinite(jobs, scale, nowWorkingHour) {
     // AMW (TOC / Drum-Buffer-Rope) = Welding is the drum; same inputs as Forwards Finite, plus the Drum / Rope rules
-    const run = this.schedulingModel === 'amw' ? Scheduler.applyAmwDbr.bind(Scheduler) : Scheduler.applyForwardsFinite.bind(Scheduler);
+    const run = this.isAmwModel() ? Scheduler.applyAmwDbr.bind(Scheduler) : Scheduler.applyForwardsFinite.bind(Scheduler);
     const result = run(jobs, scale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem, {
       planMaterials: this.planMaterials,
       groupMat: this.groupMat === true,
       dwgToPdMap: this.dwgToPdMap,
-      assemblyLinks: this.assemblyLinks
+      assemblyLinks: this.assemblyLinks,
+      amwVariant: this.schedulingModel
     });
-    this.amwReport = this.schedulingModel === 'amw' ? Scheduler.lastAmwReport : null;
+    this.amwReport = this.isAmwModel() ? Scheduler.lastAmwReport : null;
     return result;
   }
 
@@ -614,7 +620,7 @@ class CentralState {
 
     if (this.schedulingModel === 'infinite') {
       this.scheduledJobs = Scheduler.applyBackwardsInfinite(this.scheduledJobs, this.activeScale);
-    } else if (this.schedulingModel === 'finite' || this.schedulingModel === 'amw') {
+    } else if (this.schedulingModel === 'finite' || this.isAmwModel()) {
       this.scheduledJobs = this.runForwardsFinite(this.scheduledJobs, this.activeScale, nowWorkingHour);
     }
 
