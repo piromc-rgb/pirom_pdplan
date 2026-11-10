@@ -6,7 +6,7 @@ class CentralState {
   constructor() {
     this.subscribers = [];
     
-    // Configurable scheduling model: 'whiteboard' | 'finite' | 'infinite'
+    // Configurable scheduling model: 'whiteboard' | 'finite' | 'infinite' | 'amw' (TOC Drum-Buffer-Rope)
     this.schedulingModel = 'finite';
     // Fast Track (Project filter): a PD qualifies when its production time (excl. paint/adjust/assembly) exceeds hybridMinDays x hybridDayHours and it has a welding step
     this.hybridMinDays = 2;
@@ -572,7 +572,7 @@ class CentralState {
     if (shouldRecompute) {
       if (this.schedulingModel === 'infinite') {
         this.scheduledJobs = Scheduler.applyBackwardsInfinite(this.scheduledJobs, scale);
-      } else if (this.schedulingModel === 'finite') {
+      } else if (this.schedulingModel === 'finite' || this.schedulingModel === 'amw') {
         this.scheduledJobs = this.runForwardsFinite(this.scheduledJobs, scale, nowWorkingHour);
       }
     }
@@ -589,12 +589,16 @@ class CentralState {
 
   // Forwards Finite pass over the given jobs
   runForwardsFinite(jobs, scale, nowWorkingHour) {
-    return Scheduler.applyForwardsFinite(jobs, scale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem, {
+    // AMW (TOC / Drum-Buffer-Rope) = Welding is the drum; same inputs as Forwards Finite, plus the Drum / Rope rules
+    const run = this.schedulingModel === 'amw' ? Scheduler.applyAmwDbr.bind(Scheduler) : Scheduler.applyForwardsFinite.bind(Scheduler);
+    const result = run(jobs, scale, nowWorkingHour, this.workCenters, this.allowMachineOffload, this.groupSameItem, {
       planMaterials: this.planMaterials,
       groupMat: this.groupMat === true,
       dwgToPdMap: this.dwgToPdMap,
       assemblyLinks: this.assemblyLinks
     });
+    this.amwReport = this.schedulingModel === 'amw' ? Scheduler.lastAmwReport : null;
+    return result;
   }
 
   // Re-runs the Forward Finite / Backward Infinite pass over the current board
@@ -610,7 +614,7 @@ class CentralState {
 
     if (this.schedulingModel === 'infinite') {
       this.scheduledJobs = Scheduler.applyBackwardsInfinite(this.scheduledJobs, this.activeScale);
-    } else if (this.schedulingModel === 'finite') {
+    } else if (this.schedulingModel === 'finite' || this.schedulingModel === 'amw') {
       this.scheduledJobs = this.runForwardsFinite(this.scheduledJobs, this.activeScale, nowWorkingHour);
     }
 

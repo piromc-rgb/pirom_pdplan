@@ -30,6 +30,24 @@ export function getItemKey(jobOrWo) {
   return part ? part.toUpperCase() : '';
 }
 
+// AMW strategy (TOC / Drum-Buffer-Rope): Welding is the Drum, CNC is protected from starvation.
+// A Work Center can override its role with workCenters[code].amwRole = 'drum' | 'cnc' | 'none'.
+export const AMW_DEFAULT_DRUM_WCS = ['DEB011', 'DEB012', 'DEB013', 'DEB014'];
+export const AMW_DEFAULT_CNC_WCS = ['DEA012', 'DEA016', 'DEA021', 'DEA022', 'DEA023', 'DEA024', 'DEA025', 'DEA026', 'DEA027', 'DEA028'];
+export const AMW_CONSTRAINT_BUFFER_RATIO = 0.5; // Constraint Buffer = 1/2 of the upstream -> Welding lead time
+
+export function getAmwRoles(workCenters = {}) {
+  const drum = new Set(AMW_DEFAULT_DRUM_WCS);
+  const cnc = new Set(AMW_DEFAULT_CNC_WCS);
+  Object.keys(workCenters || {}).forEach(code => {
+    const role = workCenters[code] && workCenters[code].amwRole;
+    if (role === 'drum') { drum.add(code); cnc.delete(code); }
+    else if (role === 'cnc') { cnc.add(code); drum.delete(code); }
+    else if (role === 'none') { drum.delete(code); cnc.delete(code); }
+  });
+  return { drum, cnc };
+}
+
 // Raw-material codes (10-char) a job consumes at its own routing step, from the Plan + Mat sheet.
 // Used by work centers with "check material" on to run PDs sharing a material back to back.
 export function getJobMatKeys(job, planMaterials) {
@@ -571,6 +589,35 @@ export class Scheduler {
       childrenOf.set(parentId, Array.from(children).filter(cid => cid.startsWith(parentId + '-') || Scheduler.isInParentPdRange(cid, parentId, options)));
     }
 
+    // AMW: Part Tier per WO (1 = feeds / is welded, 2 = outsourced, 3 = CNC part, 4 = general). Lower tier is dispatched first on a tie.
+    const amw = options.amw || null;
+    const amwTierOf = new Map();
+    if (amw) {
+      const weldWos = new Set();
+      const outsourceWos = new Set();
+      const cncWos = new Set();
+      allCombinedJobs.forEach(j => {
+        if (!j.woId) return;
+        const m = j.originalMachine || j.machine;
+        if (amw.drum.has(m)) weldWos.add(j.woId);
+        if (String(m || '').startsWith('SUB')) outsourceWos.add(j.woId);
+        if (amw.cnc.has(m)) cncWos.add(j.woId);
+      });
+      const feedsWeld = new Set(weldWos);
+      const stack = Array.from(weldWos);
+      while (stack.length) {
+        const w = stack.pop();
+        (childrenOf.get(w) || []).forEach(c => {
+          if (!feedsWeld.has(c)) { feedsWeld.add(c); stack.push(c); }
+        });
+      }
+      allDistinctWoIds.forEach(w => {
+        amwTierOf.set(w, feedsWeld.has(w) ? 1 : outsourceWos.has(w) ? 2 : cncWos.has(w) ? 3 : 4);
+      });
+    }
+    const tierOfJob = (j) => (amw && amwTierOf.get(j.woId)) || 4;
+    if (amw) Scheduler._amwChildrenOf = childrenOf; // lets applyAmwDbr walk the sub-PD tree for the Rope
+
     // Remaining (not-yet-scheduled) steps per WO - sorted ascending by stepNum
     const remainingStepsByWo = new Map();
     jobs.forEach(job => {
@@ -747,6 +794,10 @@ export class Scheduler {
             });
           }
         }
+        // AMW Rope: upstream work is not released earlier than the Welding drum needs it (minus the buffer)
+        if (amw && readyTime !== Infinity && job.releaseHour !== undefined && job.releaseHour !== null) {
+          readyTime = Math.max(readyTime, job.releaseHour);
+        }
         const gap = readyTime - t;
         return { job, readyTime, gap };
       });
@@ -820,7 +871,15 @@ export class Scheduler {
       // a raw material with the previous job on this lane (different PDs, same material -> run together).
       const lastMatsOnLane = (options.groupMat === true && workCenters[bestMachine]?.checkMaterial && machineLastMats[bestMachine]) ? machineLastMats[bestMachine][bestLaneIdx] : null;
       const sharesLastMat = (j) => !!lastMatsOnLane && lastMatsOnLane.length > 0 && matKeysOf(j).some(k => lastMatsOnLane.includes(k));
+      const amwOnCnc = !!amw && amw.cnc.has(bestMachine);
+      // AMW CNC rule: a part that just came out of Welding goes first (post-weld parts are never made to wait)
+      const isPostWeld = (j) => !!amw && amw.drum.has(woLastMachine[j.woId]) && woEndTime[j.woId] !== undefined;
       validCandidates.sort((a, b) => {
+        if (amwOnCnc) {
+          const aPW = isPostWeld(a.job) ? 1 : 0;
+          const bPW = isPostWeld(b.job) ? 1 : 0;
+          if (aPW !== bPW) return bPW - aPW;
+        }
         const pA = getPriorityWeight(a.job.priority);
         const pB = getPriorityWeight(b.job.priority);
 
@@ -844,6 +903,11 @@ export class Scheduler {
         }
 
         if (pA !== pB) return pA - pB;
+        if (amw) {
+          const tA = tierOfJob(a.job);
+          const tB = tierOfJob(b.job);
+          if (tA !== tB) return tA - tB;
+        }
         if (a.gap !== b.gap) return a.gap - b.gap;
         return a.job.stepNum - b.job.stepNum;
       });
@@ -913,6 +977,106 @@ export class Scheduler {
     const completedJobs = jobs.filter(j => j.status === 'Completed');
     const pendingJobs = jobs.filter(j => j.status !== 'Completed');
     return this.applyActiveJobShopScheduling(pendingJobs, scale, nowWorkingHour, completedJobs, workCenters, allowOffload, groupSameItem, options);
+  }
+
+  // AMW strategy (TOC / Drum-Buffer-Rope), two passes:
+  //  1. Forward finite dispatch with AMW rules (Welding drum ordered by Priority + Part Tier, post-weld CNC parts first).
+  //  2. Rope: upstream steps feeding Welding are released no earlier than (drum start - chain time - Constraint Buffer),
+  //     then dispatch again. Pass 2 is kept only when Welding throughput does not get worse.
+  // Returns the scheduled jobs; the Drum / Rope summary is left in Scheduler.lastAmwReport.
+  static applyAmwDbr(jobs, scale = 'hr', nowWorkingHour = 0.0, workCenters = {}, allowOffload = true, groupSameItem = true, options = {}) {
+    const roles = getAmwRoles(workCenters);
+    const runOptions = { ...options, amw: roles };
+    const pending = jobs.filter(j => j.status !== 'Completed');
+    const grab = () => new Map(pending.map(j => [j, { machine: j.machine, originalMachine: j.originalMachine, isOffloaded: j.isOffloaded, startHour: j.startHour }]));
+    const put = (snap) => snap.forEach((v, j) => { j.machine = v.machine; j.originalMachine = v.originalMachine; j.isOffloaded = v.isOffloaded; j.startHour = v.startHour; });
+    const original = grab();
+    pending.forEach(j => { delete j.releaseHour; });
+
+    const drumStats = (list) => {
+      const perWc = {};
+      list.forEach(j => {
+        if (j.status === 'Completed' || !roles.drum.has(j.machine)) return;
+        const w = perWc[j.machine] || (perWc[j.machine] = { jobs: 0, busy: 0, first: Infinity, last: 0 });
+        w.jobs++; w.busy += j.estHours; w.first = Math.min(w.first, j.startHour); w.last = Math.max(w.last, j.startHour + j.estHours);
+      });
+      Object.values(perWc).forEach(w => {
+        const span = Math.max(0, w.last - w.first);
+        w.idle = +Math.max(0, span - w.busy).toFixed(2);
+        w.utilization = span > 0 ? +(w.busy / span).toFixed(3) : 1;
+        w.busy = +w.busy.toFixed(2);
+      });
+      return perWc;
+    };
+    const lastDrumEnd = (stats) => Math.max(0, ...Object.values(stats).map(w => w.last));
+
+    const result1 = this.applyForwardsFinite(jobs, scale, nowWorkingHour, workCenters, allowOffload, groupSameItem, runOptions);
+    const stats1 = drumStats(result1);
+    const pass1 = grab();
+
+    // Rope release hour of every upstream step, from the pass-1 drum start of its WO
+    const byWo = new Map();
+    pending.forEach(j => {
+      if (!j.woId) return;
+      if (!byWo.has(j.woId)) byWo.set(j.woId, []);
+      byWo.get(j.woId).push(j);
+    });
+    const release = new Map();
+    const childrenOf = Scheduler._amwChildrenOf || new Map();
+    const drumStartOfWo = new Map();
+    byWo.forEach((steps, wo) => {
+      steps.sort((a, b) => a.stepNum - b.stepNum);
+      const weld = steps.find(j => roles.drum.has(j.machine));
+      if (weld) drumStartOfWo.set(wo, weld.startHour);
+    });
+    // Rope target per WO = earliest Drum start that it feeds (its own Welding step, or any ancestor's)
+    const needBy = new Map();
+    const visit = (wo, t, seen) => {
+      if (seen.has(wo)) return;
+      seen.add(wo);
+      if (needBy.get(wo) === undefined || t < needBy.get(wo)) needBy.set(wo, t);
+      (childrenOf.get(wo) || []).forEach(c => visit(c, t, seen));
+      seen.delete(wo);
+    };
+    drumStartOfWo.forEach((t, wo) => visit(wo, t, new Set()));
+    byWo.forEach((steps, wo) => {
+      const target = needBy.get(wo);
+      if (target === undefined) return;
+      const ownWeldIdx = steps.findIndex(j => roles.drum.has(j.machine));
+      // own steps before the weld step, or every step of a child WO feeding a welded parent
+      const last = ownWeldIdx >= 0 ? ownWeldIdx : steps.length;
+      for (let i = last - 1; i >= 0; i--) {
+        const chain = steps.slice(i, last).reduce((sum, j) => sum + j.estHours, 0);
+        const lead = Math.max(0, target - steps[i].startHour);
+        const buffer = Math.max(8.0, lead * AMW_CONSTRAINT_BUFFER_RATIO);
+        const rel = target - chain - buffer;
+        if (rel > steps[i].startHour + 1e-6 && rel > nowWorkingHour) release.set(steps[i], rel);
+      }
+    });
+
+    let result = result1;
+    let stats = stats1;
+    let passUsed = 1;
+    if (release.size > 0) {
+      put(original);
+      release.forEach((rel, j) => { j.releaseHour = rel; });
+      const result2 = this.applyForwardsFinite(jobs, scale, nowWorkingHour, workCenters, allowOffload, groupSameItem, runOptions);
+      const stats2 = drumStats(result2);
+      // Throughput guard: keep the Rope plan only when the Drum does not finish later (tolerance 8h)
+      if (lastDrumEnd(stats2) <= lastDrumEnd(stats1) + 8.0) {
+        result = result2; stats = stats2; passUsed = 2;
+      } else {
+        pending.forEach(j => { delete j.releaseHour; });
+        put(pass1);
+        result = result1;
+      }
+    }
+
+    Scheduler.lastAmwReport = {
+      at: Date.now(), passUsed, ropeReleases: passUsed === 2 ? release.size : 0,
+      drum: stats, drumWorkCenters: Array.from(roles.drum), cncWorkCenters: Array.from(roles.cnc)
+    };
+    return result;
   }
 
   // Backward Active Job Shop Scheduling Pass

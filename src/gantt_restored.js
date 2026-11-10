@@ -401,6 +401,7 @@ export class GanttController {
     // Update active model tag text if present
     const modelLabels = {
       whiteboard: 'Model: Whiteboard & Cell (Manual)',
+      amw: 'Model: AMW DBR (Welding Drum)',
       finite: 'Model: Forwards Finite Capacity',
       infinite: 'Model: Backwards Infinite Capacity'
     };
@@ -642,7 +643,7 @@ export class GanttController {
           // 1. Detect sequence routing overlaps (Sequence Warning)
           let isSeqError = false;
           let isParentChildViolation = false;
-          if (job.woId && this.state.schedulingModel !== 'finite') {
+          if (job.woId && !['finite', 'amw'].includes(this.state.schedulingModel)) {
             const sisterSteps = this.state.scheduledJobs.filter(j => j.woId === job.woId && j.id !== job.id);
             sisterSteps.forEach(sister => {
               // If prior step starts after this step starts
@@ -890,7 +891,7 @@ export class GanttController {
       });
 
         // 3. Render Overlap Warnings
-        if (this.state.schedulingModel !== 'finite') {
+        if (!['finite', 'amw'].includes(this.state.schedulingModel)) {
           const overlaps = this.detectOverlaps(machineJobs);
           overlaps.forEach(overlap => {
             const timelineEnd = config.startOffset + config.totalHours;
@@ -1118,7 +1119,7 @@ export class GanttController {
           // 1. Detect sequence routing overlaps (Sequence Warning)
           let isSeqError = false;
           let isParentChildViolation = false;
-          if (job.woId && this.state.schedulingModel !== 'finite') {
+          if (job.woId && !['finite', 'amw'].includes(this.state.schedulingModel)) {
             const sisterSteps = this.state.scheduledJobs.filter(j => j.woId === job.woId && j.id !== job.id);
             sisterSteps.forEach(sister => {
               // If prior step starts after this step starts
@@ -1365,7 +1366,7 @@ export class GanttController {
         });
 
         // 3. Render Overlap Warnings
-        if (this.state.schedulingModel !== 'finite') {
+        if (!['finite', 'amw'].includes(this.state.schedulingModel)) {
           const overlaps = this.detectOverlaps(machineJobs);
           overlaps.forEach(overlap => {
             const timelineEnd = config.startOffset + config.totalHours;
