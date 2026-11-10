@@ -18,6 +18,7 @@ export function computeStrategyKpis(state) {
     byDrum.get(j.machine).push(j);
   });
   let drumLast = 0, busy = 0, capacityHours = 0, starve = 0;
+  const perDrum = [];
   byDrum.forEach((list, m) => {
     list.sort((a, b) => a.startHour - b.startHour);
     const cap = Math.max(1, parseInt(state.workCenters[m]?.capacity, 10) || 1);
@@ -30,7 +31,13 @@ export function computeStrategyKpis(state) {
     const first = list[0].startHour;
     drumLast = Math.max(drumLast, curEnd);
     capacityHours += Math.max(0, curEnd - first) * cap;
+    const wcBusy = list.reduce((sum, j) => sum + j.estHours, 0);
+    perDrum.push({
+      code: m, name: state.workCenters[m]?.name || m, jobs: list.length, cap,
+      busy: wcBusy, last: curEnd, util: curEnd - first > 0 ? wcBusy / ((curEnd - first) * cap) : null
+    });
   });
+  perDrum.sort((a, b) => b.jobs - a.jobs);
   const drumUtil = capacityHours > 0 ? busy / capacityHours : null;
 
   // Per-WO step lists
@@ -100,6 +107,7 @@ export function computeStrategyKpis(state) {
     changeovers,
     variant,
     drumNames: Array.from(roles.drum).map(c => state.workCenters[c]?.name || c),
+    perDrum,
     drumLast: byDrum.size ? drumLast : null,
     drumUtil,
     starveHours: byDrum.size ? starve : null,
@@ -148,9 +156,12 @@ export class StrategyKpiPanel {
       return;
     }
     const model = this.state.schedulingModel;
+    const drumLabel = k.perDrum.length === 0 ? '-' : k.perDrum.length === 1 ? k.perDrum[0].name
+      : `${k.perDrum[0].name} +${k.perDrum.length - 1}`;
+    const drumDetail = k.perDrum.map(d => `${d.code} ${d.name}: ${d.jobs} งาน, ${d.busy.toFixed(0)} ชม., ${d.cap} lane, Util ${d.util === null ? '-' : (d.util * 100).toFixed(0) + '%'}`).join('\n');
     const cards = [
-      { label: 'Drum จบ', value: this.fmtDate(k.drumLast), sub: k.drumUtil === null ? '' : `Util ${(k.drumUtil * 100).toFixed(0)}%`,
-        tip: `วันที่ Drum (${k.drumNames.join(', ')}) ทำงานชิ้นสุดท้ายเสร็จ และ % การใช้งาน. Throughput ของ Drum = Throughput ทั้งโรงงาน` },
+      { label: `Drum: ${drumLabel}`, value: this.fmtDate(k.drumLast), sub: k.drumUtil === null ? '' : `Util ${(k.drumUtil * 100).toFixed(0)}%`,
+        tip: `วันที่ Drum ทำงานชิ้นสุดท้ายเสร็จ และ % การใช้งาน. Throughput ของ Drum = Throughput ทั้งโรงงาน\n${drumDetail}` },
       { label: 'Drum ว่าง', value: this.fmtNum(k.starveHours, 0, ' ชม.'), sub: 'Starvation',
         tip: 'ชั่วโมงที่ Drum ว่างระหว่างงาน (ไม่มีงานเลยทั้ง Work Center) ยิ่งน้อยยิ่งดี (รวมช่วงกลางคืน/วันหยุดด้วย)' },
       { label: 'รอก่อน Drum', value: this.fmtNum(k.waitBeforeDrum, 0, ' ชม.'), sub: `เฉลี่ย ${k.waitBeforeDrumCount} งาน`,
