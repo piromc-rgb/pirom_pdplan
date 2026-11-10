@@ -1,0 +1,176 @@
+import { getAmwRoles } from './scheduler.js';
+
+// Planning-strategy KPIs shown at the top right of the header. They are computed from the current plan
+// (any Scheduling Model) so the models can be compared side by side. Drum = the constraint Work Center(s)
+// of the selected AMW model (Drum = Welding for 'amw-weld', otherwise CNC VF4 / VF7).
+export function computeStrategyKpis(state) {
+  const variant = state.schedulingModel === 'amw-weld' ? 'amw-weld' : 'amw';
+  const roles = getAmwRoles(state.workCenters, variant);
+  const jobs = (state.scheduledJobs || []).filter(j => j.status !== 'Completed' && j.opStatus !== 'Completed' && Number.isFinite(j.startHour));
+  const end = j => j.startHour + j.estHours;
+  const now = state.dateToWorkingHour(new Date());
+
+  // Drum: last finish, utilization, starvation (idle gaps while the whole Drum Work Center is empty)
+  const byDrum = new Map();
+  jobs.forEach(j => {
+    if (!roles.drum.has(j.machine)) return;
+    if (!byDrum.has(j.machine)) byDrum.set(j.machine, []);
+    byDrum.get(j.machine).push(j);
+  });
+  let drumLast = 0, busy = 0, capacityHours = 0, starve = 0;
+  byDrum.forEach((list, m) => {
+    list.sort((a, b) => a.startHour - b.startHour);
+    const cap = Math.max(1, parseInt(state.workCenters[m]?.capacity, 10) || 1);
+    let curEnd = list[0].startHour;
+    list.forEach(j => {
+      busy += j.estHours;
+      if (j.startHour - curEnd > 0.25) starve += j.startHour - curEnd;
+      curEnd = Math.max(curEnd, end(j));
+    });
+    const first = list[0].startHour;
+    drumLast = Math.max(drumLast, curEnd);
+    capacityHours += Math.max(0, curEnd - first) * cap;
+  });
+  const drumUtil = capacityHours > 0 ? busy / capacityHours : null;
+
+  // Per-WO step lists
+  const byWo = new Map();
+  jobs.forEach(j => {
+    if (!j.woId) return;
+    if (!byWo.has(j.woId)) byWo.set(j.woId, []);
+    byWo.get(j.woId).push(j);
+  });
+  byWo.forEach(list => list.sort((a, b) => a.stepNum - b.stepNum));
+
+  // Wait before the Drum: previous step of the same PD, and child PDs (assembly links) finishing before the Drum step
+  const waits = [];
+  byWo.forEach(list => {
+    list.forEach((j, i) => {
+      if (roles.drum.has(j.machine) && i > 0) waits.push(Math.max(0, j.startHour - end(list[i - 1])));
+    });
+  });
+  const seen = new Set();
+  (state.assemblyLinks || []).forEach(l => {
+    const p = String(l.to).split('-')[0];
+    const c = String(l.from).split('-')[0];
+    const key = c + '>' + p;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const parent = byWo.get(p);
+    const child = byWo.get(c);
+    if (!parent || !child) return;
+    const drumStep = parent.find(j => roles.drum.has(j.machine));
+    if (!drumStep) return;
+    const w = drumStep.startHour - Math.max(...child.map(end));
+    if (w >= 0) waits.push(w);
+  });
+
+  // Wait for CNC right after the Drum
+  const cncWaits = [];
+  byWo.forEach(list => {
+    list.forEach((j, i) => {
+      if (roles.drum.has(j.machine) && i < list.length - 1 && roles.cnc.has(list[i + 1].machine)) {
+        cncWaits.push(Math.max(0, list[i + 1].startHour - end(j)));
+      }
+    });
+  });
+
+  // Flow time (PD finish - now, working days) and makespan
+  const woEnds = [];
+  byWo.forEach(list => woEnds.push(Math.max(...list.map(end))));
+  const avg = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+  const flowDays = woEnds.length ? Math.max(0, avg(woEnds) - now) / 8 : null;
+  const makespan = woEnds.length ? Math.max(...woEnds) : null;
+
+  return {
+    variant,
+    drumNames: Array.from(roles.drum).map(c => state.workCenters[c]?.name || c),
+    drumLast: byDrum.size ? drumLast : null,
+    drumUtil,
+    starveHours: byDrum.size ? starve : null,
+    waitBeforeDrum: avg(waits),
+    waitBeforeDrumCount: waits.length,
+    drumToCncWait: avg(cncWaits),
+    flowDays,
+    makespan
+  };
+}
+
+export class StrategyKpiPanel {
+  constructor(state) {
+    this.state = state;
+    this.el = document.getElementById('strategy-kpi');
+    this.timer = null;
+    if (this.el) {
+      state.subscribe(() => this.schedule());
+      window.addEventListener('resize', () => this.fit());
+      this.schedule();
+    }
+  }
+
+  schedule() {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => { this.timer = null; this.render(); }, 250);
+  }
+
+  fmtDate(h) {
+    if (h === null || h === undefined) return '-';
+    const d = this.state.workingHourToDate(h);
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  fmtNum(v, digits = 1, unit = '') {
+    return v === null || v === undefined || !Number.isFinite(v) ? '-' : `${v.toFixed(digits)}${unit}`;
+  }
+
+  render() {
+    if (!this.el) return;
+    let k;
+    try {
+      k = computeStrategyKpis(this.state);
+    } catch (e) {
+      this.el.innerHTML = '';
+      return;
+    }
+    const model = this.state.schedulingModel;
+    const cards = [
+      { label: 'Drum จบ', value: this.fmtDate(k.drumLast), sub: k.drumUtil === null ? '' : `Util ${(k.drumUtil * 100).toFixed(0)}%`,
+        tip: `วันที่ Drum (${k.drumNames.join(', ')}) ทำงานชิ้นสุดท้ายเสร็จ และ % การใช้งาน. Throughput ของ Drum = Throughput ทั้งโรงงาน` },
+      { label: 'Drum ว่าง', value: this.fmtNum(k.starveHours, 0, ' ชม.'), sub: 'Starvation',
+        tip: 'ชั่วโมงที่ Drum ว่างระหว่างงาน (ไม่มีงานเลยทั้ง Work Center) ยิ่งน้อยยิ่งดี (รวมช่วงกลางคืน/วันหยุดด้วย)' },
+      { label: 'รอก่อน Drum', value: this.fmtNum(k.waitBeforeDrum, 0, ' ชม.'), sub: `เฉลี่ย ${k.waitBeforeDrumCount} งาน`,
+        tip: 'เวลาเฉลี่ยที่งานต้นน้ำ/PD ลูกเสร็จแล้วต้องรอก่อนเข้า Drum = WIP หน้า Drum ยิ่งน้อยยิ่งดี' },
+      { label: 'Drum→CNC รอ', value: this.fmtNum(k.drumToCncWait, 0, ' ชม.'), sub: 'เฉลี่ย',
+        tip: 'เวลาเฉลี่ยที่ชิ้นงานออกจาก Drum แล้วรอขึ้น CNC ตัวถัดไป ยิ่งน้อยยิ่งดี' },
+      { label: 'Flow เฉลี่ย', value: this.fmtNum(k.flowDays, 1, ' วัน'), sub: 'ต่อ PD',
+        tip: 'เวลาเฉลี่ยจากวันนี้ถึง PD เสร็จ (วันทำงาน 8 ชม.) ยิ่งน้อยยิ่งดี' },
+      { label: 'จบแผน', value: this.fmtDate(k.makespan), sub: 'Makespan',
+        tip: 'วันที่งานสุดท้ายในแผนเสร็จ' }
+    ];
+    this.el.title = `Model: ${model} | Drum: ${k.drumNames.join(', ')}`;
+    this.el.innerHTML = cards.map((c, i) => `
+      <div class="kpi-card" data-prio="${[0, 2, 1, 4, 3, 5][i]}" title="${c.tip}">
+        <div class="kpi-label">${c.label}</div>
+        <div class="kpi-value">${c.value}</div>
+        <div class="kpi-sub">${c.sub}</div>
+      </div>`).join('');
+    this.fit();
+  }
+
+  // Show as many cards as fit next to the header controls (lowest priority card is hidden first)
+  fit() {
+    const box = this.el && this.el.parentElement;
+    if (!box) return;
+    const cards = Array.from(this.el.children);
+    cards.forEach(c => { c.style.display = ''; });
+    const byPrio = cards.slice().sort((a, b) => Number(b.dataset.prio) - Number(a.dataset.prio));
+    let guard = cards.length;
+    while (guard-- > 0 && this.el.scrollWidth > box.clientWidth + 1) {
+      const next = byPrio.shift();
+      if (!next) break;
+      next.style.display = 'none';
+    }
+    if (this.el.scrollWidth > box.clientWidth + 1) this.el.style.visibility = 'hidden';
+    else this.el.style.visibility = '';
+  }
+}

@@ -4,15 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V5.185 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V5.186 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-D291przC.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-Bu-z-g-9.css">
+    <script type="module" crossorigin src="./assets/index-BUrbRYw4.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-B5viVMPp.css">
   </head>
   <body>
     <div id="app-container">
@@ -267,20 +267,9 @@
           </div>
         </div>
 
-        <!-- Global Metrics -->
-        <div class="global-metrics" style="margin-right: 90px; display: none;">
-          <div class="metric-card">
-            <div class="metric-label">On-Time Delivery</div>
-            <div class="metric-value text-green" id="metric-otd">94%</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Avg Shop OEE</div>
-            <div class="metric-value text-cyan" id="metric-oee">82%</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Active / Total Jobs</div>
-            <div class="metric-value" id="metric-jobs-count">4 / 10</div>
-          </div>
+        <!-- Planning strategy KPIs (top right) -->
+        <div class="global-metrics">
+          <div id="strategy-kpi" class="strategy-kpi"></div>
         </div>
       </header>
 

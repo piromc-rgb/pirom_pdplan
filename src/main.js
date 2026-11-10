@@ -13,6 +13,7 @@ import { ResourcesController } from './resources.js';
 import { KioskController } from './kiosk.js';
 import { DailyScheduleController } from './dailySchedule.js';
 import { MobileModeController } from './mobileMode.js';
+import { StrategyKpiPanel } from './strategyKpi.js';
 import { AssemblyTreeController, matchesAssemblyQuery } from './assemblyTree.js';
 import { ContinuityAnalysisController } from './continuityAnalysis.js';
 import { QcCheckController } from './qcCheck.js';
@@ -129,7 +130,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.185';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.186';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -159,6 +160,7 @@ class App {
     this.kiosk = new KioskController(state);
     this.dailySchedule = new DailyScheduleController(state);
     this.mobileMode = new MobileModeController(state);
+    this.strategyKpi = new StrategyKpiPanel(state);
     this.assemblyTree = new AssemblyTreeController(state, this.gantt);
     state.assemblyTree = this.assemblyTree;
     window.assemblyTree = this.assemblyTree;
@@ -3453,26 +3455,6 @@ class App {
   }
 
   renderKPIs() {
-    // 1. On-Time Delivery calculation
-    // Count active delays or late jobs
-    const delayedCount = state.scheduledJobs.filter(j => j.status === 'Paused' || j.delayReason).length;
-    const otd = Math.max(70, 96 - (delayedCount * 8));
-    document.getElementById('metric-otd').textContent = `${otd}%`;
-    document.getElementById('metric-otd').className = otd > 85 ? 'metric-value text-green' : 'metric-value text-orange';
-
-    // 2. Average Shop OEE calculation
-    const machineList = Object.keys(state.workCenters);
-    const avgOee = Math.round(
-      machineList.reduce((sum, mach) => sum + state.getMachineOEE(mach).oee, 0) / machineList.length
-    );
-    document.getElementById('metric-oee').textContent = `${avgOee}%`;
-    document.getElementById('metric-oee').className = avgOee > 75 ? 'metric-value text-cyan' : 'metric-value text-orange';
-
-    // 3. Active / Total count
-    const runningCount = state.scheduledJobs.filter(j => j.status === 'Running').length;
-    const totalCount = state.scheduledJobs.length;
-    document.getElementById('metric-jobs-count').textContent = `${runningCount} / ${totalCount}`;
-
     // 4. Calculate unique late Work Orders
     const lateWOIds = new Set();
     state.scheduledJobs.forEach(job => {
