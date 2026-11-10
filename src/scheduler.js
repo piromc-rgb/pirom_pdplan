@@ -30,10 +30,12 @@ export function getItemKey(jobOrWo) {
   return part ? part.toUpperCase() : '';
 }
 
-// AMW strategy (TOC / Drum-Buffer-Rope): Welding is the Drum, CNC is protected from starvation.
-// A Work Center can override its role with workCenters[code].amwRole = 'drum' | 'cnc' | 'none'.
-export const AMW_DEFAULT_DRUM_WCS = ['DEB011', 'DEB012', 'DEB013', 'DEB014'];
-export const AMW_DEFAULT_CNC_WCS = ['DEA012', 'DEA016', 'DEA021', 'DEA022', 'DEA023', 'DEA024', 'DEA025', 'DEA026', 'DEA027', 'DEA028'];
+// AMW strategy (TOC / Drum-Buffer-Rope): the Drum is the real bottleneck Work Center, CNC is protected from starvation.
+// Default Drum = CNC VF4 / VF7 (DEA024 / DEA023): the plan keeps them ~100% loaded while Welding (DEB011-014) is ~20-50%.
+// A Work Center can override its role with workCenters[code].amwRole = 'drum' | 'cnc' | 'none'
+// (e.g. set the Welding centers to 'drum' when Welding becomes the constraint).
+export const AMW_DEFAULT_DRUM_WCS = ['DEA023', 'DEA024'];
+export const AMW_DEFAULT_CNC_WCS = ['DEA012', 'DEA016', 'DEA021', 'DEA022', 'DEA025', 'DEA026', 'DEA027', 'DEA028'];
 export const AMW_CONSTRAINT_BUFFER_RATIO = 0.5; // Constraint Buffer = 1/2 of the upstream -> Welding lead time
 
 export function getAmwRoles(workCenters = {}) {

@@ -829,7 +829,7 @@ export class GanttController {
     // Update active model tag text if present
     const modelLabels = {
       whiteboard: 'Model: Whiteboard & Cell (Manual)',
-      amw: 'Model: AMW DBR (Welding Drum)',
+      amw: 'Model: AMW DBR (Drum = CNC VF4/VF7)',
       finite: 'Model: Forwards Finite Capacity',
       infinite: 'Model: Backwards Infinite Capacity'
     };
