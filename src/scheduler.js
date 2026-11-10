@@ -445,6 +445,8 @@ export class Scheduler {
       ...existingScheduledJobs.map(j => j.machine)
     ])];
 
+    const isDone = (j) => j.status === 'Completed' || j.opStatus === 'Completed';
+
     // Initialize each machine's lanes (capacity-many) based on existing scheduled jobs.
     // Existing jobs are greedily packed onto whichever lane is free earliest, same
     // idea as interval-graph "machine minimization" packing.
@@ -461,7 +463,9 @@ export class Scheduler {
       machineJobs.forEach(j => {
         let best = 0;
         for (let i = 1; i < lanes.length; i++) if (lanes[i] < lanes[best]) best = i;
-        lanes[best] = Math.max(lanes[best], j.startHour + j.estHours);
+        // A finished job cannot occupy time that has not happened yet (its startHour may still hold the old planned date).
+        const jEnd = isDone(j) ? Math.min(j.startHour + j.estHours, startOffset) : j.startHour + j.estHours;
+        lanes[best] = Math.max(lanes[best], jEnd);
         lastItems[best] = getItemKey(j);
         lastMats[best] = matKeysOf(j);
       });
@@ -474,7 +478,7 @@ export class Scheduler {
     existingScheduledJobs.forEach(j => {
       if (j.woId) {
         const currentEnd = woEndTime[j.woId] || startOffset;
-        const jobEnd = j.startHour + j.estHours;
+        const jobEnd = isDone(j) ? Math.min(j.startHour + j.estHours, startOffset) : j.startHour + j.estHours;
         if (jobEnd >= currentEnd) {
           woEndTime[j.woId] = jobEnd;
           woLastMachine[j.woId] = j.machine;
