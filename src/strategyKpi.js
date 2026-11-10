@@ -1,4 +1,4 @@
-import { getAmwRoles, getItemKey } from './scheduler.js';
+import { getAmwRoles, getItemKey, AMW_WELD_DRUM_WCS, AMW_WELD_CNC_WCS } from './scheduler.js';
 
 // Planning-strategy KPIs shown at the top right of the header. They are computed from the current plan
 // (any Scheduling Model) so the models can be compared side by side. Drum = the constraint Work Center(s)
@@ -89,6 +89,38 @@ export function computeStrategyKpis(state) {
   const flowDays = woEnds.length ? Math.max(0, avg(woEnds) - now) / 8 : null;
   const makespan = woEnds.length ? Math.max(...woEnds) : null;
 
+  // Queue wait, Welding vs CNC side by side (independent of which Work Center is the Drum):
+  // wait before a step = its start - end of the previous step of the same PD (Welding also counts child PDs)
+  const waitStats = (machineSet, withChildren) => {
+    const list = [];
+    byWo.forEach(steps => {
+      steps.forEach((j, i) => {
+        if (machineSet.has(j.machine) && i > 0) list.push(Math.max(0, j.startHour - end(steps[i - 1])));
+      });
+    });
+    if (withChildren) {
+      const seenPairs = new Set();
+      (state.assemblyLinks || []).forEach(l => {
+        const p = String(l.to).split('-')[0];
+        const c = String(l.from).split('-')[0];
+        const key = c + '>' + p;
+        if (seenPairs.has(key)) return;
+        seenPairs.add(key);
+        const parent = byWo.get(p);
+        const child = byWo.get(c);
+        if (!parent || !child) return;
+        const step = parent.find(j => machineSet.has(j.machine));
+        if (!step) return;
+        const w = step.startHour - Math.max(...child.map(end));
+        if (w >= 0) list.push(w);
+      });
+    }
+    const total = list.reduce((a, b) => a + b, 0);
+    return { n: list.length, avg: list.length ? total / list.length : null, total, max: list.length ? Math.max(...list) : null };
+  };
+  const weldWait = waitStats(new Set(AMW_WELD_DRUM_WCS), true);
+  const cncWait = waitStats(new Set(AMW_WELD_CNC_WCS), false);
+
   // Changeovers: consecutive jobs on the same Work Center that are a different item (Setup proxy)
   let changeovers = 0;
   const byMachine = new Map();
@@ -104,6 +136,8 @@ export function computeStrategyKpis(state) {
   });
 
   return {
+    weldWait,
+    cncWait,
     changeovers,
     variant,
     drumNames: Array.from(roles.drum).map(c => state.workCenters[c]?.name || c),
@@ -166,6 +200,8 @@ export class StrategyKpiPanel {
         tip: 'ชั่วโมงที่ Drum ว่างระหว่างงาน (ไม่มีงานเลยทั้ง Work Center) ยิ่งน้อยยิ่งดี (รวมช่วงกลางคืน/วันหยุดด้วย)' },
       { label: 'รอก่อน Drum', value: this.fmtNum(k.waitBeforeDrum, 0, ' ชม.'), sub: `เฉลี่ย ${k.waitBeforeDrumCount} งาน`,
         tip: 'เวลาเฉลี่ยที่งานต้นน้ำ/PD ลูกเสร็จแล้วต้องรอก่อนเข้า Drum = WIP หน้า Drum ยิ่งน้อยยิ่งดี' },
+      { label: 'รอคิว WELD | CNC', value: `${this.fmtNum(k.weldWait.avg, 0)} | ${this.fmtNum(k.cncWait.avg, 0)}`, sub: 'ชม./งาน เฉลี่ย',
+        tip: `เวลาเฉลี่ยที่งานรอก่อนเข้าเครื่อง (เสร็จ step ก่อนหน้า/PD ลูกแล้วแต่ยังไม่ได้ทำ)\nWELD (เชื่อม): เฉลี่ย ${this.fmtNum(k.weldWait.avg, 1)} ชม., รวม ${this.fmtNum(k.weldWait.total, 0)} ชม., สูงสุด ${this.fmtNum(k.weldWait.max, 0)} ชม., ${k.weldWait.n} รายการ\nCNC: เฉลี่ย ${this.fmtNum(k.cncWait.avg, 1)} ชม., รวม ${this.fmtNum(k.cncWait.total, 0)} ชม., สูงสุด ${this.fmtNum(k.cncWait.max, 0)} ชม., ${k.cncWait.n} รายการ` },
       { label: 'Drum→CNC รอ', value: this.fmtNum(k.drumToCncWait, 0, ' ชม.'), sub: 'เฉลี่ย',
         tip: 'เวลาเฉลี่ยที่ชิ้นงานออกจาก Drum แล้วรอขึ้น CNC ตัวถัดไป ยิ่งน้อยยิ่งดี' },
       { label: 'Flow เฉลี่ย', value: this.fmtNum(k.flowDays, 1, ' วัน'), sub: 'ต่อ PD',
@@ -177,7 +213,7 @@ export class StrategyKpiPanel {
     ];
     this.el.title = `Model: ${model} | Drum: ${k.drumNames.join(', ')}`;
     this.el.innerHTML = cards.map((c, i) => `
-      <div class="kpi-card" data-prio="${[0, 2, 1, 4, 3, 5, 6][i]}" title="${c.tip}">
+      <div class="kpi-card" data-prio="${[0, 3, 1, 2, 5, 4, 6, 7][i]}" title="${c.tip}">
         <div class="kpi-label">${c.label}</div>
         <div class="kpi-value">${c.value}</div>
         <div class="kpi-sub">${c.sub}</div>
