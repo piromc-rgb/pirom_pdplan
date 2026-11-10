@@ -1,4 +1,4 @@
-import { getAmwRoles } from './scheduler.js';
+import { getAmwRoles, getItemKey } from './scheduler.js';
 
 // Planning-strategy KPIs shown at the top right of the header. They are computed from the current plan
 // (any Scheduling Model) so the models can be compared side by side. Drum = the constraint Work Center(s)
@@ -82,7 +82,22 @@ export function computeStrategyKpis(state) {
   const flowDays = woEnds.length ? Math.max(0, avg(woEnds) - now) / 8 : null;
   const makespan = woEnds.length ? Math.max(...woEnds) : null;
 
+  // Changeovers: consecutive jobs on the same Work Center that are a different item (Setup proxy)
+  let changeovers = 0;
+  const byMachine = new Map();
+  jobs.forEach(j => {
+    if (!byMachine.has(j.machine)) byMachine.set(j.machine, []);
+    byMachine.get(j.machine).push(j);
+  });
+  byMachine.forEach(list => {
+    list.sort((a, b) => a.startHour - b.startHour);
+    for (let i = 1; i < list.length; i++) {
+      if (getItemKey(list[i]) !== getItemKey(list[i - 1])) changeovers++;
+    }
+  });
+
   return {
+    changeovers,
     variant,
     drumNames: Array.from(roles.drum).map(c => state.workCenters[c]?.name || c),
     drumLast: byDrum.size ? drumLast : null,
@@ -145,11 +160,13 @@ export class StrategyKpiPanel {
       { label: 'Flow เฉลี่ย', value: this.fmtNum(k.flowDays, 1, ' วัน'), sub: 'ต่อ PD',
         tip: 'เวลาเฉลี่ยจากวันนี้ถึง PD เสร็จ (วันทำงาน 8 ชม.) ยิ่งน้อยยิ่งดี' },
       { label: 'จบแผน', value: this.fmtDate(k.makespan), sub: 'Makespan',
-        tip: 'วันที่งานสุดท้ายในแผนเสร็จ' }
+        tip: 'วันที่งานสุดท้ายในแผนเสร็จ' },
+      { label: 'เปลี่ยนงาน', value: String(k.changeovers), sub: 'Setup (ครั้ง)',
+        tip: 'จำนวนครั้งที่งานติดกันบนเครื่องเดียวกันเป็นคนละชิ้นงาน (ตัวแทน Setup รวม) ยิ่งน้อยยิ่งดี' }
     ];
     this.el.title = `Model: ${model} | Drum: ${k.drumNames.join(', ')}`;
     this.el.innerHTML = cards.map((c, i) => `
-      <div class="kpi-card" data-prio="${[0, 2, 1, 4, 3, 5][i]}" title="${c.tip}">
+      <div class="kpi-card" data-prio="${[0, 2, 1, 4, 3, 5, 6][i]}" title="${c.tip}">
         <div class="kpi-label">${c.label}</div>
         <div class="kpi-value">${c.value}</div>
         <div class="kpi-sub">${c.sub}</div>
@@ -174,3 +191,5 @@ export class StrategyKpiPanel {
     else this.el.style.visibility = '';
   }
 }
+
+if (typeof window !== 'undefined') window.computeStrategyKpis = computeStrategyKpis; // for console checks

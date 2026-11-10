@@ -49,6 +49,16 @@ export function waitsForChildren(machine, workCenters = {}) {
 // Variant 'amw-weld': Welding is the Drum instead (use when Welding is the real constraint); every CNC is then protected.
 export const AMW_WELD_DRUM_WCS = ['DEB011', 'DEB012', 'DEB013', 'DEB014'];
 export const AMW_WELD_CNC_WCS = ['DEA012', 'DEA016', 'DEA021', 'DEA022', 'DEA023', 'DEA024', 'DEA025', 'DEA026', 'DEA027', 'DEA028'];
+// AMW strategy modes = weight sets of the Composite Score:
+//   Score = w1*Urgency + w2*DrumFeed + w3*Criticality + w4*CNCStarvation + w5*SetupSaving - w6*WIPPenalty
+// 'balanced' keeps the plain rule order (same-item grouping, Priority -> Part Tier -> gap) with no scoring.
+export const AMW_MODES = {
+  balanced: { label: 'สมดุล (Balanced)', weights: null },
+  delivery: { label: 'ส่งมอบตึง', weights: [6, 1, 3, 1, 0, 0.5] },
+  // efficiency: plain rule order, but same-item AND same-material grouping are forced on (fewer setups / material changes)
+  efficiency: { label: 'ประสิทธิภาพ (ลด Setup)', weights: null, forceGrouping: true },
+  protect: { label: 'ป้องกันเครื่องว่าง', weights: [1, 2, 1, 5, 1, 0] }
+};
 export const AMW_CONSTRAINT_BUFFER_RATIO = 0.5; // Constraint Buffer = 1/2 of the upstream -> Welding lead time
 
 export function getAmwRoles(workCenters = {}, variant = 'amw') {
@@ -888,9 +898,37 @@ export class Scheduler {
       const lastMatsOnLane = (options.groupMat === true && workCenters[bestMachine]?.checkMaterial && machineLastMats[bestMachine]) ? machineLastMats[bestMachine][bestLaneIdx] : null;
       const sharesLastMat = (j) => !!lastMatsOnLane && lastMatsOnLane.length > 0 && matKeysOf(j).some(k => lastMatsOnLane.includes(k));
       const amwOnCnc = !!amw && amw.cnc.has(bestMachine);
+      // AMW Composite Score (non-balanced modes): each candidate gets a score, higher goes first
+      const amwWeights = amw && AMW_MODES[options.amwMode] ? AMW_MODES[options.amwMode].weights : null;
+      if (amwWeights && validCandidates.length > 1) {
+        const pw = validCandidates.map(c => getPriorityWeight(c.job.priority));
+        const minP = Math.min(...pw);
+        const maxP = Math.max(...pw);
+        const tierScore = [0, 1, 0.6, 0.3, 0];
+        validCandidates.forEach((c, i) => {
+          const j = c.job;
+          const urgency = maxP > minP ? 1 - (pw[i] - minP) / (maxP - minP) : 1;
+          const drumFeed = tierScore[tierOfJob(j)] || 0;
+          const criticality = (parentsOfChild.get(j.woId) || []).length > 0 ? 1 : (tierOfJob(j) === 1 ? 0.5 : 0);
+          const postWeld = amw.drum.has(woLastMachine[j.woId]) && woEndTime[j.woId] !== undefined;
+          const starvation = Math.min(1, (amwOnCnc && postWeld ? 1 : 0) + (c.gap <= 1e-9 ? 0.5 : 0));
+          const lastItem = machineLastItem[bestMachine] ? machineLastItem[bestMachine][bestLaneIdx] : '';
+          const lastMatsHere = machineLastMats[bestMachine] ? machineLastMats[bestMachine][bestLaneIdx] : null;
+          const sameItem = lastItem && getItemKey(j) === lastItem ? 1 : 0;
+          const sameMat = lastMatsHere && lastMatsHere.length > 0 && matKeysOf(j).some(k => lastMatsHere.includes(k)) ? 1 : 0;
+          const setupSaving = Math.min(1, sameItem + sameMat);
+          const wipPenalty = woEndTime[j.woId] === undefined ? 1 : 0; // opening a new PD adds WIP
+          c.amwScore = amwWeights[0] * urgency + amwWeights[1] * drumFeed + amwWeights[2] * criticality
+            + amwWeights[3] * starvation + amwWeights[4] * setupSaving - amwWeights[5] * wipPenalty;
+        });
+      }
       // AMW CNC rule: a part that just came out of Welding goes first (post-weld parts are never made to wait)
       const isPostWeld = (j) => !!amw && amw.drum.has(woLastMachine[j.woId]) && woEndTime[j.woId] !== undefined;
       validCandidates.sort((a, b) => {
+        if (amwWeights && a.amwScore !== undefined && b.amwScore !== undefined) {
+          const dScore = b.amwScore - a.amwScore;
+          if (Math.abs(dScore) > 1e-9) return dScore;
+        }
         if (amwOnCnc) {
           const aPW = isPostWeld(a.job) ? 1 : 0;
           const bPW = isPostWeld(b.job) ? 1 : 0;
@@ -1002,7 +1040,12 @@ export class Scheduler {
   // Returns the scheduled jobs; the Drum / Rope summary is left in Scheduler.lastAmwReport.
   static applyAmwDbr(jobs, scale = 'hr', nowWorkingHour = 0.0, workCenters = {}, allowOffload = true, groupSameItem = true, options = {}) {
     const roles = getAmwRoles(workCenters, options.amwVariant);
+    const modeDef = AMW_MODES[options.amwMode] || AMW_MODES.balanced;
     const runOptions = { ...options, amw: roles };
+    if (modeDef.forceGrouping) {
+      groupSameItem = true;
+      runOptions.groupMat = true;
+    }
     const pending = jobs.filter(j => j.status !== 'Completed');
     const grab = () => new Map(pending.map(j => [j, { machine: j.machine, originalMachine: j.originalMachine, isOffloaded: j.isOffloaded, startHour: j.startHour }]));
     const put = (snap) => snap.forEach((v, j) => { j.machine = v.machine; j.originalMachine = v.originalMachine; j.isOffloaded = v.isOffloaded; j.startHour = v.startHour; });

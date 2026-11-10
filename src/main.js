@@ -130,7 +130,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.187';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.188';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -973,6 +973,30 @@ class App {
       modelSelect.addEventListener('change', (e) => {
         const selectedModel = e.target.value;
         state.schedulingModel = selectedModel;
+        const spinTok = typeof window.showIosSpinner === 'function' ? window.showIosSpinner(420) : null;
+        setTimeout(() => {
+          try {
+            state.recomputeSchedule();
+          } finally {
+            if (typeof window.hideIosSpinner === 'function') window.hideIosSpinner(spinTok);
+          }
+        }, 25);
+      });
+    }
+
+    // 1a. AMW strategy mode (Composite Score weights): only shown for the AMW DBR models
+    const amwModeSelect = document.getElementById('amw-mode-select');
+    if (amwModeSelect) {
+      amwModeSelect.value = state.amwMode;
+      const syncAmwModeVisibility = () => {
+        amwModeSelect.style.display = state.isAmwModel() ? 'inline-block' : 'none';
+        if (amwModeSelect.value !== state.amwMode) amwModeSelect.value = state.amwMode;
+      };
+      syncAmwModeVisibility();
+      state.subscribe(syncAmwModeVisibility);
+      amwModeSelect.addEventListener('change', (e) => {
+        state.amwMode = e.target.value;
+        try { localStorage.setItem('chaken_amw_mode', state.amwMode); } catch (err) {}
         const spinTok = typeof window.showIosSpinner === 'function' ? window.showIosSpinner(420) : null;
         setTimeout(() => {
           try {

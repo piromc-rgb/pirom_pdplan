@@ -8,6 +8,12 @@ class CentralState {
     
     // Configurable scheduling model: 'whiteboard' | 'finite' | 'infinite' | 'amw' (TOC DBR, Drum = CNC VF4/VF7) | 'amw-weld' (TOC DBR, Drum = Welding)
     this.schedulingModel = 'finite';
+    // AMW strategy mode (weight set of the Composite Score): 'balanced' | 'delivery' | 'efficiency' | 'protect'
+    this.amwMode = 'balanced';
+    try {
+      const savedMode = typeof localStorage !== 'undefined' ? localStorage.getItem('chaken_amw_mode') : null;
+      if (savedMode && ['balanced', 'delivery', 'efficiency', 'protect'].includes(savedMode)) this.amwMode = savedMode;
+    } catch (e) {}
     // Fast Track (Project filter): a PD qualifies when its production time (excl. paint/adjust/assembly) exceeds hybridMinDays x hybridDayHours and it has a welding step
     this.hybridMinDays = 2;
     this.hybridDayHours = 8;
@@ -601,7 +607,8 @@ class CentralState {
       groupMat: this.groupMat === true,
       dwgToPdMap: this.dwgToPdMap,
       assemblyLinks: this.assemblyLinks,
-      amwVariant: this.schedulingModel
+      amwVariant: this.schedulingModel,
+      amwMode: this.amwMode
     });
     this.amwReport = this.isAmwModel() ? Scheduler.lastAmwReport : null;
     return result;
