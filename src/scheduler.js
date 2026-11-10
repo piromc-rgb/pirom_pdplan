@@ -544,20 +544,24 @@ export class Scheduler {
       if (pKids) {
         for (let i = 0; i < pKids.length; i++) children.add(pKids[i]);
       }
-      const lKids = linkChildren.get(parentId);
-      if (lKids) {
-        for (let i = 0; i < lKids.length; i++) children.add(lKids[i]);
-      }
       const mats = planMats[parentId];
+      const matKids = new Set();
       if (mats) {
         for (let i = 0; i < mats.length; i++) {
           const matCode = String(mats[i].mat || '').trim();
           if (!matCode) continue;
           const mapped = dwgMapObj[matCode]?.pdId;
-          if (mapped && mapped !== parentId) children.add(mapped);
+          if (mapped && mapped !== parentId) matKids.add(mapped);
           const matchWo = dwgMap.get(matCode) || woMap.get(matCode);
-          if (matchWo && matchWo !== parentId) children.add(matchWo);
+          if (matchWo && matchWo !== parentId) matKids.add(matchWo);
         }
+      }
+      matKids.forEach(k => children.add(k));
+      // A PD whose Plan + Mat lists only raw material (no child PD) has no sub-PDs: its assembly links are ignored.
+      const rawMaterialOnly = !!mats && mats.some(m => String(m.mat || '').trim()) && matKids.size === 0;
+      const lKids = rawMaterialOnly ? null : linkChildren.get(parentId);
+      if (lKids) {
+        for (let i = 0; i < lKids.length; i++) children.add(lKids[i]);
       }
       // Link / Plan + Mat children must sit in the parent's PD Range (dash-suffix children always count)
       childrenOf.set(parentId, Array.from(children).filter(cid => cid.startsWith(parentId + '-') || Scheduler.isInParentPdRange(cid, parentId, options)));
@@ -723,6 +727,22 @@ export class Scheduler {
           }
         }
 
+        // Opt-in debug: set window.__SCHED_DEBUG_WO = 'PD1234567' (then recompute) to record why that PD is not ready on a lane.
+        const dbgWo = (typeof window !== 'undefined') ? window.__SCHED_DEBUG_WO : null;
+        if (dbgWo && job.woId === dbgWo) {
+          const log = (window.__schedDebug = window.__schedDebug || []);
+          if (log.length < 400) {
+            const kids = childrenOf.get(job.woId) || [];
+            log.push({
+              machine: bestMachine, laneTime: +t.toFixed(2), step: job.stepNum,
+              priorStepUnscheduled: priorUnscheduled,
+              woEnd: woEndTime[job.woId] !== undefined ? +woEndTime[job.woId].toFixed(2) : null,
+              readyTime: readyTime === Infinity ? 'Infinity' : +readyTime.toFixed(2),
+              unscheduledChildren: kids.filter(k => (remainingStepsByWo.get(k) || []).length > 0),
+              childEnds: kids.filter(k => woEndTime[k] !== undefined).map(k => [k, +woEndTime[k].toFixed(2)]).sort((a, b) => b[1] - a[1]).slice(0, 5)
+            });
+          }
+        }
         const gap = readyTime - t;
         return { job, readyTime, gap };
       });
