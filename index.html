@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V5.186 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V5.187 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <!-- SheetJS Excel parser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="module" crossorigin src="./assets/index-BUrbRYw4.js"></script>
+    <script type="module" crossorigin src="./assets/index-CSF5oeCN.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-B5viVMPp.css">
   </head>
   <body>
@@ -203,6 +203,10 @@
               <option value="amw-weld">AMW DBR (Drum: เชื่อม)</option>
             </select>
           </div>
+
+          <button id="btn-recompute-plan" type="button" class="btn-action-small" title="คำนวณแผนใหม่: จัดลำดับทุก PD ใหม่ตาม Scheduling Model ที่เลือก (ใช้หลังแก้เครื่อง/เวลา/Priority ของ PD)" style="display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; padding: 7px 11px; font-size: 11.5px; font-weight: 700;">
+            <span>🔄</span><span>คำนวณแผนใหม่</span>
+          </button>
           
           <div id="planning-tools-dropdown" class="dropdown-container" style="position: relative; display: inline-flex; align-items: center;">
             <button id="btn-planning-tools" type="button" class="btn btn-glowing" title="เครื่องมือวางแผนและวิเคราะห์ (Planing Tools)" style="display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; padding: 8px 14px; font-size: 12px; font-weight: 700;">

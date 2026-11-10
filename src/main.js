@@ -130,7 +130,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.186';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.187';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -977,6 +977,26 @@ class App {
         setTimeout(() => {
           try {
             state.recomputeSchedule();
+          } finally {
+            if (typeof window.hideIosSpinner === 'function') window.hideIosSpinner(spinTok);
+          }
+        }, 25);
+      });
+    }
+
+    // 1b. Recompute Plan Button: lay out every PD again with the selected Scheduling Model
+    const btnRecompute = document.getElementById('btn-recompute-plan');
+    if (btnRecompute) {
+      btnRecompute.addEventListener('click', () => {
+        if (state.schedulingModel === 'whiteboard') {
+          state.ganttController?.showToast('โหมด Whiteboard & Cell (Manual) ไม่จัดแผนอัตโนมัติ เลือก Forwards Finite หรือ AMW DBR ก่อน');
+          return;
+        }
+        const spinTok = typeof window.showIosSpinner === 'function' ? window.showIosSpinner(420) : null;
+        setTimeout(() => {
+          try {
+            state.recomputeSchedule();
+            state.ganttController?.showToast('🔄 คำนวณแผนใหม่เรียบร้อย', 'success');
           } finally {
             if (typeof window.hideIosSpinner === 'function') window.hideIosSpinner(spinTok);
           }
