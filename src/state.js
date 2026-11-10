@@ -7,9 +7,10 @@ class CentralState {
     this.subscribers = [];
     
     // Configurable scheduling model: 'whiteboard' | 'finite' | 'infinite' | 'amw' (TOC DBR, Drum = CNC VF4/VF7) | 'amw-weld' (TOC DBR, Drum = Welding)
-    this.schedulingModel = 'finite';
+    // Default plan strategy: AMW DBR (Drum: CNC VF4/VF7) with the 'efficiency' mode
+    this.schedulingModel = 'amw';
     // AMW strategy mode (weight set of the Composite Score): 'balanced' | 'delivery' | 'efficiency' | 'protect'
-    this.amwMode = 'balanced';
+    this.amwMode = 'efficiency';
     try {
       const savedMode = typeof localStorage !== 'undefined' ? localStorage.getItem('chaken_amw_mode') : null;
       if (savedMode && ['balanced', 'delivery', 'efficiency', 'protect'].includes(savedMode)) this.amwMode = savedMode;
@@ -719,7 +720,7 @@ class CentralState {
     if (planData.scheduledJobs) this.scheduledJobs = planData.scheduledJobs;
     if (planData.workOrders) this.workOrders = planData.workOrders;
     if (planData.nests) this.nests = planData.nests;
-    if (planData.schedulingModel) this.schedulingModel = planData.schedulingModel === 'hybrid' ? 'finite' : planData.schedulingModel; // Hybrid Production Flow was removed
+    // The Scheduling Model is not taken from a saved plan any more: every session starts with the default strategy (AMW DBR) unless the user changes it.
     if (planData.activeScale) this.activeScale = planData.activeScale;
     if (planData.timelineOffset !== undefined) this.timelineOffset = planData.timelineOffset;
     if (planData.priorityColors) this.priorityColors = planData.priorityColors;
