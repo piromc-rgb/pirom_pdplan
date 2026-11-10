@@ -340,7 +340,29 @@ export class Scheduler {
       }
     }
 
-    return Array.from(children);
+    return Array.from(children).filter(cId => cId.startsWith(parentWoId + '-') || Scheduler.isInParentPdRange(cId, parentWoId, options));
+  }
+
+  // PD Range rule for Assembly / Plan + Mat links: a linked child only counts when it falls inside a PD Range
+  // (Summary Project Order) that also contains the parent. A parent outside every range keeps all its links.
+  static isInParentPdRange(childWoId, parentWoId, options = {}) {
+    const summary = options.projectPrioritySummary || (typeof window !== 'undefined' && window.state?.projectPrioritySummary);
+    if (!summary) return true;
+    if (!options._pdRanges) {
+      const ranges = [];
+      Object.values(summary).forEach(arr => (Array.isArray(arr) ? arr : []).forEach(r => {
+        const s = parseInt(String(r.start || '').replace(/\D/g, ''), 10);
+        const e = parseInt(String(r.end || '').replace(/\D/g, ''), 10);
+        if (!isNaN(s) && !isNaN(e)) ranges.push([s, e]);
+      }));
+      options._pdRanges = ranges;
+    }
+    const num = id => parseInt(String(id).split('-')[0].replace(/\D/g, ''), 10);
+    const p = num(parentWoId);
+    const parentRanges = options._pdRanges.filter(([s, e]) => p >= s && p <= e);
+    if (parentRanges.length === 0) return true;
+    const c = num(childWoId);
+    return parentRanges.some(([s, e]) => c >= s && c <= e);
   }
 
   static isChildWoOf(childWoId, parentWoId, options = {}) {
@@ -350,6 +372,8 @@ export class Scheduler {
     const planMaterials = options.planMaterials || (typeof window !== 'undefined' && window.state?.planMaterials) || {};
     const dwgToPdMap = options.dwgToPdMap || (typeof window !== 'undefined' && window.state?.dwgToPdMap) || {};
     const assemblyLinks = options.assemblyLinks || (typeof window !== 'undefined' && window.state?.assemblyLinks) || [];
+
+    if (!Scheduler.isInParentPdRange(childWoId, parentWoId, options)) return false;
 
     const hasLink = assemblyLinks.some(l => {
       const f = (l.from || '').split('-')[0];
@@ -535,7 +559,8 @@ export class Scheduler {
           if (matchWo && matchWo !== parentId) children.add(matchWo);
         }
       }
-      childrenOf.set(parentId, Array.from(children));
+      // Link / Plan + Mat children must sit in the parent's PD Range (dash-suffix children always count)
+      childrenOf.set(parentId, Array.from(children).filter(cid => cid.startsWith(parentId + '-') || Scheduler.isInParentPdRange(cid, parentId, options)));
     }
 
     // Remaining (not-yet-scheduled) steps per WO - sorted ascending by stepNum
