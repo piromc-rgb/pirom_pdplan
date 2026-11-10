@@ -36,6 +36,16 @@ export function getItemKey(jobOrWo) {
 // (e.g. set the Welding centers to 'drum' when Welding becomes the constraint).
 export const AMW_DEFAULT_DRUM_WCS = ['DEA023', 'DEA024'];
 export const AMW_DEFAULT_CNC_WCS = ['DEA012', 'DEA016', 'DEA021', 'DEA022', 'DEA025', 'DEA026', 'DEA027', 'DEA028'];
+// Parent / sub-PD "wait for child PDs" rule only applies to steps run on these Work Centers:
+// Welding (DEB011-014) and ASSY mechanical assembly (DEC001). Other steps of the same PD never wait for children.
+// A Work Center can override with workCenters[code].waitForChildren = true | false.
+export const CHILD_WAIT_DEFAULT_WCS = ['DEB011', 'DEB012', 'DEB013', 'DEB014', 'DEC001'];
+export function waitsForChildren(machine, workCenters = {}) {
+  const flag = workCenters && workCenters[machine] && workCenters[machine].waitForChildren;
+  if (flag === true) return true;
+  if (flag === false) return false;
+  return CHILD_WAIT_DEFAULT_WCS.includes(machine);
+}
 export const AMW_CONSTRAINT_BUFFER_RATIO = 0.5; // Constraint Buffer = 1/2 of the upstream -> Welding lead time
 
 export function getAmwRoles(workCenters = {}) {
@@ -749,7 +759,7 @@ export class Scheduler {
 
           // Parent-Child constraint (Forward Pass):
           // Parent / Sub-Assembly WO steps can only start after all Child WO steps are completed (+ lead time & move buffer).
-          if (job.woId) {
+          if (job.woId && waitsForChildren(bestMachine, workCenters)) {
             const parentWoId = job.woId;
             // Check if this WO has any direct/indirect child WOs still unscheduled
             const hasUnscheduledChildren = hasUnscheduledChildSteps(parentWoId);
@@ -820,7 +830,7 @@ export class Scheduler {
               pendingEnds.push(woEndTime[c.woId] + lastLeadHours + move);
             }
             const parentWoId = c.woId;
-            (childrenOf.get(parentWoId) || []).forEach(childWoId => {
+            (waitsForChildren(bestMachine, workCenters) ? (childrenOf.get(parentWoId) || []) : []).forEach(childWoId => {
               if (woEndTime[childWoId] !== undefined && woEndTime[childWoId] > t) {
                 const childLastM = woLastMachine[childWoId];
                 const childLeadDays = (childLastM && workCenters[childLastM]?.leadTimeDays) ? parseFloat(workCenters[childLastM].leadTimeDays) : 0;
