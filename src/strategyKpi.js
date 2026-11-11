@@ -193,8 +193,13 @@ export class StrategyKpiPanel {
     const drumLabel = k.perDrum.length === 0 ? '-' : k.perDrum.length === 1 ? k.perDrum[0].name
       : `${k.perDrum[0].name} +${k.perDrum.length - 1}`;
     const drumDetail = k.perDrum.map(d => `${d.code} ${d.name}: ${d.jobs} งาน, ${d.busy.toFixed(0)} ชม., ${d.cap} lane, Util ${d.util === null ? '-' : (d.util * 100).toFixed(0) + '%'}`).join('\n');
+    const utilPct = k.drumUtil === null ? null : k.drumUtil * 100;
     const cards = [
-      { label: `Drum: ${drumLabel}`, value: this.fmtDate(k.drumLast), sub: k.drumUtil === null ? '' : `Util ${(k.drumUtil * 100).toFixed(0)}%`,
+      { label: 'Utilization', value: utilPct === null ? '-' : `${utilPct.toFixed(0)}%`, sub: 'Drum', big: true,
+        cls: utilPct === null ? '' : utilPct >= 90 ? 'kpi-util-good' : 'kpi-util-bad', prio: -1,
+        tip: `% การใช้งาน Drum (เขียว = 90% ขึ้นไป, แดง = ต่ำกว่า 90%)
+${drumDetail}` },
+      { label: `Drum: ${drumLabel}`, value: this.fmtDate(k.drumLast), sub: 'ชิ้นสุดท้ายเสร็จ',
         tip: `วันที่ Drum ทำงานชิ้นสุดท้ายเสร็จ และ % การใช้งาน. Throughput ของ Drum = Throughput ทั้งโรงงาน\n${drumDetail}` },
       { label: 'Drum ว่าง', value: this.fmtNum(k.starveHours, 0, ' ชม.'), sub: 'Starvation',
         tip: 'ชั่วโมงที่ Drum ว่างระหว่างงาน (ไม่มีงานเลยทั้ง Work Center) ยิ่งน้อยยิ่งดี (รวมช่วงกลางคืน/วันหยุดด้วย)' },
@@ -212,10 +217,12 @@ export class StrategyKpiPanel {
         tip: 'จำนวนครั้งที่งานติดกันบนเครื่องเดียวกันเป็นคนละชิ้นงาน (ตัวแทน Setup รวม) ยิ่งน้อยยิ่งดี' }
     ];
     this.el.title = `Model: ${model} | Drum: ${k.drumNames.join(', ')}`;
-    this.el.innerHTML = cards.map((c, i) => `
-      <div class="kpi-card" data-prio="${[0, 3, 1, 2, 5, 4, 6, 7][i]}" title="${c.tip}">
+    const prios = [0, 3, 1, 2, 5, 4, 6, 7];
+    let n = 0;
+    this.el.innerHTML = cards.map(c => `
+      <div class="kpi-card${c.big ? ' kpi-util' : ''}" data-prio="${c.prio !== undefined ? c.prio : prios[n++]}" title="${c.tip}">
         <div class="kpi-label">${c.label}</div>
-        <div class="kpi-value">${c.value}</div>
+        <div class="kpi-value ${c.cls || ''}">${c.value}</div>
         <div class="kpi-sub">${c.sub}</div>
       </div>`).join('');
     this.fit();

@@ -572,6 +572,11 @@ body.dark-theme .user-mode-item.item-plan.active {
   white-space: nowrap;
 }
 
+.kpi-util { min-width: 72px; text-align: center; }
+.kpi-util .kpi-value { font-size: 24px; line-height: 1.05; }
+.kpi-value.kpi-util-good { color: #0b8a3e; }
+.kpi-value.kpi-util-bad { color: #e53935; }
+
 .kpi-sub {
   font-size: 8.5px;
   color: var(--text-secondary);
