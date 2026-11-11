@@ -302,8 +302,8 @@ export class StrategyKpiPanel {
     const redList = b => b.red.length ? '\n🔴 ' + b.red.slice(0, 10).map(x => x.text).join('\n🔴 ') + (b.red.length > 10 ? `\n... อีก ${b.red.length - 10} งาน` : '') : '';
     const cb = k.cncBuf;
     const cards = [
-      { label: `Drum: ${drumLabel}`, value: this.fmtDate(k.drumLast), sub: k.drumUtil === null ? '' : `Util ${(k.drumUtil * 100).toFixed(0)}%`,
-        tip: `Drum = Work Center คอขวดของแผน (TOC/DBR) Throughput ของ Drum = Throughput ทั้งโรงงาน\nตัวเลขใหญ่ (วัน/เดือน) = วันที่งานสุดท้ายของ Drum เสร็จ\nUtil = ชม.งานจริง ÷ (ชม.ตั้งแต่งานแรกถึงงานสุดท้าย × จำนวน lane) ต่ำ = Drum มีช่องว่าง/รองาน (ดู 'Drum ว่าง', 'รอก่อน Drum')\n"+N" = มีอีก N Work Center เป็น Drum ที่มีงาน\n${drumDetail}` },
+      { label: `Drum: ${drumLabel}`, value: k.drumUtil === null ? '-' : `<span class="${k.drumUtil > 0.8 ? 'kpi-util-ok' : 'kpi-util-low'}">Util ${(k.drumUtil * 100).toFixed(0)}%</span>`, sub: this.fmtDate(k.drumLast),
+        tip: `Drum = Work Center คอขวดของแผน (TOC/DBR) Throughput ของ Drum = Throughput ทั้งโรงงาน\nบรรทัดล่าง (วัน/เดือน) = วันที่งานสุดท้ายของ Drum เสร็จ\nUtil >80% = เขียวเข้ม, ≤80% = แดงกระพริบ\nUtil = ชม.งานจริง ÷ (ชม.ตั้งแต่งานแรกถึงงานสุดท้าย × จำนวน lane) ต่ำ = Drum มีช่องว่าง/รองาน (ดู 'Drum ว่าง', 'รอก่อน Drum')\n"+N" = มีอีก N Work Center เป็น Drum ที่มีงาน\n${drumDetail}` },
       { label: 'Drum ว่าง', value: this.fmtNum(k.starveHours, 0, ' ชม.'), sub: 'Starvation',
         tip: 'ชั่วโมงที่ Drum ว่างระหว่างงาน (ไม่มีงานเลยทั้ง Work Center) ยิ่งน้อยยิ่งดี (รวมช่วงกลางคืน/วันหยุดด้วย)' },
       { label: 'รอก่อน Drum', value: this.fmtNum(k.waitBeforeDrum, 0, ' ชม.'), sub: `เฉลี่ย ${k.waitBeforeDrumCount} งาน`,

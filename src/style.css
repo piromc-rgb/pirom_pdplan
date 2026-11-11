@@ -593,6 +593,10 @@ body.dark-theme .user-mode-item.item-plan.active {
 .kpi-z-y { color: #eab308; }
 .kpi-z-r { color: #ef4444; }
 
+.kpi-util-ok { color: #15803d; }
+.kpi-util-low { color: #ef4444; animation: kpi-util-blink 1s ease-in-out infinite; }
+@keyframes kpi-util-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
 .kpi-sub {
   font-size: 8.5px;
   color: var(--text-secondary);
