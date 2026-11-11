@@ -327,7 +327,9 @@ export class StrategyKpiPanel {
     ];
  // Drum-based cards (0,1,2,4) only make sense for the AMW models
     const drumOnly = new Set([0, 1, 2, 4, 8, 9, 10]);
-    const shown = cards.map((c, i) => ({ c, i })).filter(x => k.isAmw || !drumOnly.has(x.i));
+    // Only show Drum Util (0) and WELD | CNC queue wait (3); other cards are kept in code but hidden
+    const visibleCards = new Set([0, 3]);
+    const shown = cards.map((c, i) => ({ c, i })).filter(x => visibleCards.has(x.i) && (k.isAmw || !drumOnly.has(x.i)));
     this.el.innerHTML = shown.map(({ c, i }) => `
       <div class="kpi-card" data-prio="${[0, 3, 1, 2, 5, 4, 6, 7, 1.5, 2.5, 4.5][i]}" data-tip="${c.tip.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}">
         <div class="kpi-label">${c.label}</div>
