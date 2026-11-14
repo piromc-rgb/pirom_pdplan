@@ -557,6 +557,23 @@ body.dark-theme .user-mode-item.item-plan.active {
   cursor: help;
 }
 
+.kpi-tooltip {
+  display: none;
+  position: fixed;
+  z-index: 10000;
+  max-width: 380px;
+  padding: 8px 10px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid var(--border-glass);
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-line;
+  pointer-events: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
 .kpi-label {
   font-size: 8.5px;
   text-transform: uppercase;
@@ -572,10 +589,13 @@ body.dark-theme .user-mode-item.item-plan.active {
   white-space: nowrap;
 }
 
-.kpi-util { min-width: 72px; text-align: center; }
-.kpi-util .kpi-value { font-size: 24px; line-height: 1.05; }
-.kpi-value.kpi-util-good { color: #0b8a3e; }
-.kpi-value.kpi-util-bad { color: #e53935; }
+.kpi-z-g { color: #22c55e; }
+.kpi-z-y { color: #eab308; }
+.kpi-z-r { color: #ef4444; }
+
+.kpi-util-ok { color: #15803d; }
+.kpi-util-low { color: #ef4444; animation: kpi-util-blink 1s ease-in-out infinite; }
+@keyframes kpi-util-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 
 .kpi-sub {
   font-size: 8.5px;
