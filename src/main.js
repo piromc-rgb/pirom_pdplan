@@ -130,7 +130,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.198';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.199';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -1070,10 +1070,6 @@ class App {
     });
 
     // Zoom In / Zoom Out buttons (also Ctrl + mouse wheel on the board, handled in gantt.js)
-    const btnZoomIn = document.getElementById('btn-timeline-zoom-in');
-    const btnZoomOut = document.getElementById('btn-timeline-zoom-out');
-    if (btnZoomIn) btnZoomIn.addEventListener('click', () => this.gantt.zoomStep('in'));
-    if (btnZoomOut) btnZoomOut.addEventListener('click', () => this.gantt.zoomStep('out'));
 
     const btnTimelineFit = document.getElementById('btn-timeline-fit');
     if (btnTimelineFit) {
