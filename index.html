@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://mie-solutions.com/wp-content/themes/mie/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CHAKEN Planing V5.197 - Production Scheduling Command Center</title>
+    <title>CHAKEN Planing V5.198 - Production Scheduling Command Center</title>
     <!-- Import Google Fonts: Inter and Orbitron for industrial/high-tech UI -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -197,21 +197,22 @@
         <div class="scheduler-controls">
           <div class="model-select-wrapper">
             <label for="model-select">Scheduling Model</label>
-            <select id="model-select">
-              <option value="whiteboard">Whiteboard & Cell (Manual)</option>
-              <option value="finite">Forwards Finite Capacity</option>
-              <option value="infinite">Backwards Infinite Capacity</option>
-              <option value="amw" selected>AMW DBR (Drum: CNC VF4/VF7)</option>
-              <option value="amw-weld">AMW DBR (Drum: เชื่อม)</option>
-            </select>
-          </div>
-
-          <select id="amw-mode-select" title="กลยุทธ์ AMW (น้ำหนัก Composite Score): สมดุล / ส่งมอบตึง / ประสิทธิภาพ (ลด Setup) / ป้องกันเครื่องว่าง" style="display: none; padding: 6px 8px; font-size: 11.5px; border-radius: 6px; border: 1px solid var(--accent-blue, #3b82f6); background: rgba(59, 130, 246, 0.08); color: var(--text-primary); font-weight: 600;">
+            <div class="model-select-stack" style="display: flex; flex-direction: column; gap: 3px; align-items: stretch;">
+              <select id="model-select" style="padding: 4px 12px;">
+                <option value="whiteboard">Whiteboard & Cell (Manual)</option>
+                <option value="finite">Forwards Finite Capacity</option>
+                <option value="infinite">Backwards Infinite Capacity</option>
+                <option value="amw" selected>AMW DBR (Drum: CNC VF4/VF7)</option>
+                <option value="amw-weld">AMW DBR (Drum: เชื่อม)</option>
+              </select>
+              <select id="amw-mode-select" title="กลยุทธ์ AMW (น้ำหนัก Composite Score): สมดุล / ส่งมอบตึง / ประสิทธิภาพ (ลด Setup) / ป้องกันเครื่องว่าง" style="display: none; width: 100%; padding: 3px 8px; font-size: 11px; border-radius: 6px; border: 1px solid var(--accent-blue, #3b82f6); background: rgba(59, 130, 246, 0.08); color: var(--text-primary); font-weight: 600;">
             <option value="balanced">กลยุทธ์: สมดุล</option>
             <option value="delivery">กลยุทธ์: ส่งมอบตึง</option>
             <option value="efficiency" selected>กลยุทธ์: ประสิทธิภาพ (ลด Setup)</option>
             <option value="protect">กลยุทธ์: ป้องกันเครื่องว่าง</option>
           </select>
+            </div>
+          </div>
 
           <button id="btn-recompute-plan" type="button" class="btn-action-small" title="คำนวณแผนใหม่: จัดลำดับทุก PD ใหม่ตาม Scheduling Model ที่เลือก (ใช้หลังแก้เครื่อง/เวลา/Priority ของ PD)" style="display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; padding: 7px 9px; font-size: 11.5px; font-weight: 700;" aria-label="คำนวณแผนใหม่">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-15.5-6.2L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 15.5 6.2L21 16"/><path d="M21 21v-5h-5"/></svg>
