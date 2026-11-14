@@ -656,7 +656,7 @@ export class WorkflowController {
       const on = this.backlogStatusFilter.has(key);
       return `<span class="backlog-status-chip" data-status="${key}" role="button" title="${title} · คลิกเพื่อ${on ? 'ยกเลิกการกรอง' : 'แสดงเฉพาะ PD กลุ่มนี้'}" style="cursor: pointer; user-select: none; padding: 2px 8px; border-radius: 10px; font-weight: 700; white-space: nowrap; border: ${on ? '2px' : '1px'} solid ${color}; color: ${on ? '#fff' : color}; background: ${on ? color : bg}; ${on ? 'box-shadow: 0 0 0 2px rgba(0,0,0,0.12);' : ''}">${label} <strong>${n}</strong></span>`;
     };
-    const waitingOn = this.state.requireChildPdsClosed !== false;
+    const waitingOn = this.state.requireChildPdsClosed === true;
     const filterNote = shown < total
       ? `<label title="เปิด = แสดงเฉพาะ PD ใน Backlog ที่ผ่านตัวกรอง Priority / Project / Customer / PD Range ที่เปิดอยู่ · ปิด = แสดง PD ใน Backlog ทั้งหมด" style="width: 100%; display: flex; align-items: center; gap: 8px; color: #0369a1; font-weight: 700; cursor: pointer; user-select: none;"><span class="ios-toggle"><input type="checkbox" id="chk-backlog-filtered-only"${this.backlogFilteredOnly ? ' checked' : ''}><span class="ios-toggle-slider"></span></span><span>ตามตัวกรอง: ${shown} จาก ${total} PD</span></label>`
       : '';

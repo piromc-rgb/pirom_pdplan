@@ -544,7 +544,7 @@ class App {
         toast('⚠️ กรุณาสลับเป็นโหมดวางแผนก่อน จึงจะย้ายงานกลับ Backlog ได้', 'error');
         return;
       }
-      if (state.requireChildPdsClosed === false) {
+      if (state.requireChildPdsClosed !== true) {
         toast('ℹ️ ตัวเลือก "รอ PD ลูก Closed ก่อนวางแผนลง Board" ปิดอยู่ (เปิดได้ที่ Option ⚙)', 'info');
         return;
       }
@@ -1068,6 +1068,12 @@ class App {
         state.setActiveScale(selectedScale);
       });
     });
+
+    // Zoom In / Zoom Out buttons (also Ctrl + mouse wheel on the board, handled in gantt.js)
+    const btnZoomIn = document.getElementById('btn-timeline-zoom-in');
+    const btnZoomOut = document.getElementById('btn-timeline-zoom-out');
+    if (btnZoomIn) btnZoomIn.addEventListener('click', () => this.gantt.zoomStep('in'));
+    if (btnZoomOut) btnZoomOut.addEventListener('click', () => this.gantt.zoomStep('out'));
 
     const btnTimelineFit = document.getElementById('btn-timeline-fit');
     if (btnTimelineFit) {
@@ -2308,17 +2314,17 @@ class App {
     // AI Auto-Optimize modal itself (both read/write the same state.onlyScheduleMatReadyOp1).
     const toggleMatReadyOnly = document.getElementById('toggle-mat-ready-only');
     if (toggleMatReadyOnly) {
-      toggleMatReadyOnly.checked = state.onlyScheduleMatReadyOp1 !== false;
+      toggleMatReadyOnly.checked = state.onlyScheduleMatReadyOp1 === true;
       toggleMatReadyOnly.addEventListener('change', () => {
         state.onlyScheduleMatReadyOp1 = toggleMatReadyOnly.checked;
         state.savePlanToFile();
       });
     }
 
-    // Gear option: a PD with open child PDs stays in the Backlog until all of them are Closed (default on)
+    // Gear option: a PD with open child PDs stays in the Backlog until all of them are Closed (default off)
     const toggleChildPdClosed = document.getElementById('toggle-child-pd-closed');
     if (toggleChildPdClosed) {
-      toggleChildPdClosed.checked = state.requireChildPdsClosed !== false;
+      toggleChildPdClosed.checked = state.requireChildPdsClosed === true;
       toggleChildPdClosed.addEventListener('change', () => {
         state.requireChildPdsClosed = toggleChildPdClosed.checked;
         state.savePlanToFile();
@@ -2426,8 +2432,8 @@ class App {
       if (toggleGroupSameItem) toggleGroupSameItem.checked = state.groupSameItem !== false;
       if (toggleGroupMat) toggleGroupMat.checked = state.groupMat === true;
       if (toggleShowForceClose) toggleShowForceClose.checked = state.showForceCloseButtons === true;
-      if (toggleMatReadyOnly) toggleMatReadyOnly.checked = state.onlyScheduleMatReadyOp1 !== false;
-      if (toggleChildPdClosed) toggleChildPdClosed.checked = state.requireChildPdsClosed !== false;
+      if (toggleMatReadyOnly) toggleMatReadyOnly.checked = state.onlyScheduleMatReadyOp1 === true;
+      if (toggleChildPdClosed) toggleChildPdClosed.checked = state.requireChildPdsClosed === true;
     };
 
     state.subscribe(() => {
@@ -2591,7 +2597,7 @@ class App {
               </div>
             </div>
             <span class="ios-toggle">
-              <input type="checkbox" id="modal-toggle-mat-ready-only" ${state.onlyScheduleMatReadyOp1 !== false ? 'checked' : ''}>
+              <input type="checkbox" id="modal-toggle-mat-ready-only" ${state.onlyScheduleMatReadyOp1 === true ? 'checked' : ''}>
               <span class="ios-toggle-slider"></span>
             </span>
           </div>

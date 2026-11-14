@@ -259,6 +259,19 @@ export class GanttController {
       this.boardWrapper.addEventListener('wheel', (e) => {
         // Prevent default browser page scrolling
         e.preventDefault();
+
+        // Ctrl + wheel = Zoom In / Zoom Out the time scale, anchored at the mouse position
+        if (e.ctrlKey) {
+          const rect = this.boardWrapper.getBoundingClientRect();
+          const trackWidth = Math.max(100, (rect.width || 1000) - 140);
+          const frac = Math.min(1, Math.max(0, (e.clientX - rect.left - 140) / trackWidth));
+          const now = Date.now();
+          if (!this._lastWheelZoom || now - this._lastWheelZoom > 120) { // throttle: one step per gesture tick
+            this._lastWheelZoom = now;
+            this.zoomStep(e.deltaY < 0 ? 'in' : 'out', frac);
+          }
+          return;
+        }
         
         // Scroll vertically
         this.boardWrapper.scrollTop += e.deltaY;
@@ -3440,6 +3453,24 @@ export class GanttController {
     // Use silent scale update to avoid triggering recompute & duplicate render
     this.state.setActiveScale(targetScale, shouldRecompute, true);
     this.state.setTimelineOffset(targetOffset, false); // scale changed too: refresh every panel
+  }
+
+  // Zoom In (finer time scale) / Zoom Out (coarser) one step along the scale ladder.
+  // The time under `anchorFrac` (0 = left edge of the track, 1 = right edge) stays put.
+  zoomStep(direction, anchorFrac = 0.5) {
+    const ladder = ['min1', 'min5', 'min15', 'min30', 'hr', 'hr4', 'day', 'week', 'month', 'quarter', 'year'];
+    const cur = this.state.activeScale;
+    const idx = ladder.indexOf(cur);
+    if (idx < 0) return false;
+    const next = ladder[direction === 'in' ? idx - 1 : idx + 1];
+    if (!next) return false; // already at the finest / coarsest scale
+    const oldTotal = this.getScaleConfig(cur).totalHours;
+    const anchorHour = (this.state.timelineOffset || 0) + oldTotal * anchorFrac;
+    // Switch scale silently (no plan recompute, no auto-recenter), then restore the anchor
+    this.state.setActiveScale(next, false, true);
+    const newTotal = this.getScaleConfig(next).totalHours;
+    this.state.setTimelineOffset(anchorHour - newTotal * anchorFrac, false);
+    return true;
   }
 
   showWorkCenterPlanModal(machineName) {

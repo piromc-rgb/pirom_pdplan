@@ -93,7 +93,8 @@ class CentralState {
     // to run consecutively / simultaneously on machines, reducing setup changeovers.
     this.groupSameItem = true;
     this.groupMat = false;
-    this.requireChildPdsClosed = true; // Gear option: plan a PD only after all its child PDs are Closed
+    this.onlyScheduleMatReadyOp1 = false; // AI Auto-Optimize: only plan PDs whose Op01 Mat is ready (default off)
+    this.requireChildPdsClosed = false; // Gear option: plan a PD only after all its child PDs are Closed
     // Per project (SO): the machine list keyed in on the project setup page [{ id, itemCode, qty, targetDate 'dd/mm/yyyy' }]
     this.projectMachineLists = {};
 
@@ -2385,7 +2386,7 @@ class CentralState {
   // PDs are Closed). Skips PDs that are Closed/finished, have any completed job, or belong to a locked project.
   // Returns [{ woId, jobIds, children }].
   findBoardPdsWaitingForChildren() {
-    if (this.requireChildPdsClosed === false) return [];
+    if (this.requireChildPdsClosed !== true) return [];
     const byWo = new Map();
     (this.scheduledJobs || []).forEach(j => {
       const woId = j.woId || j.id;
@@ -2417,7 +2418,7 @@ class CentralState {
 
   // Option (Gear menu, default on): a PD with open child PDs stays in the Backlog until every child is Closed.
   isPdBlockedByChildren(woId) {
-    if (this.requireChildPdsClosed === false) return false;
+    if (this.requireChildPdsClosed !== true) return false;
     return this.getOpenChildPdsForPlanning(woId).length > 0;
   }
 
@@ -2904,7 +2905,7 @@ class CentralState {
       activeScale: this.activeScale,
       groupSameItem: this.groupSameItem !== false,
       groupMat: this.groupMat === true,
-      requireChildPdsClosed: this.requireChildPdsClosed !== false,
+      requireChildPdsClosed: this.requireChildPdsClosed === true,
       projectMachineLists: this.projectMachineLists || {},
       completedPdHistory: this.completedPdHistory || {},
       completedOpHistory: this.completedOpHistory || {},
