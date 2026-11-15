@@ -1191,8 +1191,23 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
       rows.forEach(r => { if (r._d && !lotOf.has(r._d.getTime())) lotOf.set(r._d.getTime(), lotOf.size); });
       const today = new Date(); today.setHours(0, 0, 0, 0);
       const fmtDate = (d) => d ? `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}` : '-';
+      // Priority of the machine's root PD (Board job first, then Backlog); '-' when the PD is in neither
+      const prioWeight = (pdId) => {
+        const job = pdId ? (this.state.scheduledJobs || []).find(j => (j.woId || j.id) === pdId) : null;
+        const wo = pdId ? (this.state.workOrders || []).find(w => w.id === pdId) : null;
+        return (job || wo) ? getPriorityWeight(getJobPriority(job || { woId: pdId }, this.state)) : 1e9; // no priority sorts last
+      };
+      const prioCell = (pdId) => {
+        if (!pdId) return '<span style="color:#94a3b8;">-</span>';
+        const job = (this.state.scheduledJobs || []).find(j => (j.woId || j.id) === pdId);
+        const wo = (this.state.workOrders || []).find(w => w.id === pdId);
+        if (!job && !wo) return '<span style="color:#94a3b8;">-</span>';
+        const pr = getJobPriority(job || { woId: pdId }, this.state);
+        const col = (this.state.priorityColors || {})[pr];
+        return `<span style="font-weight:700;${col ? `color:${esc(col)};` : ''}">${esc(pr)}</span>`;
+      };
       const bodyRows = rows.length === 0
-        ? '<tr><td colspan="9" style="padding:14px;color:#94a3b8;text-align:center;">ยังไม่ได้ Setup รายการเครื่องจักรของโครงการ (ดับเบิลคลิกเลขโครงการในตัวกรองเพื่อ Setup)</td></tr>'
+        ? '<tr><td colspan="11" style="padding:14px;color:#94a3b8;text-align:center;">ยังไม่ได้ Setup รายการเครื่องจักรของโครงการ (ดับเบิลคลิกเลขโครงการในตัวกรองเพื่อ Setup)</td></tr>'
         : rows.map((r, i) => {
           const t = r.total || 0;
           const pc = (n) => t > 0 ? n / t * 100 : 0;
@@ -1204,17 +1219,18 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
           const pct = (n, col) => t > 0 ? `<span style="color:${col};font-weight:700;">${pc(n).toFixed(1)}%</span>` : '-';
           const lot = r._d ? lotOf.get(r._d.getTime()) : undefined;
           const tint = lot !== undefined ? `background:${LOT_TINTS[lot % LOT_TINTS.length]};` : '';
-          return `<tr style="border-top:1px solid #e2e8f0;${tint}">
+          return `<tr data-i="${i}" style="border-top:1px solid #e2e8f0;${tint}">
             <td style="padding:5px 8px;text-align:center;color:#64748b;">${i + 1}</td>
+            <td class="ps-prio-col" data-v="${prioWeight(r.pdId)}" style="padding:5px 8px;white-space:nowrap;display:none;">${prioCell(r.pdId)}</td>
             <td style="padding:5px 8px;white-space:nowrap;">${multi ? `<span style="color:#64748b;">${esc(r.project)}</span> ` : ''}<span class="ps-item-code" data-code="${esc(r.itemCode)}" title="Double click = เปิดไฟล์แบบ PDF" style="font-family:monospace;font-weight:700;cursor:pointer;">${esc(r.itemCode)}</span></td>
             <td style="padding:5px 8px;color:#334155;">${esc(r.description)}</td>
-            <td style="padding:5px 8px;text-align:right;">${r.qty ?? '-'}</td>
-            <td style="padding:5px 8px;white-space:nowrap;${late ? 'color:#b91c1c;font-weight:700;' : ''}" title="${late ? 'เลยกำหนดส่งมอบแล้ว แต่ยังผลิตไม่เสร็จ' : ''}">${fmtDate(r._d)}</td>
-            <td style="padding:5px 8px;text-align:right;">${t}</td>
-            <td style="padding:5px 8px;min-width:200px;width:34%;">${bar}</td>
-            <td style="padding:5px 8px;text-align:right;white-space:nowrap;" title="${r.done} PD">${pct(r.done, '#15803d')}</td>
-            <td style="padding:5px 8px;text-align:right;white-space:nowrap;" title="${r.working} PD">${pct(r.working, '#a16207')}</td>
-            <td style="padding:5px 8px;text-align:right;white-space:nowrap;" title="${r.waiting} PD">${pct(r.waiting, '#dc2626')}</td>
+            <td data-v="${r.qty ?? ''}" style="padding:5px 8px;text-align:right;">${r.qty ?? '-'}</td>
+            <td data-v="${r._d ? r._d.getTime() : ''}" style="padding:5px 8px;white-space:nowrap;${late ? 'color:#b91c1c;font-weight:700;' : ''}" title="${late ? 'เลยกำหนดส่งมอบแล้ว แต่ยังผลิตไม่เสร็จ' : ''}">${fmtDate(r._d)}</td>
+            <td data-v="${t}" style="padding:5px 8px;text-align:right;">${t}</td>
+            <td data-v="${t > 0 ? pc(r.done) + pc(r.working) / 1000 : ''}" style="padding:5px 8px;min-width:200px;width:34%;">${bar}</td>
+            <td data-v="${t > 0 ? pc(r.done) : ''}" style="padding:5px 8px;text-align:right;white-space:nowrap;" title="${r.done} PD">${pct(r.done, '#15803d')}</td>
+            <td data-v="${t > 0 ? pc(r.working) : ''}" style="padding:5px 8px;text-align:right;white-space:nowrap;" title="${r.working} PD">${pct(r.working, '#a16207')}</td>
+            <td data-v="${t > 0 ? pc(r.waiting) : ''}" style="padding:5px 8px;text-align:right;white-space:nowrap;" title="${r.waiting} PD">${pct(r.waiting, '#dc2626')}</td>
           </tr>`;
         }).join('');
       return `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
@@ -1224,7 +1240,7 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
         <div style="color:#64748b;font-size:11.5px;">เรียงตามเป้าการส่งมอบ (ส่งก่อนอยู่บน) · เป้าส่งมอบวันเดียวกันใช้สีพื้นแถวเดียวกัน วันที่ต่างกันสีต่างกัน (ส่งก่อนสุด = แดงอ่อน) · ไม่มีเป้าส่งมอบอยู่ท้ายสุด · % = สัดส่วน PD ในช่วง PD (Start-End) ของเครื่องนั้นจากไฟล์ Summary Project Order (ถ้าไม่พบช่วง ใช้ชุดประกอบ BOM แทน)</div>
         <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:8px;">
           <table style="border-collapse:collapse;width:100%;font-size:12px;">
-            <thead><tr style="background:#f1f5f9;text-align:left;"><th style="padding:6px 8px;text-align:center;">#</th><th style="padding:6px 8px;">Item Code</th><th style="padding:6px 8px;">Description</th><th style="padding:6px 8px;text-align:right;">QTY</th><th style="padding:6px 8px;">เป้าส่งมอบ</th><th style="padding:6px 8px;text-align:right;">PD</th><th style="padding:6px 8px;">Progress</th><th style="padding:6px 8px;text-align:right;">เสร็จ</th><th style="padding:6px 8px;text-align:right;">กำลังผลิต</th><th style="padding:6px 8px;text-align:right;">รอผลิต</th></tr></thead>
+            <thead><tr class="ps-sort-head" style="background:#f1f5f9;text-align:left;cursor:pointer;user-select:none;" title="คลิกหัวคอลัมน์เพื่อเรียงลำดับ (คลิกซ้ำ = สลับน้อย→มาก / มาก→น้อย)"><th style="padding:6px 8px;text-align:center;">#</th><th class="ps-prio-col" style="padding:6px 8px;display:none;">Priority</th><th style="padding:6px 8px;">Item Code</th><th style="padding:6px 8px;">Description</th><th style="padding:6px 8px;text-align:right;">QTY</th><th style="padding:6px 8px;">เป้าส่งมอบ</th><th style="padding:6px 8px;text-align:right;">PD</th><th style="padding:6px 8px;">Progress</th><th style="padding:6px 8px;text-align:right;">เสร็จ</th><th style="padding:6px 8px;text-align:right;">กำลังผลิต</th><th style="padding:6px 8px;text-align:right;">รอผลิต</th></tr></thead>
             <tbody>${bodyRows}</tbody>
           </table>
         </div>`;
@@ -1283,7 +1299,10 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
             </div>
             <div id="ps-machine-actions" style="display:none;flex-direction:column;align-items:flex-end;gap:6px;">
               <button type="button" id="btn-ps-machine-pdf" style="padding:5px 12px;border:1px solid #15803d;border-radius:6px;background:#f0fdf4;color:#166534;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;" title="สรุป Progress การผลิตแยกเครื่องเป็น PDF (พิมพ์ / Save as PDF)">🖨 สรุป Progress เป็น PDF</button>
-              <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#334155;cursor:pointer;user-select:none;" title="เปิด = รายงาน PDF มีคอลัมน์แบบงาน (รูป Drawing + ลิงก์ไฟล์) ต่อจาก Item Code"><span>แบบงาน</span><span class="ios-toggle"><input type="checkbox" id="chk-ps-pdf-dwg"><span class="ios-toggle-slider"></span></span></label>
+              <div style="display:flex;align-items:center;gap:14px;">
+                <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#334155;cursor:pointer;user-select:none;" title="เปิด = แสดงคอลัมน์ Priority (ของ PD แม่ของเครื่อง) หน้า Item Code ทั้งในหน้านี้และรายงาน PDF"><span>Priority</span><span class="ios-toggle"><input type="checkbox" id="chk-ps-show-prio"><span class="ios-toggle-slider"></span></span></label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:#334155;cursor:pointer;user-select:none;" title="เปิด = รายงาน PDF มีคอลัมน์แบบงาน (รูป Drawing + ลิงก์ไฟล์) ต่อจาก Item Code"><span>แบบงาน</span><span class="ios-toggle"><input type="checkbox" id="chk-ps-pdf-dwg"><span class="ios-toggle-slider"></span></span></label>
+              </div>
             </div>
             <button type="button" id="btn-close-project-summary" style="border:none;background:transparent;font-size:18px;cursor:pointer;">✕</button>
           </div>
@@ -1333,6 +1352,49 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
     };
     overlay.querySelector('#btn-ps-machine-view')?.addEventListener('click', () => showPage(true));
     overlay.querySelector('#btn-ps-back')?.addEventListener('click', () => showPage(false));
+    // Click a column head of the progress table to sort by it (click again = reverse); "#" restores the delivery-target order
+    {
+      const tbl = overlay.querySelector('#ps-machine-view table');
+      const head = tbl && tbl.querySelector('thead tr');
+      const tbody = tbl && tbl.querySelector('tbody');
+      let sortCol = -1, sortDir = 1;
+      head?.addEventListener('click', (e) => {
+        const th = e.target.closest('th');
+        if (!th || !tbody) return;
+        const col = [...head.children].indexOf(th);
+        const rowsEl = [...tbody.querySelectorAll('tr[data-i]')];
+        if (rowsEl.length === 0) return;
+        sortDir = (col === sortCol) ? -sortDir : 1;
+        sortCol = col;
+        const key = (tr) => {
+          if (col === 0) return Number(tr.dataset.i);
+          const td = tr.children[col];
+          if (!td) return null;
+          if (td.dataset.v !== undefined) return td.dataset.v === '' ? null : Number(td.dataset.v);
+          return td.textContent.trim().toLowerCase();
+        };
+        rowsEl.sort((a, b) => {
+          const ka = key(a), kb = key(b);
+          if (ka === null && kb === null) return Number(a.dataset.i) - Number(b.dataset.i);
+          if (ka === null) return 1;   // empty values always last
+          if (kb === null) return -1;
+          const c = (typeof ka === 'number' && typeof kb === 'number') ? ka - kb : String(ka).localeCompare(String(kb), 'th', { numeric: true });
+          return (c * sortDir) || (Number(a.dataset.i) - Number(b.dataset.i));
+        });
+        rowsEl.forEach((tr, n) => { tbody.appendChild(tr); tr.children[0].textContent = String(n + 1); });
+        head.querySelectorAll('.ps-sort-ind').forEach(x => x.remove());
+        if (col !== 0) {
+          const ind = document.createElement('span');
+          ind.className = 'ps-sort-ind'; ind.style.cssText = 'font-size:9px;margin-left:3px;color:#2563eb;';
+          ind.textContent = sortDir === 1 ? '▲' : '▼';
+          th.appendChild(ind);
+        }
+      });
+    }
+    // Option "Priority": show / hide the Priority column (before Item Code) of the progress table; the PDF follows it
+    overlay.querySelector('#chk-ps-show-prio')?.addEventListener('change', (e) => {
+      overlay.querySelectorAll('#ps-machine-view .ps-prio-col').forEach(el => { el.style.display = e.target.checked ? '' : 'none'; });
+    });
     // Progress summary as PDF (print window): clones the progress table; optional "แบบงาน" column = link to the drawing PDF of each item
     overlay.querySelector('#btn-ps-machine-pdf')?.addEventListener('click', async () => {
       const table = overlay.querySelector('#ps-machine-view table');
@@ -1342,6 +1404,10 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
       if (!win) { toast('⚠️ เบราว์เซอร์บล็อกหน้าต่างใหม่ กรุณาอนุญาต Pop-up', 'error'); return; }
       win.document.write('<p style="font-family:sans-serif;padding:20px;">กำลังสร้างรายงาน... (ถ้าเลือกแสดงแบบงาน จะค้นไฟล์แบบจาก Drive ทีละ item อาจใช้เวลาสักครู่)</p>');
       const clone = table.cloneNode(true);
+      const showPrio = !!overlay.querySelector('#chk-ps-show-prio')?.checked;
+      if (!showPrio) clone.querySelectorAll('.ps-prio-col').forEach(el => el.remove());
+      clone.querySelectorAll('.ps-sort-ind').forEach(el => el.remove());
+      const dwgAt = showPrio ? 3 : 2; // the "แบบงาน" column goes right after Item Code
       clone.querySelectorAll('.ps-item-code').forEach(el => { el.style.cursor = 'default'; el.removeAttribute('title'); });
       // The report keeps the progress bar only: drop the last 3 columns (เสร็จ / กำลังผลิต / รอผลิต %)
       clone.querySelectorAll('tr').forEach(tr => {
@@ -1372,7 +1438,7 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
         const headRow = clone.querySelector('thead tr');
         const th = document.createElement('th');
         th.style.cssText = 'padding:6px 8px;'; th.textContent = 'แบบงาน';
-        headRow.insertBefore(th, headRow.children[2]);
+        headRow.insertBefore(th, headRow.children[dwgAt]);
         clone.querySelectorAll('tbody tr').forEach(tr => {
           const td = document.createElement('td');
           td.style.cssText = 'padding:5px 8px;white-space:nowrap;';
@@ -1396,7 +1462,7 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
             td.appendChild(a);
           }
           else if (code) { td.textContent = 'ไม่พบไฟล์แบบ'; td.style.color = '#94a3b8'; }
-          if (tr.children.length > 2 && tr.children[1]) tr.insertBefore(td, tr.children[2]); else tr.appendChild(td);
+          if (tr.children.length > dwgAt && tr.children[dwgAt - 1]) tr.insertBefore(td, tr.children[dwgAt]); else tr.appendChild(td);
         });
       }
       const legendHtml = overlay.querySelector('#ps-machine-view span[style*="gap:14px"]')?.innerHTML || '';
@@ -1465,7 +1531,7 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
     overlay.id = 'project-machine-setup-modal';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
     overlay.innerHTML = `
-      <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:1000px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
+      <div style="background:#fff;color:#0f172a;border-radius:10px;max-width:1300px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.3);font-size:12.5px;">
         <div style="padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <div>
             <div style="font-size:15px;font-weight:700;">⚙️ Setup รายการเครื่องจักร — SO / โครงการ <span style="color:#2563eb;">${esc(proj)}</span></div>
@@ -1479,8 +1545,8 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
           <table style="border-collapse:collapse;width:100%;font-size:12.5px;">
             <thead><tr style="background:#f1f5f9;text-align:center;">
               <th style="padding:6px 8px;width:34px;">#</th>
-              <th class="pms-sort" data-sort="itemCode" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;width:190px;cursor:pointer;user-select:none;">Item Code<span class="pms-arrow"></span></th>
-              <th class="pms-sort" data-sort="desc" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;cursor:pointer;user-select:none;">Description<span class="pms-arrow"></span></th>
+              <th class="pms-sort" data-sort="itemCode" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;width:150px;cursor:pointer;user-select:none;">Item Code<span class="pms-arrow"></span></th>
+              <th class="pms-sort" data-sort="desc" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;min-width:340px;cursor:pointer;user-select:none;">Description<span class="pms-arrow"></span></th>
               <th class="pms-sort" data-sort="priority" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;width:70px;cursor:pointer;user-select:none;">Priority<span class="pms-arrow"></span></th>
               <th style="padding:6px 8px;width:170px;" title="PD range จากไฟล์ Summary Project Order">PD range (Start-End)</th>
               <th style="padding:6px 8px;width:70px;" title="Priority ที่เรียงใหม่ตามเป้าส่งเครื่อง (กดปุ่ม ปรับ Priority) · แสดงอย่างเดียว ไม่บันทึก">Priority ใหม่</th>
@@ -1518,9 +1584,25 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
     // Priority / PD range come from the Summary Project Order file (not stored with the list)
     const newPri = new Map(); // row id -> Priority re-ranked by target date (display only)
     const priOf = (code) => (String(code || '').trim() ? state.getProjectItemPriority(proj, String(code).trim()) : null);
+    // Rows with the same target date share one pale background (earliest date = light red), same palette as the Progress page
+    const LOT_TINTS = ['#fee2e2', '#ffedd5', '#fef9c3', '#dcfce7', '#dbeafe', '#ede9fe', '#fce7f3', '#e0f2fe'];
+    const dateKey = (txt) => { const d = parseDate(txt); if (!d) return null; const [dd, mm, yy] = d.split('/'); return Number(yy) * 10000 + Number(mm) * 100 + Number(dd); };
+    const tintMap = () => {
+      const keys = [...new Set(rows.map(r => dateKey(r.targetDate)).filter(k => k !== null))].sort((a, b) => a - b);
+      return new Map(keys.map((k, i) => [k, LOT_TINTS[i % LOT_TINTS.length]]));
+    };
+    const applyTints = () => {
+      const tm = tintMap();
+      body.querySelectorAll('tr[data-id]').forEach(tr => {
+        const r = rows.find(x => x.id === tr.dataset.id);
+        const k = r ? dateKey(r.targetDate) : null;
+        tr.style.background = k !== null ? tm.get(k) : '';
+      });
+    };
     const render = () => {
+      const tm = tintMap();
       body.innerHTML = rows.map((r, i) => `
-        <tr data-id="${r.id}" ${editable ? 'draggable="true"' : ''} style="border-top:1px solid #e2e8f0;">
+        <tr data-id="${r.id}" ${editable ? 'draggable="true"' : ''} style="border-top:1px solid #e2e8f0;${dateKey(r.targetDate) !== null ? `background:${tm.get(dateKey(r.targetDate))};` : ''}">
           <td style="padding:5px 8px;color:#64748b;${editable ? 'cursor:grab;' : ''}" title="${editable ? 'ลากเพื่อย้ายลำดับ' : ''}">${editable ? '⋮⋮ ' : ''}${i + 1}</td>
           <td style="padding:4px 8px;position:relative;"><input class="pms-code" list="pms-items" value="${esc(r.itemCode)}" placeholder="Item Code" title="Double click = ดู Assembly view ของ Item code นี้" style="${inputCss}font-family:monospace;"${dis}>${editable ? '' : '<span class="pms-code-hit" style="position:absolute;inset:4px 8px;cursor:pointer;" title="Double click = ดู Assembly view ของ Item code นี้"></span>'}</td>
           <td class="pms-desc" style="padding:5px 8px;">${descFor(r.itemCode)}</td>
@@ -1639,9 +1721,10 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
         const r = rowOf(e.target);
         if (!r) return;
         const n = parseDate(e.target.value);
-        if (e.target.value.trim() === '') { r.targetDate = ''; return; }
+        if (e.target.value.trim() === '') { r.targetDate = ''; applyTints(); return; }
         if (n) { r.targetDate = n; e.target.value = n; e.target.style.borderColor = '#cbd5e1'; }
         else { e.target.style.borderColor = '#dc2626'; }
+        applyTints();
       }
     });
     body.addEventListener('click', (e) => {
