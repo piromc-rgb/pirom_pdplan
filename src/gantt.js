@@ -3665,33 +3665,40 @@ export class GanttController {
     if (scheduledJobs.length === 0 && !backlogWO) {
       let matchedDwg = null;
       let matchedInfo = null;
+      let ordQty = null; // Quantity Ordered of this PD from the Status Overview
       if (this.state.dwgToPdMap) {
         for (const [dwg, info] of Object.entries(this.state.dwgToPdMap)) {
-          if (info.pdId === woId) {
+          if (!info) continue;
+          // the PD can be the default PD of the Dwg or one of its candidates (several PDs share one Dwg)
+          const hit = info.pdId === woId ? info : (info.candidates || []).find(c => c && c.pdId === woId);
+          if (hit) {
             matchedDwg = dwg;
-            matchedInfo = info;
+            matchedInfo = hit;
             break;
           }
         }
       }
+      if (matchedInfo && Number(matchedInfo.qty) > 0) ordQty = Number(matchedInfo.qty);
 
       if (matchedInfo) {
         backlogWO = {
           id: woId,
-          customer: 'General',
-          project: matchedInfo.project || 'General',
+          overviewOnly: true, // rebuilt from the Status Overview, not a plan record
+          customer: matchedInfo.customer || '',
+          project: matchedInfo.project || '',
           dwgNo: matchedDwg || '',
-          partName: matchedDwg || '',
-          qty: 1,
-          priority: 'Normal',
+          partName: matchedInfo.description || matchedDwg || '',
+          qty: ordQty || null,
+          priority: matchedInfo.priority || '',
           steps: (matchedInfo.operations || []).map(op => ({
             id: `${woId}-${op.stepNum}`,
             stepNum: op.stepNum,
             name: op.name || op.machine,
             machine: op.machine,
-            estHours: 0.5,
-            cycleMinutes: 1,
-            setupMinutes: 0,
+            // real numbers of the Status Overview; null = not in the file (never invented)
+            estHours: op.estHours ?? 0,
+            cycleMinutes: op.cycleMinutes ?? null,
+            setupMinutes: op.setupMinutes ?? 0,
             status: op.status || 'Unscheduled',
             opStatus: op.status || undefined
           }))
@@ -3702,12 +3709,13 @@ export class GanttController {
           const firstMat = matItems[0];
           backlogWO = {
             id: woId,
-            customer: 'General',
-            project: 'General',
+            overviewOnly: true, // rebuilt from Plan + Mat guesses, not a plan record
+            customer: '',
+            project: '',
             dwgNo: firstMat.mat || '',
             partName: firstMat.matDesc || '',
-            qty: firstMat.estimatedQty || 1,
-            priority: 'Normal',
+            qty: ordQty || null, // the material quantity is NOT the quantity ordered
+            priority: '',
             steps: matItems.map(m => ({
               id: `${woId}-${m.stepNum}`,
               stepNum: m.stepNum,
@@ -3730,12 +3738,14 @@ export class GanttController {
     }
 
     const firstSource = scheduledJobs[0] || backlogWO;
-    const customer = backlogWO?.customer || firstSource?.customer || 'General';
-    const project = backlogWO?.project || firstSource?.project || 'General';
+    // A PD rebuilt only from the Status Overview shows what the file has; an unknown value stays empty, never a guess
+    const noGuess = Boolean(backlogWO && backlogWO.overviewOnly);
+    const customer = backlogWO?.customer || firstSource?.customer || (noGuess ? '' : 'General');
+    const project = backlogWO?.project || firstSource?.project || (noGuess ? '' : 'General');
     const dwgNo = backlogWO?.dwgNo || firstSource?.dwgNo || '';
     const partName = backlogWO?.partName || firstSource?.partName || '';
-    const qty = backlogWO?.qty || firstSource?.qty || 100;
-    const priority = backlogWO?.priority || firstSource?.priority || 'Normal';
+    const qty = backlogWO?.qty || firstSource?.qty || (noGuess ? null : 100);
+    const priority = backlogWO?.priority || firstSource?.priority || (noGuess ? '' : 'Normal');
     const memo = this.state.pdMemos?.[woId] || backlogWO?.memo || firstSource?.memo || '';
     const dueHour = backlogWO?.dueHour !== undefined ? backlogWO.dueHour : (firstSource?.dueHour !== undefined ? firstSource.dueHour : null);
 
@@ -3760,7 +3770,7 @@ export class GanttController {
     if (inputDwgNo) inputDwgNo.value = dwgNo;
     this.updatePdRevLabel(woId);
     if (inputPartName) inputPartName.value = partName;
-    if (inputQty) inputQty.value = qty;
+    if (inputQty) inputQty.value = qty ?? '';
     if (inputPriority) inputPriority.value = priority;
     if (inputMemo) inputMemo.value = memo;
 
@@ -4348,7 +4358,18 @@ export class GanttController {
     if (btnSave) {
       const cleanBtnSave = btnSave.cloneNode(true);
       btnSave.parentNode.replaceChild(cleanBtnSave, btnSave);
+      // A PD rebuilt only from the Status Overview (no plan record) must not be saved: its Setup / Cycle values are not
+      // real plan data, and saving would turn them into one. The button is re-enabled for every other PD.
+      const overviewOnlyPd = Boolean(backlogWO && backlogWO.overviewOnly);
+      cleanBtnSave.disabled = overviewOnlyPd;
+      cleanBtnSave.style.opacity = overviewOnlyPd ? '0.45' : '';
+      cleanBtnSave.style.cursor = overviewOnlyPd ? 'not-allowed' : '';
+      cleanBtnSave.title = overviewOnlyPd ? 'PD นี้แสดงจากไฟล์ Status Overview เท่านั้น (ไม่มีข้อมูลในแผน) จึงบันทึกไม่ได้' : '';
       cleanBtnSave.addEventListener('click', () => {
+        if (overviewOnlyPd) {
+          this.showToast('PD นี้แสดงจากไฟล์ Status Overview เท่านั้น ไม่สามารถบันทึกลงแผนได้');
+          return;
+        }
         const customerVal = inputCustomer.value.trim() || 'General';
         const projectVal = inputProject.value.trim() || 'General';
         const dwgNoVal = inputDwgNo.value.trim() || '';
