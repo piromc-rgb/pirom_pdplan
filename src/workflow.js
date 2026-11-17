@@ -5,7 +5,58 @@ import { isJobPriorityVisible, isJobProjectVisible, isJobCustomerVisible, isJobP
 // Several PDs can share one Dwg (an old closed PD plus the PD just released for a new parent). The Dwg -> PD map keeps
 // one default PD per Dwg; this also remembers EVERY PD of a Dwg so a parent can pick its own child (nearest PD number
 // after the parent, same SO) instead of the first one found.
-function addDwgCandidate(candMap, dwg, pdId, orderStatus, project, opNum, name, machine, status, description = '', qty = null) {
+// The Status Overview columns are found by header name, with a fixed column position as the last resort. When a header
+// is missing (the file layout changed) the fixed position can silently read the WRONG column, so say it out loud.
+const OVERVIEW_REQUIRED_HEADERS = {
+  'Project': ['project', 'project code', 'projectcode', 'project name', 'projectname', 'so no', 'so number', 'so'],
+  'Customer': ['customer', 'cust', 'customer name', 'client'],
+  'Production Order': ['production order', 'productionorder', 'pd id', 'pd_id', 'pd no', 'pd_no', 'order'],
+  'Prioty': ['prioty', 'priority', 'urgency'],
+  'Item_5': ['item_5', 'drawing', 'dwg', 'dwg_no', 'dwg no', 'part number'],
+  'Description': ['description', 'part name', 'part_name', 'part description', 'partname'],
+  'Operation': ['operation', 'step', 'oper', 'op'],
+  'Work Center': ['work center code', 'wc code', 'machine code', 'work center', 'wc', 'item_4'],
+  'Operation Status': ['operation status', 'op status'],
+  'Quantity Ordered': ['quantity ordered', 'qty', 'quantity', 'orderqty'],
+  'Order Status': ['order status'],
+  'Production Time': ['production time'],
+  'Cycle Time': ['cycle time', 'cycletime'],
+  'Average Setup Time': ['average setup time', 'setup time', 'setup']
+};
+let _lastHeaderWarning = '';
+function checkOverviewHeaders(headerRow, toast) {
+  const missing = Object.keys(OVERVIEW_REQUIRED_HEADERS).filter(label =>
+    !OVERVIEW_REQUIRED_HEADERS[label].some(n => headerRow.some(h => h === n || h.startsWith(n)))
+  );
+  if (missing.length === 0) { _lastHeaderWarning = ''; return missing; }
+  const msg = missing.join(', ');
+  console.warn('[Status Overview] columns not found by header name (a fixed position is used instead):', msg);
+  if (msg !== _lastHeaderWarning && typeof toast === 'function') {
+    toast(`⚠️ ไฟล์ Status Overview ไม่พบคอลัมน์: ${msg} — ข้อมูลช่องเหล่านี้อาจผิด ตรวจโครงสร้างไฟล์ (ชีต Data)`, 'error');
+  }
+  _lastHeaderWarning = msg;
+  return missing;
+}
+
+// Real timing of one operation row of the Status Overview (Average Setup Time, Cycle Time [min/pc], Production Time [h]).
+// Only the numbers the file really has are returned, so the PD view never has to invent setup / cycle / hours.
+function opTimingFromRow(rawRow, col) {
+  const num = (idx) => {
+    if (idx === undefined || idx < 0) return null;
+    const raw = rawRow[idx];
+    if (raw === undefined || raw === null || String(raw).trim() === '') return null;
+    const n = Number(String(raw).replace(/,/g, ''));
+    return Number.isFinite(n) ? n : null;
+  };
+  const t = {};
+  const setup = num(col.setupTime), cycle = num(col.cycleTime), hours = num(col.prodTime);
+  if (setup !== null) t.setupMinutes = setup;
+  if (cycle !== null) t.cycleMinutes = cycle;
+  if (hours !== null) t.estHours = hours;
+  return t;
+}
+
+function addDwgCandidate(candMap, dwg, pdId, orderStatus, project, opNum, name, machine, status, description = '', qty = null, customer = '', priority = '', timing = null) {
   if (!candMap[dwg]) candMap[dwg] = {};
   let c = candMap[dwg][pdId];
   if (!c) c = candMap[dwg][pdId] = { pdId, orderStatus, project, operations: [] };
@@ -13,7 +64,9 @@ function addDwgCandidate(candMap, dwg, pdId, orderStatus, project, opNum, name, 
   if (!c.project && project) c.project = project;
   if (!c.description && description) c.description = description;
   if ((c.qty === undefined || c.qty === null) && qty !== null) c.qty = qty;
-  if (!c.operations.some(o => o.stepNum === opNum)) c.operations.push({ stepNum: opNum, name, machine, status });
+  if (!c.customer && customer) c.customer = customer;
+  if (!c.priority && priority) c.priority = priority;
+  if (!c.operations.some(o => o.stepNum === opNum)) c.operations.push(Object.assign({ stepNum: opNum, name, machine, status }, timing || {}));
 }
 
 function attachDwgCandidates(dwgToPdMap, candMap) {
@@ -1257,6 +1310,7 @@ export class WorkflowController {
     const raw2D = XLSX.utils.sheet_to_json(wb.Sheets[dataName], { header: 1, defval: '' });
 
     const headerRow = (raw2D[0] || []).map(h => String(h || '').trim().toLowerCase());
+    checkOverviewHeaders(headerRow, (m, t) => this.state.ganttController?.showToast?.(m, t));
     const findColIdx = (possibleNames, fallbackIdx) => {
       for (const p of possibleNames) for (let i = 0; i < headerRow.length; i++) if (headerRow[i] === p) return i;
       for (const p of possibleNames) for (let i = 0; i < headerRow.length; i++) if (headerRow[i].startsWith(p)) return i;
@@ -1576,6 +1630,7 @@ export class WorkflowController {
         
         // Dynamic exact-prioritized column index resolution
         const headerRow = (raw2D[0] || []).map(h => String(h || '').trim().toLowerCase());
+        checkOverviewHeaders(headerRow, (m, t) => this.state.ganttController?.showToast?.(m, t));
         const findColIdx = (possibleNames, fallbackIdx) => {
           // 1. Exact match first
           for (let p of possibleNames) {
@@ -1613,7 +1668,8 @@ export class WorkflowController {
           qty: findColIdx(['quantity ordered', 'qty', 'quantity', 'orderqty'], 16),
           orderStatus: findColIdx(['order status'], 17),
           cycleTime: findColIdx(['cycle time', 'cycletime'], 21),
-          setupTime: findColIdx(['average setup time', 'setup time', 'setup'], 23)
+          setupTime: findColIdx(['average setup time', 'setup time', 'setup'], 23),
+          prodTime: findColIdx(['production time'], 18)
         };
 
         // Priority and Project filters
@@ -1675,7 +1731,9 @@ export class WorkflowController {
           const itemDesc = String(rawRow[col.partName] || '').trim();
           const itemQtyNum = Number(String(rawRow[col.qty] ?? '').replace(/,/g, ''));
           const itemQty = Number.isFinite(itemQtyNum) && String(rawRow[col.qty] ?? '').trim() !== '' ? itemQtyNum : null;
-          addDwgCandidate(dwgCandidates, dwg, pdId, orderStatus, String(rawRow[col.project] || '').trim(), opNum, wcDesc || wcCode, wcCode, opStatus, itemDesc, itemQty);
+          const itemCustomer = String(rawRow[col.customer] ?? '').trim();
+          const itemPriority = String(rawRow[col.priority] ?? '').trim();
+          addDwgCandidate(dwgCandidates, dwg, pdId, orderStatus, String(rawRow[col.project] || '').trim(), opNum, wcDesc || wcCode, wcCode, opStatus, itemDesc, itemQty, itemCustomer, itemPriority, opTimingFromRow(rawRow, col));
 
           if (!dwgToPdMap[dwg]) {
             dwgToPdMap[dwg] = {
@@ -1684,6 +1742,8 @@ export class WorkflowController {
               project: String(rawRow[col.project] || '').trim(),
               description: itemDesc,
               qty: itemQty,
+              customer: itemCustomer,
+              priority: itemPriority,
               operations: []
             };
           } else if (orderStatus !== 'Closed' && dwgToPdMap[dwg].orderStatus === 'Closed') {
@@ -1692,16 +1752,18 @@ export class WorkflowController {
             dwgToPdMap[dwg].project = String(rawRow[col.project] || '').trim();
             dwgToPdMap[dwg].description = itemDesc;
             dwgToPdMap[dwg].qty = itemQty;
+            dwgToPdMap[dwg].customer = itemCustomer;
+            dwgToPdMap[dwg].priority = itemPriority;
             dwgToPdMap[dwg].operations = [];
           }
 
           if (pdId === dwgToPdMap[dwg].pdId) {
-            dwgToPdMap[dwg].operations.push({
+            dwgToPdMap[dwg].operations.push(Object.assign({
               stepNum: opNum,
               name: wcDesc || wcCode,
               machine: wcCode,
               status: opStatus
-            });
+            }, opTimingFromRow(rawRow, col)));
           }
         }
         attachDwgCandidates(dwgToPdMap, dwgCandidates);
@@ -2101,6 +2163,7 @@ export class WorkflowController {
   parseAndStoreDataSheet(raw2D) {
     if (!raw2D || raw2D.length <= 1) return false;
     const headerRow = (raw2D[0] || []).map(h => String(h || '').trim().toLowerCase());
+    checkOverviewHeaders(headerRow, (m, t) => this.state.ganttController?.showToast?.(m, t));
     const findColIdx = (possibleNames, fallbackIdx) => {
       for (const p of possibleNames) for (let i = 0; i < headerRow.length; i++) if (headerRow[i] === p) return i;
       for (const p of possibleNames) for (let i = 0; i < headerRow.length; i++) if (headerRow[i].startsWith(p)) return i;
@@ -2112,6 +2175,11 @@ export class WorkflowController {
       dwg: findColIdx(['item_5', 'drawing', 'dwg', 'dwg_no', 'dwg no', 'part number'], 10),
       partName: findColIdx(['description', 'part name', 'part_name', 'part description', 'partname'], 11),
       qty: findColIdx(['quantity ordered', 'qty', 'quantity', 'orderqty'], 16),
+      customer: findColIdx(['customer'], 5),
+      priority: findColIdx(['prioty', 'priority'], 2),
+      cycleTime: findColIdx(['cycle time', 'cycletime'], 21),
+      setupTime: findColIdx(['average setup time', 'setup time', 'setup'], 23),
+      prodTime: findColIdx(['production time'], 18),
       step: findColIdx(['operation', 'step', 'oper', 'op'], 12),
       wcCode: findColIdx(['work center code', 'wc code', 'machine code', 'work center', 'wc', 'item_4'], 13),
       wcDesc: findColIdx(['r.ref.oper.desc', 'machine description', 'machine name', 'department'], 14),
@@ -2147,19 +2215,23 @@ export class WorkflowController {
       const itemDesc = String(rawRow[col.partName] || '').trim();
       const itemQtyNum = Number(String(rawRow[col.qty] ?? '').replace(/,/g, ''));
       const itemQty = Number.isFinite(itemQtyNum) && String(rawRow[col.qty] ?? '').trim() !== '' ? itemQtyNum : null;
-      addDwgCandidate(dwgCandidates, dwg, pdId, orderStatus, String(rawRow[col.project] || '').trim(), opNum, wcDesc || wcCode, wcCode, opStatus, itemDesc, itemQty);
+      const itemCustomer = String(rawRow[col.customer] ?? '').trim();
+      const itemPriority = String(rawRow[col.priority] ?? '').trim();
+      addDwgCandidate(dwgCandidates, dwg, pdId, orderStatus, String(rawRow[col.project] || '').trim(), opNum, wcDesc || wcCode, wcCode, opStatus, itemDesc, itemQty, itemCustomer, itemPriority, opTimingFromRow(rawRow, col));
       if (!dwgToPdMap[dwg]) {
-        dwgToPdMap[dwg] = { pdId, orderStatus, project: String(rawRow[col.project] || '').trim(), description: itemDesc, qty: itemQty, operations: [] };
+        dwgToPdMap[dwg] = { pdId, orderStatus, project: String(rawRow[col.project] || '').trim(), description: itemDesc, qty: itemQty, customer: itemCustomer, priority: itemPriority, operations: [] };
       } else if (orderStatus !== 'Closed' && dwgToPdMap[dwg].orderStatus === 'Closed') {
         dwgToPdMap[dwg].pdId = pdId;
         dwgToPdMap[dwg].orderStatus = orderStatus;
         dwgToPdMap[dwg].project = String(rawRow[col.project] || '').trim();
         dwgToPdMap[dwg].description = itemDesc;
         dwgToPdMap[dwg].qty = itemQty;
+        dwgToPdMap[dwg].customer = itemCustomer;
+        dwgToPdMap[dwg].priority = itemPriority;
         dwgToPdMap[dwg].operations = [];
       }
       if (pdId === dwgToPdMap[dwg].pdId) {
-        dwgToPdMap[dwg].operations.push({ stepNum: opNum, name: wcDesc || wcCode, machine: wcCode, status: opStatus });
+        dwgToPdMap[dwg].operations.push(Object.assign({ stepNum: opNum, name: wcDesc || wcCode, machine: wcCode, status: opStatus }, opTimingFromRow(rawRow, col)));
       }
     }
     if (Object.keys(dwgToPdMap).length === 0) return false;
