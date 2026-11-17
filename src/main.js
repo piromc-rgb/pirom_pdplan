@@ -997,7 +997,6 @@ class App {
       state.subscribe(syncAmwModeVisibility);
       amwModeSelect.addEventListener('change', (e) => {
         state.amwMode = e.target.value;
-        try { localStorage.setItem('chaken_amw_mode', state.amwMode); } catch (err) {}
         const spinTok = typeof window.showIosSpinner === 'function' ? window.showIosSpinner(420) : null;
         setTimeout(() => {
           try {

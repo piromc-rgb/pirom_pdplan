@@ -11,10 +11,9 @@ class CentralState {
     this.schedulingModel = 'amw';
     // AMW strategy mode (weight set of the Composite Score): 'balanced' | 'delivery' | 'efficiency' | 'protect'
     this.amwMode = 'efficiency';
-    try {
-      const savedMode = typeof localStorage !== 'undefined' ? localStorage.getItem('chaken_amw_mode') : null;
-      if (savedMode && ['balanced', 'delivery', 'efficiency', 'protect'].includes(savedMode)) this.amwMode = savedMode;
-    } catch (e) {}
+    // The mode is NOT remembered between sessions: every start uses the default above (a value saved by an older
+    // version is removed so it cannot override it)
+    try { if (typeof localStorage !== 'undefined') localStorage.removeItem('chaken_amw_mode'); } catch (e) {}
     // Fast Track (Project filter): a PD qualifies when its production time (excl. paint/adjust/assembly) exceeds hybridMinDays x hybridDayHours and it has a welding step
     this.hybridMinDays = 2;
     this.hybridDayHours = 8;
