@@ -86,7 +86,7 @@ class CentralState {
     // Whether the scheduler is allowed to offload a job onto a work center's
     // configured alt machine(s) to keep it running when the original machine
     // is busy. Off restricts every job to strictly its own machine.
-    this.allowMachineOffload = true;
+    this.allowMachineOffload = false;
 
     // Strategy option: group same item (DWG No. / Part Name) together across different PDs
     // to run consecutively / simultaneously on machines, reducing setup changeovers.

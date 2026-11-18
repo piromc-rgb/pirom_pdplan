@@ -2256,7 +2256,7 @@ class App {
     // alt machine(s) when the original machine is busy.
     const toggleMachineOffload = document.getElementById('toggle-machine-offload');
     if (toggleMachineOffload) {
-      toggleMachineOffload.checked = state.allowMachineOffload !== false;
+      toggleMachineOffload.checked = state.allowMachineOffload === true;
       toggleMachineOffload.addEventListener('change', () => {
         state.allowMachineOffload = toggleMachineOffload.checked;
       });
@@ -2427,7 +2427,7 @@ class App {
       syncHideUnusedWcUI();
       if (togglePriorityBadge) togglePriorityBadge.checked = state.showPriorityBadge !== false;
       if (toggleMergeBars) toggleMergeBars.checked = state.mergeBarsEnabled !== false;
-      if (toggleMachineOffload) toggleMachineOffload.checked = state.allowMachineOffload !== false;
+      if (toggleMachineOffload) toggleMachineOffload.checked = state.allowMachineOffload === true;
       if (toggleGroupSameItem) toggleGroupSameItem.checked = state.groupSameItem !== false;
       if (toggleGroupMat) toggleGroupMat.checked = state.groupMat === true;
       if (toggleShowForceClose) toggleShowForceClose.checked = state.showForceCloseButtons === true;
