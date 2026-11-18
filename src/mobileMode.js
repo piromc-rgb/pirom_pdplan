@@ -212,7 +212,8 @@ export class MobileModeController {
 
   renderWorkCenters() {
     const s = this.state;
-    this.title.textContent = 'Work Center';
+    const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '';
+    this.title.textContent = versionStr ? `Work Center V${versionStr}` : 'Work Center';
     const machines = this.getMachines();
     // Same as the Gantt row labels: the three most loaded Work Centers are red
     const top3 = new Set(machines.map(m => ({ m, u: s.getMachineOEE(m).util || 0 })).filter(x => x.u > 0).sort((a, b) => b.u - a.u).slice(0, 3).map(x => x.m));
