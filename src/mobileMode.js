@@ -18,6 +18,7 @@ export class MobileModeController {
   constructor(state) {
     this.state = state;
     this.active = false;
+    this.editUnlocked = false;
     this.stack = [{ screen: 'wc' }];
     this.date = new Date();
     this.btn = document.getElementById('btn-mobile-mode');
@@ -80,6 +81,7 @@ export class MobileModeController {
   exit() {
     this.setOptedOut(true);
     this.active = false;
+    this.editUnlocked = false;
     this.el.classList.add('hidden');
     document.body.classList.remove('mm-active');
     if (this.btn) this.btn.classList.remove('mm-on');
@@ -387,9 +389,9 @@ export class MobileModeController {
         when = `<div style="font-size:11.5px;color:#64748b;margin-top:2px;">${pad2(a.getDate())}/${pad2(a.getMonth() + 1)} ${pad2(a.getHours())}:${pad2(a.getMinutes())}-${pad2(b.getHours())}:${pad2(b.getMinutes())}</div>`;
       }
       const mins = Number(r.estHours) > 0 ? Math.round(r.estHours * 60) : 0;
-      return `<div style="padding:8px 0;border-top:1px solid #e2e8f0;">
+      return `<div class="mm-step" data-step="${esc(r.stepNum)}" style="padding:8px 0;border-top:1px solid #e2e8f0;cursor:pointer;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><b style="font-size:13px;">${esc(r.stepNum)} · ${esc(r.name)}</b>${opChip(r)}</div>
-        <div style="font-size:12px;color:#475569;margin-top:2px;">${esc(s.getMachineDisplayName(r.machine) || r.machine || '')}${mins ? ` · ${mins} นาที` : ''}</div>${when}</div>`;
+        <div style="font-size:12px;color:#475569;margin-top:2px;">${esc(s.getMachineDisplayName(r.machine) || r.machine || '')}${mins ? ` · ${mins} นาที` : ''} <span style="color:#94a3b8;">✎</span></div>${when}</div>`;
     }).join('');
 
     const matRows = this.getMatRows(pdId);
@@ -424,5 +426,122 @@ export class MobileModeController {
     this.body.querySelectorAll('.mm-child').forEach(el => el.addEventListener('click', () => this.push({ screen: 'pd', pdId: el.dataset.pd })));
     const pdf = this.body.querySelector('#mm-pdf');
     if (pdf) pdf.addEventListener('click', () => { if (typeof window.openDwgPdfViewer === 'function') window.openDwgPdfViewer(dwg); });
+    this.body.querySelectorAll('.mm-step').forEach(el => el.addEventListener('click', () => {
+      const stepNum = parseInt(el.dataset.step, 10);
+      const row = steps.find(x => x.stepNum === stepNum);
+      if (row) this.onStepTap(pdId, row);
+    }));
+  }
+
+  // ---- Station edit (EDIT password required) ----------------------------------------------
+  onStepTap(pdId, row) {
+    if (this.editUnlocked) { this.openStepEditSheet(pdId, row); return; }
+    this.openEditPasswordSheet(() => this.openStepEditSheet(pdId, row));
+  }
+
+  closeStepSheet() {
+    const sheet = this.el.querySelector('#mm-step-sheet');
+    if (sheet) sheet.remove();
+  }
+
+  openEditPasswordSheet(onSuccess) {
+    this.closeStepSheet();
+    const box = document.createElement('div');
+    box.id = 'mm-step-sheet';
+    box.style.cssText = 'position:absolute;inset:0;z-index:6;background:rgba(15,23,42,0.55);display:flex;align-items:flex-end;';
+    box.innerHTML = `<div style="width:100%;background:#fff;padding:14px 12px 18px;border-radius:14px 14px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,0.3);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><b style="font-size:15px;">🔑 กรอก Password เพื่อแก้ไขสถานีงาน</b><button type="button" id="mm-ep-close" style="border:none;background:#e2e8f0;border-radius:8px;width:34px;height:34px;font-size:16px;">✕</button></div>
+      <input id="mm-ep-input" type="password" inputmode="numeric" autocomplete="off" placeholder="Password" style="width:100%;box-sizing:border-box;font-size:16px;padding:10px 12px;border:1.5px solid #94a3b8;border-radius:8px;letter-spacing:2px;font-family:monospace;">
+      <div id="mm-ep-msg" style="font-size:12.5px;color:#b91c1c;margin-top:8px;min-height:16px;"></div>
+      <button type="button" id="mm-ep-go" style="width:100%;margin-top:4px;border:none;background:#16a34a;color:#fff;font-weight:700;font-size:14px;border-radius:8px;padding:11px;">ตกลง</button>
+    </div>`;
+    this.el.appendChild(box);
+    const input = box.querySelector('#mm-ep-input');
+    const msg = box.querySelector('#mm-ep-msg');
+    const close = () => this.closeStepSheet();
+    box.querySelector('#mm-ep-close').addEventListener('click', close);
+    box.addEventListener('click', (e) => { if (e.target === box) close(); });
+    const submit = () => {
+      const expected = (localStorage.getItem('PDPLAN_EDIT_PASSWORD') || '1122').trim();
+      if (input.value.trim() === expected) {
+        this.editUnlocked = true;
+        this.closeStepSheet();
+        onSuccess();
+      } else {
+        msg.textContent = '❌ รหัสผ่านไม่ถูกต้อง';
+        input.value = '';
+        input.focus();
+      }
+    };
+    box.querySelector('#mm-ep-go').addEventListener('click', submit);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+    setTimeout(() => input.focus(), 50);
+  }
+
+  openStepEditSheet(pdId, row) {
+    this.closeStepSheet();
+    const s = this.state;
+    const opMap = (s.pdOpStatusMap && s.pdOpStatusMap[pdId]) || {};
+    const curStatusRaw = String(opMap[String(row.stepNum)] || (row.status === 'Completed' ? 'Completed' : '') || row.status || 'Planned').trim();
+    const STATUS_OPTS = ['Planned', 'Ready to Start', 'Active', 'Completed'];
+    const curStatus = STATUS_OPTS.find(o => o.toLowerCase() === curStatusRaw.toLowerCase()) || 'Planned';
+    const statusOptionsHtml = STATUS_OPTS.map(o => `<option value="${o}" ${o === curStatus ? 'selected' : ''}>${o}</option>`).join('');
+    const machines = s.workCenterOrder && s.workCenterOrder.length ? s.workCenterOrder : Object.keys(s.workCenters || {});
+    const machineOptionsHtml = machines.map(m => {
+      const name = s.workCenters[m]?.name || m;
+      const selected = m === row.machine || String(m).toLowerCase() === String(row.machine || '').toLowerCase();
+      return `<option value="${esc(m)}" ${selected ? 'selected' : ''}>${esc(m)} - ${esc(name)}</option>`;
+    }).join('');
+
+    const box = document.createElement('div');
+    box.id = 'mm-step-sheet';
+    box.style.cssText = 'position:absolute;inset:0;z-index:6;background:rgba(15,23,42,0.55);display:flex;align-items:flex-end;';
+    box.innerHTML = `<div style="width:100%;background:#fff;padding:14px 12px 18px;border-radius:14px 14px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,0.3);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><b style="font-size:15px;">แก้ไข ${esc(row.stepNum)} · ${esc(row.name)}</b><button type="button" id="mm-es-close" style="border:none;background:#e2e8f0;border-radius:8px;width:34px;height:34px;font-size:16px;">✕</button></div>
+      <label style="display:block;font-size:11.5px;color:#64748b;margin-bottom:4px;">สถานะ</label>
+      <select id="mm-es-status" style="width:100%;box-sizing:border-box;font-size:15px;padding:10px 12px;border:1.5px solid #94a3b8;border-radius:8px;margin-bottom:12px;">${statusOptionsHtml}</select>
+      <label style="display:block;font-size:11.5px;color:#64748b;margin-bottom:4px;">เครื่องจักร</label>
+      <select id="mm-es-machine" style="width:100%;box-sizing:border-box;font-size:15px;padding:10px 12px;border:1.5px solid #94a3b8;border-radius:8px;">${machineOptionsHtml}</select>
+      <button type="button" id="mm-es-save" style="width:100%;margin-top:16px;border:none;background:#2563eb;color:#fff;font-weight:700;font-size:15px;border-radius:8px;padding:12px;">💾 Save</button>
+    </div>`;
+    this.el.appendChild(box);
+    const close = () => this.closeStepSheet();
+    box.querySelector('#mm-es-close').addEventListener('click', close);
+    box.addEventListener('click', (e) => { if (e.target === box) close(); });
+    box.querySelector('#mm-es-save').addEventListener('click', () => {
+      const newStatus = box.querySelector('#mm-es-status').value;
+      const newMachine = box.querySelector('#mm-es-machine').value;
+      this.saveStepEdit(pdId, row.stepNum, newStatus, newMachine);
+      close();
+      this.render(false); // back to the same PD page with the updated values
+    });
+  }
+
+  saveStepEdit(pdId, stepNum, newStatus, newMachine) {
+    const s = this.state;
+    s.saveStateToHistory();
+    if (!s.pdOpStatusMap) s.pdOpStatusMap = {};
+    if (!s.pdOpStatusMap[pdId]) s.pdOpStatusMap[pdId] = {};
+    s.pdOpStatusMap[pdId][String(stepNum)] = newStatus;
+
+    const job = (s.scheduledJobs || []).find(j => (j.woId || j.id) === pdId && j.stepNum === stepNum);
+    if (job) {
+      job.machine = newMachine;
+      job.originalMachine = newMachine;
+    } else {
+      const wo = (s.workOrders || []).find(w => w.id === pdId);
+      const step = wo && wo.steps && wo.steps.find(st => st.stepNum === stepNum);
+      if (step) step.machine = newMachine;
+    }
+    s.notify();
+    this.showStepToast('✓ บันทึกการแก้ไขสถานีงานแล้ว');
+  }
+
+  showStepToast(msg) {
+    const t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:absolute;left:50%;bottom:16px;transform:translateX(-50%);background:#0f172a;color:#fff;font-size:12.5px;font-weight:600;padding:9px 16px;border-radius:20px;z-index:20;box-shadow:0 4px 14px rgba(0,0,0,0.3);';
+    this.el.appendChild(t);
+    setTimeout(() => t.remove(), 1800);
   }
 }
