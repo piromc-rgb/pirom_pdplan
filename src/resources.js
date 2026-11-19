@@ -1179,7 +1179,10 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
         const d = new Date(y, Number(m[2]) - 1, Number(m[1]));
         return isNaN(d.getTime()) ? null : d;
       };
+      // Rows marked "ส่งแล้ว" (Setup รายการเครื่องจักร) are left out of this report in VIEW ONLY mode;
+      // EDIT mode still shows them so the Setup list and this report stay easy to cross-check.
       const rows = projects.flatMap(pr => this.state.getProjectMachineProgress(pr))
+        .filter(r => this.isEditMode() || !r.shipped)
         .map((r, idx) => ({ ...r, _d: parseD(r.targetDate), _idx: idx }))
         .sort((x, y) => (x._d && y._d) ? (x._d - y._d || x._idx - y._idx) : (x._d ? -1 : y._d ? 1 : x._idx - y._idx));
       const COLORS = { done: '#15803d', working: '#eab308', waiting: '#dc2626' };
@@ -1511,7 +1514,7 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
     const mode = state.storageSync && typeof state.storageSync.getUserMode === 'function' ? state.storageSync.getUserMode() : 'plan';
     const editable = mode === 'plan';
     const uid = () => 'm' + Math.random().toString(36).slice(2, 9);
-    let rows = ((state.projectMachineLists || {})[proj] || []).map(r => ({ id: r.id || uid(), itemCode: r.itemCode || '', qty: r.qty ?? '', targetDate: r.targetDate || '', qtyAuto: false }));
+    let rows = ((state.projectMachineLists || {})[proj] || []).map(r => ({ id: r.id || uid(), itemCode: r.itemCode || '', qty: r.qty ?? '', targetDate: r.targetDate || '', shipped: r.shipped === true, qtyAuto: false }));
     if (rows.length === 0 && editable) rows.push({ id: uid(), itemCode: '', qty: '', targetDate: '', qtyAuto: false });
 
     const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1552,6 +1555,7 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
               <th style="padding:6px 8px;width:70px;" title="Priority ที่เรียงใหม่ตามเป้าส่งเครื่อง (กดปุ่ม ปรับ Priority) · แสดงอย่างเดียว ไม่บันทึก">Priority ใหม่</th>
               <th class="pms-sort" data-sort="qty" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;width:90px;cursor:pointer;user-select:none;">QTY<span class="pms-arrow"></span></th>
               <th class="pms-sort" data-sort="targetDate" title="คลิกเพื่อเรียงข้อมูล" style="padding:6px 8px;width:130px;cursor:pointer;user-select:none;">เป้าส่งเครื่อง (d/m/y)<span class="pms-arrow"></span></th>
+              <th style="padding:6px 8px;width:70px;" title="รายการที่ส่งแล้วจะไม่แสดงในรายงาน Progress แยกเครื่อง (โหมด VIEW ONLY)">ส่งแล้ว</th>
               <th style="padding:6px 8px;width:120px;text-align:center;">ย้าย / ลบ</th>
             </tr></thead>
             <tbody id="pms-body"></tbody>
@@ -1611,12 +1615,13 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
           <td class="pms-newpri" style="padding:5px 8px;text-align:center;font-weight:700;color:#15803d;">${newPri.get(r.id) ?? '<span style="color:#94a3b8;font-weight:400;">—</span>'}</td>
           <td style="padding:4px 8px;"><input class="pms-qty" type="number" min="0" step="any" value="${esc(r.qty)}" style="${inputCss}text-align:right;"${dis}></td>
           <td style="padding:4px 8px;"><input class="pms-date" value="${esc(r.targetDate)}" placeholder="d/m/y" style="${inputCss}"${dis}></td>
+          <td style="padding:4px 8px;text-align:center;"><input type="checkbox" class="pms-shipped" title="ส่งแล้ว (ไม่แสดงในรายงาน Progress แยกเครื่อง โหมด VIEW ONLY)" style="width:16px;height:16px;cursor:pointer;" ${r.shipped ? 'checked' : ''}${dis}></td>
           <td style="padding:4px 8px;text-align:center;white-space:nowrap;">
             <button type="button" class="pms-up" title="ย้ายขึ้น" style="border:1px solid #cbd5e1;border-radius:4px;background:#fff;cursor:pointer;"${i === 0 || !editable ? ' disabled' : ''}>▲</button>
             <button type="button" class="pms-down" title="ย้ายลง" style="border:1px solid #cbd5e1;border-radius:4px;background:#fff;cursor:pointer;"${i === rows.length - 1 || !editable ? ' disabled' : ''}>▼</button>
             <button type="button" class="pms-del" title="ลบแถว" style="border:1px solid #fecaca;border-radius:4px;background:#fff;color:#dc2626;cursor:pointer;"${dis}>🗑</button>
           </td>
-        </tr>`).join('') || '<tr><td colspan="9" style="padding:14px;text-align:center;color:#94a3b8;">ยังไม่มีรายการเครื่องจักร</td></tr>';
+        </tr>`).join('') || '<tr><td colspan="10" style="padding:14px;text-align:center;color:#94a3b8;">ยังไม่มีรายการเครื่องจักร</td></tr>';
       overlay.querySelector('#pms-count').textContent = `${rows.length} รายการ · Item ในโครงการนี้ ${catalog.length} รายการ`;
     };
     render();
@@ -1725,6 +1730,9 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
         if (n) { r.targetDate = n; e.target.value = n; e.target.style.borderColor = '#cbd5e1'; }
         else { e.target.style.borderColor = '#dc2626'; }
         applyTints();
+      } else if (e.target.classList.contains('pms-shipped')) {
+        const r = rowOf(e.target);
+        if (r) r.shipped = e.target.checked;
       }
     });
     body.addEventListener('click', (e) => {
@@ -1873,7 +1881,7 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
           date = parseDate(r.targetDate);
           if (!date) { bad = bad || `แถวที่ ${i + 1}: เป้าส่งเครื่องต้องเป็นวันที่ d/m/y เช่น 15/11/2026`; return; }
         }
-        cleaned.push({ id: r.id, itemCode: String(r.itemCode).trim(), qty: r.qty === '' || r.qty === null ? null : Number(r.qty), targetDate: date });
+        cleaned.push({ id: r.id, itemCode: String(r.itemCode).trim(), qty: r.qty === '' || r.qty === null ? null : Number(r.qty), targetDate: date, shipped: r.shipped === true });
       });
       if (bad) { toast(`⚠️ ${bad}`, 'error'); return; }
       if (!state.projectMachineLists) state.projectMachineLists = {};
