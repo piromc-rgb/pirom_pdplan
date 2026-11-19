@@ -3379,16 +3379,29 @@ export class GanttController {
       emptyMsg.classList.add('hidden');
       const whereLabel = { board: '📊 บน Board', backlog: '📋 Backlog', closed: '✅ รายการ PD ที่ปิดแล้ว' };
       // The step currently Active, per the same source the PD detail's operation chips use
-      // (pdOpStatusMap first, then the job/step's own status).
+      // (pdOpStatusMap first, then the job/step's own status) - name + the Work Center running it.
+      // The Production Order's own "Active" status (getPdOrderStatus, from the ERP Order Status
+      // column) doesn't always line up with one operation explicitly tagged Active/Running, so for
+      // a Board job fall back to whichever one is scheduled right now (its time window contains now).
+      const nowWH = state.dateToWorkingHour ? state.dateToWorkingHour(new Date()) : null;
       const activeStationOf = (woId) => {
         const opMap = (state.pdOpStatusMap && state.pdOpStatusMap[woId]) || {};
         const wo = (state.workOrders || []).find(w => w.id === woId);
         const steps = new Map();
-        (wo && wo.steps ? wo.steps : []).forEach(x => steps.set(x.stepNum, { name: x.name || x.stepName, status: x.opStatus || x.status }));
-        (state.scheduledJobs || []).filter(j => (j.woId || j.id) === woId).forEach(j => steps.set(j.stepNum, { name: j.stepName || j.name, status: j.status }));
-        for (const [stepNum, st] of [...steps.entries()].sort((a, b) => a[0] - b[0])) {
+        (wo && wo.steps ? wo.steps : []).forEach(x => steps.set(x.stepNum, { name: x.name || x.stepName, machine: x.machine, status: x.opStatus || x.status }));
+        (state.scheduledJobs || []).filter(j => (j.woId || j.id) === woId).forEach(j => steps.set(j.stepNum, { name: j.stepName || j.name, machine: j.machine, status: j.status, startHour: j.startHour, estHours: j.estHours }));
+        const sorted = [...steps.entries()].sort((a, b) => a[0] - b[0]);
+        for (const [stepNum, st] of sorted) {
           const raw = String(opMap[String(stepNum)] || st.status || '').trim().toLowerCase();
-          if (raw === 'active' || raw === 'running') return st.name;
+          if (raw === 'active' || raw === 'running') return { name: st.name, machine: st.machine ? state.getMachineDisplayName(st.machine) : '' };
+        }
+        if (nowWH !== null) {
+          for (const [, st] of sorted) {
+            if (st.status === 'Completed' || st.startHour == null) continue;
+            if (nowWH >= st.startHour && nowWH <= st.startHour + (st.estHours || 0)) {
+              return { name: st.name, machine: st.machine ? state.getMachineDisplayName(st.machine) : '' };
+            }
+          }
         }
         return null;
       };
@@ -3408,7 +3421,7 @@ export class GanttController {
           </div>
           <span style="font-size: 11px; color: var(--text-primary);">${r.partName || 'N/A'}</span>
           <span style="font-size: 10px; font-weight: 700; color: var(--text-secondary);">${whereLabel[r.where] || ''}${r.customer ? ` · Customer: ${r.customer}` : ''}</span>
-          ${activeStation ? `<span style="font-size: 10.5px; font-weight: 700; color: #0891b2;">⚡ กำลังผลิต: ${activeStation}</span>` : ''}
+          ${activeStation ? `<span style="font-size: 10.5px; font-weight: 700; color: #0891b2;">⚡ กำลังผลิต: ${activeStation.name}${activeStation.machine ? ` (${activeStation.machine})` : ''}</span>` : ''}
         `;
         row.addEventListener('click', (ev) => {
           modal.classList.add('hidden');
