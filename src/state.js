@@ -3489,7 +3489,7 @@ class CentralState {
     const rootPdFor = (code) => this.getProjectItemRootPd(proj, code);
     return ((this.projectMachineLists || {})[proj] || []).filter(r => r && r.itemCode).map(r => {
       const pdId = rootPdFor(r.itemCode);
-      const out = { project: proj, itemCode: r.itemCode, description: (catalog.get(r.itemCode) || {}).description || '', qty: r.qty, targetDate: r.targetDate || '', pdId, total: 0, done: 0, working: 0, waiting: 0, fromSummary: false };
+      const out = { project: proj, itemCode: r.itemCode, description: (catalog.get(r.itemCode) || {}).description || '', qty: r.qty, targetDate: r.targetDate || '', shipped: r.shipped === true, pdId, total: 0, done: 0, working: 0, waiting: 0, fromSummary: false };
       // Preferred source: the PD range (Start-End) of the machine's row in the Summary Project Order file. Parent / child
       // codes in the assembly tree do not match the real PD allocation 100%, so the range is the more accurate set.
       const hit = this.getProjectItemSummaryEntry(proj, r.itemCode);
