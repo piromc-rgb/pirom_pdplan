@@ -3312,7 +3312,7 @@ export class GanttController {
 
   // Double-click on any Production Order / Assembly Set row label opens this -
   // search by PD number, part name, or drawing number and jump straight to it.
-  showPdSearchModal() {
+  showPdSearchModal(preserveQuery = false) {
     const modal = document.getElementById('pd-search-modal');
     const input = document.getElementById('pd-search-input');
     const resultsEl = document.getElementById('pd-search-results');
@@ -3357,12 +3357,17 @@ export class GanttController {
         const d = dwgOf.get(id) || {};
         add(id, { partName: d.partName, dwgNo: d.dwgNo, where: 'closed' });
       });
+      // Each space-separated term just needs to appear somewhere (PD number, Part Name or
+      // Drawing No.), in any order - so "เพลา แกน" still finds "เพลาขับแกน X" even though
+      // that isn't one contiguous substring.
+      const terms = q.split(/\s+/).filter(Boolean);
       const results = Array.from(found.values()).filter(r => {
         const d = dwgOf.get(r.woId) || {};
         const partName = r.partName || d.partName || '';
         const dwgNo = r.dwgNo || d.dwgNo || '';
         r.partName = partName; r.dwgNo = dwgNo;
-        return r.woId.toLowerCase().includes(q) || partName.toLowerCase().includes(q) || dwgNo.toLowerCase().includes(q);
+        const haystack = `${r.woId} ${partName} ${dwgNo}`.toLowerCase();
+        return terms.every(t => haystack.includes(t));
       }).sort((a, b) => a.woId.localeCompare(b.woId));
 
       if (results.length === 0) {
@@ -3373,23 +3378,63 @@ export class GanttController {
 
       emptyMsg.classList.add('hidden');
       const whereLabel = { board: '📊 บน Board', backlog: '📋 Backlog', closed: '✅ รายการ PD ที่ปิดแล้ว' };
+      // The step currently Active, per the same source the PD detail's operation chips use
+      // (pdOpStatusMap first, then the job/step's own status) - name + the Work Center running it.
+      // The Production Order's own "Active" status (getPdOrderStatus, from the ERP Order Status
+      // column) doesn't always line up with one operation explicitly tagged Active/Running, so for
+      // a Board job fall back to whichever one is scheduled right now (its time window contains now).
+      const nowWH = state.dateToWorkingHour ? state.dateToWorkingHour(new Date()) : null;
+      const activeStationOf = (woId) => {
+        const opMap = (state.pdOpStatusMap && state.pdOpStatusMap[woId]) || {};
+        const wo = (state.workOrders || []).find(w => w.id === woId);
+        const steps = new Map();
+        (wo && wo.steps ? wo.steps : []).forEach(x => steps.set(x.stepNum, { name: x.name || x.stepName, machine: x.machine, status: x.opStatus || x.status }));
+        (state.scheduledJobs || []).filter(j => (j.woId || j.id) === woId).forEach(j => steps.set(j.stepNum, { name: j.stepName || j.name, machine: j.machine, status: j.status, startHour: j.startHour, estHours: j.estHours }));
+        const sorted = [...steps.entries()].sort((a, b) => a[0] - b[0]);
+        for (const [stepNum, st] of sorted) {
+          const raw = String(opMap[String(stepNum)] || st.status || '').trim().toLowerCase();
+          if (raw === 'active' || raw === 'running') return { name: st.name, machine: st.machine ? state.getMachineDisplayName(st.machine) : '' };
+        }
+        if (nowWH !== null) {
+          for (const [, st] of sorted) {
+            if (st.status === 'Completed' || st.startHour == null) continue;
+            if (nowWH >= st.startHour && nowWH <= st.startHour + (st.estHours || 0)) {
+              return { name: st.name, machine: st.machine ? state.getMachineDisplayName(st.machine) : '' };
+            }
+          }
+        }
+        return null;
+      };
       results.slice(0, 150).forEach(r => {
         const row = document.createElement('div');
         row.style.cssText = 'display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); border-left: 3px solid var(--accent-teal); border-radius: 6px; cursor: pointer;';
+        const pdStatus = state.getPdOrderStatusDisplay ? state.getPdOrderStatusDisplay(r.woId) : null;
+        const statusBadge = pdStatus ? `<span style="font-size: 9.5px; font-weight: 700; color: #fff; background: ${pdStatus.color}; border-radius: 10px; padding: 1px 8px; white-space: nowrap;">${pdStatus.label}</span>` : '';
+        const activeStation = r.where === 'board' ? activeStationOf(r.woId) : null;
         row.innerHTML = `
-          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-            <strong class="pd-search-id" title="คลิกเพื่อดูรายละเอียด PD" style="font-size: 12px; color: var(--accent-teal); cursor: pointer; text-decoration: underline;">${r.woId}</strong>
-            <span style="font-size: 9.5px; color: var(--text-secondary); font-family: monospace;">${r.dwgNo || 'N/A'}</span>
+          <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 8px;">
+            <div style="display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap;">
+              <strong class="pd-search-id" title="คลิกเพื่อดูรายละเอียด PD" style="font-size: 12px; color: var(--accent-teal); cursor: pointer; text-decoration: underline;">${r.woId}</strong>
+              ${statusBadge}
+            </div>
+            <span style="font-size: 9.5px; color: var(--text-secondary); font-family: monospace; flex-shrink: 0; margin-left: auto;">${r.dwgNo || 'N/A'}</span>
           </div>
           <span style="font-size: 11px; color: var(--text-primary);">${r.partName || 'N/A'}</span>
           <span style="font-size: 10px; font-weight: 700; color: var(--text-secondary);">${whereLabel[r.where] || ''}${r.customer ? ` · Customer: ${r.customer}` : ''}</span>
+          ${activeStation ? `<span style="font-size: 10.5px; font-weight: 700; color: #0891b2;">⚡ กำลังผลิต: ${activeStation.name}${activeStation.machine ? ` (${activeStation.machine})` : ''}</span>` : ''}
         `;
         row.addEventListener('click', (ev) => {
           modal.classList.add('hidden');
           // Click the PD number = PD detail window; click elsewhere on the row = jump to it on the Board
-          if (ev.target.closest('.pd-search-id')) this.showPDPlanModal(r.woId);
-          else if (r.where === 'board' && r.jobs.length > 0) this.fitTasks(r.jobs);
-          else this.showPDPlanModal(r.woId);
+          if (ev.target.closest('.pd-search-id')) {
+            this.pdModalReturnCallback = () => this.showPdSearchModal(true);
+            this.showPDPlanModal(r.woId);
+          } else if (r.where === 'board' && r.jobs.length > 0) {
+            this.fitTasks(r.jobs);
+          } else {
+            this.pdModalReturnCallback = () => this.showPdSearchModal(true);
+            this.showPDPlanModal(r.woId);
+          }
         });
         resultsEl.appendChild(row);
       });
@@ -3407,8 +3452,8 @@ export class GanttController {
       document.getElementById('btn-close-pd-search')?.addEventListener('click', () => modal.classList.add('hidden'));
     }
 
-    input.value = '';
-    renderResults('');
+    if (!preserveQuery) input.value = '';
+    renderResults(input.value);
     modal.classList.remove('hidden');
     setTimeout(() => input.focus(), 50);
   }
