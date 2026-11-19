@@ -3357,12 +3357,17 @@ export class GanttController {
         const d = dwgOf.get(id) || {};
         add(id, { partName: d.partName, dwgNo: d.dwgNo, where: 'closed' });
       });
+      // Each space-separated term just needs to appear somewhere (PD number, Part Name or
+      // Drawing No.), in any order - so "เพลา แกน" still finds "เพลาขับแกน X" even though
+      // that isn't one contiguous substring.
+      const terms = q.split(/\s+/).filter(Boolean);
       const results = Array.from(found.values()).filter(r => {
         const d = dwgOf.get(r.woId) || {};
         const partName = r.partName || d.partName || '';
         const dwgNo = r.dwgNo || d.dwgNo || '';
         r.partName = partName; r.dwgNo = dwgNo;
-        return r.woId.toLowerCase().includes(q) || partName.toLowerCase().includes(q) || dwgNo.toLowerCase().includes(q);
+        const haystack = `${r.woId} ${partName} ${dwgNo}`.toLowerCase();
+        return terms.every(t => haystack.includes(t));
       }).sort((a, b) => a.woId.localeCompare(b.woId));
 
       if (results.length === 0) {
