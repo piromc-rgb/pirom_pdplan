@@ -503,7 +503,10 @@ export class MobileModeController {
       <select id="mm-es-status" style="width:100%;box-sizing:border-box;font-size:15px;padding:10px 12px;border:1.5px solid #94a3b8;border-radius:8px;margin-bottom:12px;">${statusOptionsHtml}</select>
       <label style="display:block;font-size:11.5px;color:#64748b;margin-bottom:4px;">เครื่องจักร</label>
       <select id="mm-es-machine" style="width:100%;box-sizing:border-box;font-size:15px;padding:10px 12px;border:1.5px solid #94a3b8;border-radius:8px;">${machineOptionsHtml}</select>
-      <button type="button" id="mm-es-save" style="width:100%;margin-top:16px;border:none;background:#2563eb;color:#fff;font-weight:700;font-size:15px;border-radius:8px;padding:12px;">💾 Save</button>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button type="button" id="mm-es-delete" style="flex:0 0 auto;border:1.5px solid #dc2626;background:#fff;color:#dc2626;font-weight:700;font-size:15px;border-radius:8px;padding:12px 16px;">🗑️ Delete</button>
+        <button type="button" id="mm-es-save" style="flex:1;border:none;background:#2563eb;color:#fff;font-weight:700;font-size:15px;border-radius:8px;padding:12px;">💾 Save</button>
+      </div>
     </div>`;
     this.el.appendChild(box);
     const close = () => this.closeStepSheet();
@@ -515,6 +518,12 @@ export class MobileModeController {
       this.saveStepEdit(pdId, row.stepNum, newStatus, newMachine);
       close();
       this.render(false); // back to the same PD page with the updated values
+    });
+    box.querySelector('#mm-es-delete').addEventListener('click', () => {
+      if (!window.confirm(`ลบสถานีงาน ${row.stepNum} · ${row.name} ออกจาก ${pdId} ใช่หรือไม่?`)) return;
+      this.deleteStep(pdId, row);
+      close();
+      this.render(false); // back to the same PD page with the station removed
     });
   }
 
@@ -536,6 +545,29 @@ export class MobileModeController {
     }
     s.notify();
     this.showStepToast('✓ บันทึกการแก้ไขสถานีงานแล้ว');
+  }
+
+  deleteStep(pdId, row) {
+    const s = this.state;
+    s.saveStateToHistory();
+
+    // Remember this exact (machine, name) station of this PD so a future Excel
+    // import or app reload never brings it back - same rule the desktop PD
+    // modal's Routing Steps table uses when a row is removed there.
+    if (typeof s.getStepIdentityKey === 'function') {
+      const key = s.getStepIdentityKey(pdId, row.machine, row.name);
+      if (!s.removedStepHistory) s.removedStepHistory = {};
+      s.removedStepHistory[key] = true;
+    }
+
+    s.scheduledJobs = (s.scheduledJobs || []).filter(j => !((j.woId || j.id) === pdId && j.stepNum === row.stepNum));
+    const wo = (s.workOrders || []).find(w => w.id === pdId);
+    if (wo && wo.steps) wo.steps = wo.steps.filter(st => st.stepNum !== row.stepNum);
+    if (s.pdOpStatusMap && s.pdOpStatusMap[pdId]) delete s.pdOpStatusMap[pdId][String(row.stepNum)];
+    if (s.pdDoneOps && s.pdDoneOps[pdId]) s.pdDoneOps[pdId] = s.pdDoneOps[pdId].filter(x => x.stepNum !== row.stepNum);
+
+    s.notify();
+    this.showStepToast('🗑️ ลบสถานีงานแล้ว');
   }
 
   showStepToast(msg) {
