@@ -3684,6 +3684,25 @@ class CentralState {
     return steps > 0;
   }
 
+  // PD ids present in the imported Status Overview (pdOpStatusMap) that are missing from both the Board
+  // (scheduledJobs) and the Backlog (workOrders), and are not otherwise accounted for (all ops already
+  // Completed, cancelled, or closed) - i.e. PDs that fell through the cracks of a previous import and should
+  // be pulled into the Backlog. Used to auto top-up the Backlog on every Status Overview sync.
+  getMissingOverviewPdIds() {
+    const opMap = this.pdOpStatusMap || {};
+    const onBoard = new Set((this.scheduledJobs || []).map(j => j.woId || j.id));
+    const inBacklog = new Set((this.workOrders || []).map(w => w.id));
+    const missing = [];
+    Object.keys(opMap).forEach(pdId => {
+      if (onBoard.has(pdId) || inBacklog.has(pdId)) return;
+      if (this.isPdAllOpsComplete(pdId)) return;
+      if (this.isPdCancelled(pdId)) return;
+      if (this.isPdClosedForPlanning(pdId)) return;
+      missing.push(pdId);
+    });
+    return missing;
+  }
+
   // Order Status of a PD as imported from the Status Overview: completed-PD list first, then the
   // "Plan + Mat" rows (PD level, present even when the PD is missing from the Data sheet's Dwg map),
   // then the Data sheet entries. Returns '' when the PD is unknown.

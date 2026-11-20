@@ -1441,6 +1441,32 @@ export class WorkflowController {
     return { added: toAdd.map(w => w.id), skipped, missing, filename: overview.filename || '' };
   }
 
+  // Runs after every Status Overview sync (storageSync.updateAssemblyTreeAfterMaterials - cache load, Cloud
+  // fetch, periodic poll, or a direct file import all funnel through it) so a PD that shows up in a refreshed
+  // Status Overview never just sits there missing from the Backlog until someone notices and runs
+  // "Add PD เข้า Backlog" by hand. Silent (no prompt): only reports via toast when it actually added something.
+  // Skipped outside โหมดวางแผน so a View Only session never writes to the Backlog / pushes to Cloud.
+  async autoImportMissingPdsFromOverview() {
+    const state = this.state;
+    const mode = state.storageSync && typeof state.storageSync.getUserMode === 'function' ? state.storageSync.getUserMode() : 'plan';
+    if (mode !== 'plan') return;
+    if (this._autoImportingMissingPds) return; // a run is already in flight - avoid overlapping imports
+    if (typeof state.getMissingOverviewPdIds !== 'function') return;
+    const missing = state.getMissingOverviewPdIds();
+    if (missing.length === 0) return;
+    this._autoImportingMissingPds = true;
+    try {
+      const r = await this.addPdsToBacklog(missing, true, []);
+      if (r.added.length > 0) {
+        state.ganttController?.showToast?.(`📥 ดึง PD ที่ตกหล่นจาก Status Overview เข้า Backlog อัตโนมัติ ${r.added.length} PD`, 'success');
+      }
+    } catch (err) {
+      console.warn('Auto-import missing PDs from Status Overview failed:', err);
+    } finally {
+      this._autoImportingMissingPds = false;
+    }
+  }
+
   // Backlog Tools menu: ask for PD numbers, add them (with child PDs) to the Backlog and show the result.
   async promptAddPdsToBacklog() {
     const toast = (m, t) => this.state.ganttController?.showToast?.(m, t);
