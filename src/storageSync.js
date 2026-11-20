@@ -2433,6 +2433,11 @@ export class StorageSyncManager {
     if (typeof this.state.syncOverviewStatusToJobs === 'function') {
       this.state.syncOverviewStatusToJobs();
     }
+    // PDs that appear in this (now refreshed) Status Overview but never made it into the Backlog/Board get
+    // pulled in automatically here, so nothing is left to fall through the cracks between manual imports.
+    if (this.state.workflowController && typeof this.state.workflowController.autoImportMissingPdsFromOverview === 'function') {
+      this.state.workflowController.autoImportMissingPdsFromOverview();
+    }
     if (this.state.assemblyTree) {
       if (typeof this.state.assemblyTree.invalidateCache === 'function') {
         this.state.assemblyTree.invalidateCache();
