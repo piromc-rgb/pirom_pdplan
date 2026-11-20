@@ -466,6 +466,12 @@ export class MobileModeController {
       const expected = (localStorage.getItem('PDPLAN_EDIT_PASSWORD') || '1122').trim();
       if (input.value.trim() === expected) {
         this.editUnlocked = true;
+        // The mobile edit password only gates the UI; saveWorkOrdersToFile/savePlanToFile() require the app's
+        // main user mode to be "plan" or they silently no-op (data stays in memory until the page reloads and
+        // the change is lost). Both gates already share the same password, so unlocking one unlocks the other.
+        if (this.state.storageSync && typeof this.state.storageSync.setUserMode === 'function' && this.state.storageSync.getUserMode() !== 'plan') {
+          this.state.storageSync.setUserMode('plan');
+        }
         this.closeStepSheet();
         onSuccess();
       } else {
@@ -544,6 +550,11 @@ export class MobileModeController {
       if (step) step.machine = newMachine;
     }
     s.notify();
+    // Mobile has no separate desktop-style "💾 Save" header button to commit a draft to Cloud later - this
+    // Save button IS the final action, so push straight to Cloud now instead of leaving it as a local-only
+    // draft that Cloud sync would silently overwrite back to the old value on the next load.
+    if (typeof s.savePlanToFile === 'function') s.savePlanToFile(true);
+    if (typeof s.saveWorkOrdersToFile === 'function') s.saveWorkOrdersToFile(true);
     this.showStepToast('✓ บันทึกการแก้ไขสถานีงานแล้ว');
   }
 
@@ -567,6 +578,9 @@ export class MobileModeController {
     if (s.pdDoneOps && s.pdDoneOps[pdId]) s.pdDoneOps[pdId] = s.pdDoneOps[pdId].filter(x => x.stepNum !== row.stepNum);
 
     s.notify();
+    // Same reasoning as saveStepEdit(): commit straight to Cloud since mobile offers no other Save step.
+    if (typeof s.savePlanToFile === 'function') s.savePlanToFile(true);
+    if (typeof s.saveWorkOrdersToFile === 'function') s.saveWorkOrdersToFile(true);
     this.showStepToast('🗑️ ลบสถานีงานแล้ว');
   }
 
