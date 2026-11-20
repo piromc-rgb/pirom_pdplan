@@ -138,14 +138,17 @@ export class ResourcesController {
 
     document.getElementById('btn-pdrange-select-all')?.addEventListener('click', () => {
       this.state.activePdRanges.forEach(r => r.enabled = true);
+      this.state.persistStarredPdRanges();
       this.state.notify();
     });
     document.getElementById('btn-pdrange-deselect-all')?.addEventListener('click', () => {
       this.state.activePdRanges.forEach(r => r.enabled = false);
+      this.state.persistStarredPdRanges();
       this.state.notify();
     });
     document.getElementById('btn-pdrange-clear-all')?.addEventListener('click', () => {
       this.state.activePdRanges = [];
+      this.state.persistStarredPdRanges();
       this.state.notify();
     });
 
@@ -2923,15 +2926,17 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
       cb.style = 'cursor: pointer;';
       cb.addEventListener('change', (e) => {
         range.enabled = e.target.checked;
+        this.state.persistStarredPdRanges();
         this.state.notify();
       });
 
       const btnStar = document.createElement('button');
       btnStar.innerHTML = range.favorite ? '&#9733;' : '&#9734;';
-      btnStar.title = range.favorite ? 'เอาออกจากรายการโปรด' : 'เพิ่มเป็นรายการโปรด';
+      btnStar.title = range.favorite ? 'เอาออกจากรายการโปรด' : 'เพิ่มเป็นรายการโปรด (จำค่าไว้ใช้ครั้งถัดไป)';
       btnStar.style = `background: none; border: none; cursor: pointer; font-size: 13px; padding: 0 2px; color: ${range.favorite ? '#ffd54a' : 'var(--text-secondary)'};`;
       btnStar.addEventListener('click', () => {
         range.favorite = !range.favorite;
+        this.state.persistStarredPdRanges();
         this.state.notify();
       });
 
@@ -2944,19 +2949,66 @@ PD แม่ของ PD ที่แสดงจะไม่ถูกปรั�
       leftDiv.appendChild(btnStar);
       leftDiv.appendChild(label);
 
+      const rightDiv = document.createElement('div');
+      rightDiv.style = 'display: flex; align-items: center; gap: 2px;';
+
+      const btnEditPriority = document.createElement('button');
+      btnEditPriority.innerHTML = '&#9998;';
+      btnEditPriority.title = 'แก้ไข Priority ของ PD ในช่วงนี้';
+      btnEditPriority.style = 'background: none; border: none; color: var(--accent-teal); cursor: pointer; font-size: 12px; padding: 0 4px;';
+      btnEditPriority.addEventListener('click', () => this.editPriorityForPdRange(range));
+
       const btnDel = document.createElement('button');
       btnDel.innerHTML = '&times;';
       btnDel.style = 'background: none; border: none; color: var(--accent-red); cursor: pointer; font-size: 14px; font-weight: bold; padding: 0 4px;';
       btnDel.title = 'ลบช่วงนี้';
       btnDel.addEventListener('click', () => {
         this.state.activePdRanges.splice(idx, 1);
+        this.state.persistStarredPdRanges();
         this.state.notify();
       });
 
+      rightDiv.appendChild(btnEditPriority);
+      rightDiv.appendChild(btnDel);
+
       row.appendChild(leftDiv);
-      row.appendChild(btnDel);
+      row.appendChild(rightDiv);
       container.appendChild(row);
     });
+  }
+
+  // ✏️ Edit Priority of every PD (Board + Backlog) that falls inside this one PD Range row,
+  // same pattern as the project list's edit-priority button.
+  editPriorityForPdRange(range) {
+    const st = this.state;
+    const matches = (pd) => isPdMatchingRange(pd, range);
+    const jobs = (st.scheduledJobs || []).filter(j => matches(String(j.woId || j.id || '').trim()));
+    const wos = (st.workOrders || []).filter(w => matches(String(w.id || '').trim()));
+    const pdIds = new Set([...jobs.map(j => j.woId || j.id), ...wos.map(w => w.id)]);
+    const label = range.end ? `${range.start} - ${range.end}` : range.start;
+    if (pdIds.size === 0) { st.ganttController?.showToast?.(`⚠️ ช่วง PD ${label} ไม่มี PD ใน Board / Backlog ให้แก้ไข Priority`, 'error'); return; }
+
+    const counts = {};
+    [...jobs.map(j => j.priority), ...wos.map(w => w.priority)].forEach(p => { const k = String(p ?? 'Normal'); counts[k] = (counts[k] || 0) + 1; });
+    const current = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    const shown = current.length > 8 ? `${current.slice(0, 8).join(', ')} … (รวม ${current.length} ค่า)` : current.join(', ');
+    const input = prompt(`แก้ไข Priority ของ PD ในช่วง "${label}" (${pdIds.size} PD)\nPriority ปัจจุบัน: ${shown}\n\nระบุ Priority ใหม่:`, current[0] || '');
+    if (input === null) return;
+    const newP = input.trim();
+    if (!newP) return;
+    if (current.length === 1 && current[0] === newP) return;
+    // Several different Priority values within this range would all be overwritten: ask first
+    if (current.length > 1 && !confirm(`ช่วง PD "${label}" มี Priority ต่างกัน ${current.length} ค่า\nการตั้งเป็น "${newP}" จะเขียนทับ Priority ของ ${pdIds.size} PD ทั้งหมดเป็นค่าเดียว (ย้อนกลับได้ด้วย Undo)\n\nยืนยันหรือไม่?`)) return;
+
+    st.saveStateToHistory();
+    jobs.forEach(j => { j.priority = newP; });
+    wos.forEach(w => { w.priority = newP; });
+    if (st.activePriorities[newP] === undefined) st.activePriorities[newP] = true;
+    st.savePlanToFile();
+    st.saveWorkOrdersToFile();
+    st.notify();
+    st.dispatchHistoryEvent?.();
+    st.ganttController?.showToast?.(`✅ ตั้ง Priority ของช่วง PD ${label} เป็น "${newP}" (${pdIds.size} PD) แล้ว — กด Undo เพื่อย้อนกลับได้`, 'success');
   }
 
 }

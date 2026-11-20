@@ -39,8 +39,10 @@ class CentralState {
     this.activeCustomers = {};
     this.customerColors = {};
 
-    // Active PD Ranges
-    this.activePdRanges = [];
+    // Active PD Ranges — ranges the user starred are restored here on every app load
+    // (see loadStarredPdRanges/persistStarredPdRanges); un-starred ranges are session-only,
+    // same as the other board filters.
+    this.activePdRanges = this.loadStarredPdRanges();
 
     // Manually selected Work Centers to show on the board (defaults to true for all keys)
     this.activeWorkCenters = {};
@@ -2606,6 +2608,32 @@ class CentralState {
     }
     this.savePlanToFile();
     this.notify();
+  }
+
+  // Starred PD Range Filter entries (browser-local, per user - not part of the shared
+  // plan payload): restored into activePdRanges on every app load so they stay put
+  // until the user removes them with the row's x button.
+  loadStarredPdRanges() {
+    try {
+      if (typeof localStorage === 'undefined') return [];
+      const saved = JSON.parse(localStorage.getItem('pdplan_starred_pdranges') || '[]');
+      if (!Array.isArray(saved)) return [];
+      return saved
+        .filter(r => r && r.start)
+        .map(r => ({ start: String(r.start), end: r.end ? String(r.end) : null, enabled: r.enabled !== false, favorite: true }));
+    } catch (e) {
+      return [];
+    }
+  }
+
+  persistStarredPdRanges() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const starred = (this.activePdRanges || [])
+        .filter(r => r.favorite)
+        .map(r => ({ start: r.start, end: r.end, enabled: r.enabled !== false }));
+      localStorage.setItem('pdplan_starred_pdranges', JSON.stringify(starred));
+    } catch (e) {}
   }
 
   // Step IDs are NOT stable across reloads - renumberWorkOrderSteps() re-sequences
