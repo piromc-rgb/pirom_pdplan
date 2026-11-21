@@ -1379,6 +1379,20 @@ class CentralState {
     return ids;
   }
 
+  // Every Backlog PD that can go onto the plan now, regardless of Op1 Mat readiness
+  // (still excludes locked projects, PDs closed for planning, and PDs blocked by open child PDs).
+  findAllBacklogPdIds() {
+    const ids = [];
+    (this.workOrders || []).forEach(wo => {
+      if (!wo.steps || wo.steps.length === 0) return;
+      if (this.isProjectLocked(wo.project)) return;
+      if (this.isPdClosedForPlanning(wo.id)) return;
+      if (this.isPdBlockedByChildren(wo.id)) return;
+      ids.push(wo.id);
+    });
+    return ids;
+  }
+
   // Unschedule a specific step (returns it back to parent backlog WO)
   unscheduleJob(stepId) {
     this.saveStateToHistory();

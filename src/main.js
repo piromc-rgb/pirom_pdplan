@@ -114,6 +114,7 @@ class App {
     this.initGanttLabelColumnResize();
     this.initSidebarLeftResize();
     this.initAddReadyPdsButton();
+    this.initAddAllPdsButton();
     document.getElementById('btn-add-pds-backlog')?.addEventListener('click', () => state.workflowController.promptAddPdsToBacklog());
     this.initMoveWaitingChildrenButton();
     this.initSidebarRightResize();
@@ -130,7 +131,7 @@ class App {
   initHeaderDateTime() {
     const headerDateTime = document.getElementById('header-datetime-text');
     if (headerDateTime) {
-      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.214';
+      const versionStr = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '5.215';
       const updateDateTime = () => {
         const now = new Date();
         const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -592,6 +593,32 @@ class App {
       const aiBtn = document.getElementById('btn-ai-optimize') || btn;
       // onlyMatReadyOp1 = false: the ready PDs are already selected here; PDs already on the board stay untouched
       this.runAIOptimizationWithSelection(aiBtn, readyIds, null, false);
+    });
+  }
+
+  // Backlog button: schedules every Backlog PD onto the plan regardless of Op1 Mat readiness
+  // (via the AI scheduler, which shows its usual result popup so the plan can still be reviewed before accepting).
+  initAddAllPdsButton() {
+    const btn = document.getElementById('btn-add-all-pds-plan');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const toast = (msg, type) => state.ganttController?.showToast?.(msg, type);
+      const mode = state.storageSync && typeof state.storageSync.getUserMode === 'function' ? state.storageSync.getUserMode() : 'plan';
+      if (mode !== 'plan') {
+        toast('⚠️ กรุณาสลับเป็นโหมดวางแผนก่อน จึงจะจัดงานลงแผนได้', 'error');
+        return;
+      }
+      const allIds = state.findAllBacklogPdIds();
+      if (allIds.length === 0) {
+        toast('ℹ️ ไม่มี PD ใน Backlog ที่สามารถจัดลงแผนได้', 'info');
+        return;
+      }
+      const total = (state.workOrders || []).length;
+      const ok = window.confirm(`พบ ${allIds.length} PD (จากทั้งหมด ${total} ใน Backlog) ที่สามารถจัดลงแผนได้\n\nจัดลงแผนทั้งหมดด้วย AI Auto-Optimize หรือไม่? (ไม่สนสถานะ Mat. พร้อมผลิต)\n(ใช้เวลาสักครู่ และจะมีหน้าสรุปผลให้ตรวจก่อนยืนยัน)`);
+      if (!ok) return;
+      const aiBtn = document.getElementById('btn-ai-optimize') || btn;
+      // onlyMatReadyOp1 = false: the PDs are already selected here; PDs already on the board stay untouched
+      this.runAIOptimizationWithSelection(aiBtn, allIds, null, false);
     });
   }
 
@@ -1200,6 +1227,8 @@ class App {
       if (btnImportExcel) btnImportExcel.style.display = showAssembly ? 'none' : '';
       const btnAddReady = document.getElementById('btn-add-ready-pds-plan');
       if (btnAddReady) btnAddReady.style.display = showAssembly ? 'none' : 'flex';
+      const btnAddAll = document.getElementById('btn-add-all-pds-plan');
+      if (btnAddAll) btnAddAll.style.display = showAssembly ? 'none' : 'flex';
       const btnMoveWait = document.getElementById('btn-move-waiting-children-backlog');
       if (btnMoveWait) btnMoveWait.style.display = showAssembly ? 'none' : 'flex';
       const backlogToolsBox = document.getElementById('backlog-tools-dropdown');
@@ -3377,6 +3406,8 @@ class App {
       if (btnViewCompletedPd) btnViewCompletedPd.style.display = 'none';
       const btnAddReadyA = document.getElementById('btn-add-ready-pds-plan');
       if (btnAddReadyA) btnAddReadyA.style.display = 'none';
+      const btnAddAllA = document.getElementById('btn-add-all-pds-plan');
+      if (btnAddAllA) btnAddAllA.style.display = 'none';
       const btnMoveWaitA = document.getElementById('btn-move-waiting-children-backlog');
       if (btnMoveWaitA) btnMoveWaitA.style.display = 'none';
       const backlogToolsBoxA = document.getElementById('backlog-tools-dropdown');
@@ -3415,6 +3446,8 @@ class App {
         if (btnViewCompletedPd) btnViewCompletedPd.style.display = '';
         const btnAddReadyB = document.getElementById('btn-add-ready-pds-plan');
         if (btnAddReadyB) btnAddReadyB.style.display = 'flex';
+        const btnAddAllB = document.getElementById('btn-add-all-pds-plan');
+        if (btnAddAllB) btnAddAllB.style.display = 'flex';
         const btnMoveWaitB = document.getElementById('btn-move-waiting-children-backlog');
         if (btnMoveWaitB) btnMoveWaitB.style.display = 'flex';
         const backlogToolsBoxB = document.getElementById('backlog-tools-dropdown');
